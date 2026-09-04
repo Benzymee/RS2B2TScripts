@@ -1,5 +1,6 @@
 /**
  * InventoryAlcher. High Level Alchemy from the inventory.
+ *
  * Load URL: https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/InventoryAlcher.js
  */
 const SUPPORTED_API_VERSION = 1;

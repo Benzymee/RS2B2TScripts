@@ -1,11 +1,7 @@
 /// <reference path="./dev/rs2b0t-abi.d.ts" />
 
 /**
- * OakTreeFletcherSell — same oak camp as OakTreeFletcher; banks logs.
- * If fletching is on: oak shortbows at 20 / longbows at 25, sell at Varrock General,
- * bank the coins (keeps knife/axe), then back to the oaks.
- * Knife required to fletch; missing knife → nearest bank, else Lumbridge castle spawn.
- * Broken rune axe: nearest bank 1k, walk to Bob, repair, walk back.
+ * OakTreeFletcherSell. Chops oak trees north of Varrock, fletches bows, and sells them.
  * Completely vibe coded by @.benzyme on Discord via Cursor AI
  * Self-contained ESM for rs2b0t Load local script / Load URL.
  */
@@ -1503,7 +1499,7 @@ export default defineBot({
     category: 'Fletching',
     tags: ['woodcutting', 'fletching', 'oak', 'shortbow', 'longbow', 'sell', 'varrock'],
     description:
-        'Chops oaks north of Varrock (3166,3416). Banks logs. If fletching is on: oak shortbows at 20 / longbows at 25, sells them at Varrock General, banks the coins (keeps knife/axe), then returns. Knife required to fletch (bank, else Lumbridge castle spawn). Broken rune axe: withdraws 1k, walks to Bob, repairs, then returns.',
+        'Chops oak trees north of Varrock. Optional fletching into oak shortbows at 20 or longbows at 25, then sells the bows at Varrock General Store and banks the coins.',
     settingsSchema: {
         fletchLogs: {
             type: 'boolean',

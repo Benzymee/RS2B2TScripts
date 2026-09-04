@@ -1,10 +1,7 @@
 /// <reference path="./dev/rs2b0t-abi.d.ts" />
 
 /**
- * CatherbyLobsters — cage lobster at Catherby (Cage+Harpoon spots only).
- * Harry sand / mid beach first; cape via sand corridor; never the east rocks (I can't reach that).
- * Start: bank → deposit everything → withdraw Lobster pot → shore, then cage fish.
- * If none in bank, buys one from Harry. Optional cook on bank-house Range, optional sell to Harry.
+ * CatherbyLobsters. Cage-fishes lobsters at Catherby.
  * Completely vibe coded by @.benzyme on Discord via Cursor AI
  * Self-contained ESM for rs2b0t Load local script / Load URL.
  */
@@ -1865,7 +1862,7 @@ export default defineBot({
     category: 'Fishing',
     tags: ['fishing', 'catherby', 'lobster', 'cage', 'bank', 'cook', 'harry'],
     description:
-        "Benzyme's Catherby Lobsters — on start always banks, deposits everything, withdraws Lobster pot, then cages lobsters on Cage+Harpoon spots (Harry sand / mid beach first; cape via sand corridor; never the east rocks). Buys a pot from Harry if missing. Optional cook on way; optional sell Raw lobster to Harry instead of banking.",
+        'Cage-fishes lobsters at Catherby. Buys a lobster pot from Harry if needed. Optional cook on the Range next to the bank, or sell raw lobster to Harry.',
     settingsSchema: {
         cookOnWay: {
             type: 'boolean',

@@ -1,10 +1,7 @@
 /// <reference path="./dev/rs2b0t-abi.d.ts" />
 
 /**
- * FaladorTreeFletcher — chop regular trees at 2953,3407, bank.
- * If fletching is on: arrow shafts, or shortbows at 5 / longbows at 10, then bank bows.
- * Knife required to fletch; missing knife → nearest bank, else Lumbridge castle spawn.
- * Broken rune axe: nearest bank 1k, walk to Bob, repair, walk back.
+ * FaladorTreeFletcher. Chops regular trees west of Falador and banks the logs.
  * Completely vibe coded by @.benzyme on Discord via Cursor AI
  * Self-contained ESM for rs2b0t Load local script / Load URL.
  */
@@ -1375,7 +1372,7 @@ export default defineBot({
     category: 'Fletching',
     tags: ['woodcutting', 'fletching', 'falador', 'trees', 'arrow shafts', 'shortbow', 'longbow'],
     description:
-        'Chops regular trees west of Falador (2953,3407). Banks logs. If fletching is on: arrow shafts, or shortbows at 5 / longbows at 10 — then banks the bows. Knife required to fletch (bank, else Lumbridge castle spawn). Broken rune axe: withdraws 1k, walks to Bob, repairs, then returns.',
+        'Chops regular trees west of Falador and banks the logs. Optional fletching into arrow shafts, shortbows at 5, or longbows at 10. Repairs a broken axe at Bob in Lumbridge.',
     settingsSchema: {
         fletchLogs: {
             type: 'boolean',

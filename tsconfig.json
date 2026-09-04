@@ -2,10 +2,12 @@
     "compilerOptions": {
         "target": "ES2022",
         "module": "ES2022",
-        "lib": ["ES2022", "DOM"],
+        "lib": ["ES2022", "DOM", "DOM.Iterable"],
         "strict": true,
+        "noImplicitAny": false,
+        "strictNullChecks": false,
         "skipLibCheck": true,
         "noEmit": true
     },
-    "include": ["Alchgility.ts", "rs2b0t-abi.d.ts"]
+    "include": ["*.ts", "rs2b0t-abi.d.ts"]
 }

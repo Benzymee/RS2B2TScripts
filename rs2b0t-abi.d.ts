@@ -9,9 +9,18 @@ declare global {
         num?(key: string, fallback?: number): number;
     }
 
+    interface BotEvent {
+        name?: string;
+        text?: string;
+        previous?: number;
+        level?: number;
+        [key: string]: unknown;
+    }
+
     class LoopingBot {
         log(message: string): void;
         settings: SettingsApi;
+        on(event: string, handler: (e: BotEvent) => void): void;
         onStart(): Promise<void> | void;
         onStop(): void;
         loop(): Promise<void>;
@@ -35,6 +44,8 @@ declare global {
         z: number;
         level?: number;
         constructor(x: number, z: number, level?: number);
+        static from(tile: TileLike | null | undefined): Tile;
+        distanceTo(other: TileLike | null | undefined): number;
     }
 
     interface WalkOpts {
@@ -46,33 +57,68 @@ declare global {
     }
 
     interface TraversalApi {
-        preload?: () => void;
-        walkResilient?: (dest: TileLike, opts?: WalkOpts) => Promise<void>;
-        walkTo?: (dest: TileLike, opts?: WalkOpts) => Promise<void>;
+        preload(): void;
+        walkResilient(dest: TileLike, opts?: any): Promise<void>;
+        walkTo(dest: TileLike, opts?: any): Promise<void>;
+        [key: string]: any;
     }
 
-    interface Loc {
-        name?: string | (() => string | null | undefined);
-        tile?: TileLike | (() => TileLike | null | undefined);
-        actions?: string[] | (() => string[] | null | undefined);
-        distance?: () => number;
+    interface DirectNavigatorApi {
+        walkTo?: (tile: TileLike, radius?: number, timeoutMs?: number) => Promise<void>;
+    }
+
+    /** Loc/NPC wrappers expose name/tile/actions as a property or a method. */
+    interface GameEntity {
+        name?: any;
+        tile?: any;
+        actions?: any;
+        distance?: any;
         interact: (op: string) => Promise<boolean | void> | boolean | void;
+        [key: string]: any;
     }
 
-    interface LocQuery {
-        where(pred: (loc: Loc) => boolean): LocQuery;
-        nearest(): Loc | null | undefined;
-        results?: () => Loc[] | null | undefined;
+    type Loc = GameEntity;
+    type Npc = GameEntity;
+    type GroundItem = GameEntity;
+    type Player = GameEntity;
+
+    interface AreaBox {
+        minX: number;
+        maxX: number;
+        minZ: number;
+        maxZ: number;
+    }
+
+    interface EntityQuery<T> {
+        where(pred: (entity: T) => any): EntityQuery<T>;
+        name(...names: string[]): EntityQuery<T>;
+        within(tiles: number): EntityQuery<T>;
+        inside?(box: AreaBox): EntityQuery<T>;
+        nearest(): T | null | undefined;
+        results?: () => T[] | null | undefined;
     }
 
     interface LocsApi {
-        query?: () => LocQuery;
+        query: () => EntityQuery<Loc>;
+    }
+
+    interface NpcsApi {
+        query: () => EntityQuery<Npc>;
+    }
+
+    interface GroundItemsApi {
+        query: () => EntityQuery<GroundItem>;
+    }
+
+    interface PlayersApi {
+        query: () => EntityQuery<Player>;
     }
 
     interface GameApi {
         ingame(): boolean;
         tile(): TileLike | null;
-        animating?: () => boolean;
+        animating(): boolean;
+        [key: string]: any;
         myName?: () => string | null | undefined;
         castOnInv?: (spell: string, item: InvItem) => Promise<boolean> | boolean;
         castOnItem?: (spell: string, item: InvItem) => Promise<boolean> | boolean;
@@ -91,6 +137,8 @@ declare global {
         slot: number;
         snap?: InvSnap;
         interact?: (op: string) => Promise<boolean | void> | boolean | void;
+        useOn?: (target: any) => Promise<boolean | void> | boolean | void;
+        [key: string]: any;
     }
 
     interface BankItem {
@@ -108,34 +156,80 @@ declare global {
 
     interface InventoryApi {
         items(): InvItem[];
-        used?: () => number;
+        used(): number;
+        free(): number;
+        count(name: string): number;
+        isFull(): boolean;
+        first(name: string): InvItem | null | undefined;
+        [key: string]: any;
     }
 
     interface EquipmentApi {
-        items?: () => EquipItem[];
-        contains?: (name: string) => boolean;
-        equip?: (name: string) => Promise<void> | void;
+        items(): EquipItem[];
+        contains(name: string): boolean;
+        equip(name: string): Promise<void> | void;
+        unequip(name: string): Promise<boolean | void> | boolean | void;
+        [key: string]: any;
     }
 
     interface BankApi {
         isOpen(): boolean;
         close(): Promise<void> | void;
-        items?: () => BankItem[] | null;
-        loaded?: () => boolean;
+        items(): BankItem[];
+        loaded(): boolean;
+        count(name: string): number;
+        noteMode?: () => boolean;
         depositInventory?: () => Promise<void> | void;
         snapshotGeneration?: () => number;
         waitSnapshotAfter?: (gen: number, timeoutMs: number) => Promise<void>;
         setNoteMode?: (noted: boolean) => Promise<void> | void;
-        withdraw?: (name: string, op: string) => Promise<boolean> | boolean;
+        withdraw?: (name: string, op?: string) => Promise<boolean> | boolean;
         withdrawById?: (id: number, op: string) => Promise<boolean> | boolean;
         withdrawX?: (name: string, amount: number) => Promise<boolean> | boolean;
         withdrawXById?: (id: number, amount: number) => Promise<boolean> | boolean;
         depositAllMatching?: (pred: (name: string, id: number) => boolean) => Promise<void> | void;
+        openBooth?: (
+            stand: TileLike,
+            name: string,
+            op: string,
+            log?: (message: string) => void
+        ) => Promise<boolean> | boolean;
     }
 
     interface BankingApi {
         preload?: () => void;
-        open(opts?: { log?: (message: string) => void }): Promise<boolean>;
+        open(opts?: Record<string, any>): Promise<boolean>;
+        bankNearest?: (...args: any[]) => any;
+        [key: string]: any;
+    }
+
+    interface ShopApi {
+        isOpen(): boolean;
+        close(): Promise<void> | void;
+        open(npcName: string): Promise<boolean>;
+        buy(name: string, amount: number): Promise<any>;
+        sell(name: string, amount: number): Promise<any>;
+        [key: string]: any;
+    }
+
+    interface TradeOfferItem {
+        name?: string;
+        id?: number;
+        count?: number;
+        noted?: boolean;
+    }
+
+    interface TradeApi {
+        request(name: string): Promise<void> | void;
+        active(): boolean;
+        onOfferScreen(): boolean;
+        onConfirmScreen(): boolean;
+        accept(): Promise<void> | void;
+        decline(): Promise<void> | void;
+        myOffer(): TradeOfferItem[];
+        partner(): string | null | undefined;
+        offerAll?: (...args: any[]) => Promise<boolean> | boolean;
+        [key: string]: any;
     }
 
     interface SkillsApi {
@@ -146,6 +240,19 @@ declare global {
     interface ChatDialogApi {
         canContinue(): boolean;
         continue(): Promise<void> | void;
+        isMakeMenu?: () => boolean;
+        isOpen?: () => boolean;
+        makeProducts?: () => any;
+        makeX?: (...args: any[]) => any;
+        make?: (...args: any[]) => any;
+        options?: () => any;
+        chooseOption?: (...args: any[]) => any;
+        [key: string]: any;
+    }
+
+    interface AxeDef {
+        name: string;
+        level?: number;
     }
 
     interface BotSpec {
@@ -239,9 +346,18 @@ declare global {
         Inventory: InventoryApi;
         Equipment: EquipmentApi;
         Skills: SkillsApi;
-        Locs?: LocsApi;
-        Traversal?: TraversalApi;
+        Locs: LocsApi;
+        Npcs: NpcsApi;
+        GroundItems: GroundItemsApi;
+        Players: PlayersApi;
+        Shop: ShopApi;
+        Trade: TradeApi;
+        Traversal: TraversalApi;
+        DirectNavigator: DirectNavigatorApi;
         Tile: typeof Tile;
+        AXES: AxeDef[];
+        bestAxe: (level: number, pred: (name: string) => boolean) => string | null | undefined;
+        canWieldTool: (name: string, attackLevel: number) => boolean;
         withdrawOp?: (ops: string[] | undefined, kind: string) => string | null;
         ObjType?: ObjTypeTable;
         IfType?: IfTypeTable;

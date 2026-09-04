@@ -1,5 +1,6 @@
 /**
  * CatherbyNetFisher. Small-net fishes shrimp at Catherby.
+ *
  * Load URL: https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/CatherbyNetFisher.js
  */
 const SUPPORTED_API_VERSION = 1;

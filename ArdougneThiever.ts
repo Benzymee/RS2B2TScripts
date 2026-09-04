@@ -1,7 +1,7 @@
 /// <reference path="./dev/rs2b0t-abi.d.ts" />
 
 /**
- * ArdougneThiever — pickpocket Men / Warrior women / Guards / Knights / Paladins / Heroes in East Ardougne.
+ * ArdougneThiever. Pickpockets in East Ardougne.
  * Completely vibe coded by @.benzyme on Discord via Cursor AI
  * Self-contained ESM for rs2b0t Load local script / Load URL.
  */
@@ -3390,7 +3390,7 @@ export default defineBot({
     category: 'Thieving',
     tags: ['thieving', 'ardougne', 'pickpocket', 'man', 'guard', 'warrior', 'knight', 'paladin', 'hero', 'cake', 'baker', 'shrimp', 'anchovies', 'tuna', 'lobster', 'catherby', 'mule'],
     description:
-        "Benzyme's Ardougne Thiever — Auto picks Men (1–24), Warrior women (25–39), Ardougne Guards (40–54), Knights (55–79), or Heroes (80+) from Thieving on start. Or pick Paladins / a specific target. Cake / chocolate / shrimp+anchovies / tuna / lobster food or wait-for-HP regen. Steal cakes (Cake food, on by default): when the bank has no cake, steal from the Baker stall until 200 banked, then resume. Catch and cook: when the bank has no Lobster, cage+cook 500 at Catherby then return. Mule (on by default): when banked Coins (id 995) exceed 100k, withdraw all gp and trade to Ben at East Ardougne bank.",
+        'Pickpockets in East Ardougne. Auto-picks Men, Warrior women, Guards, Knights, or Heroes from Thieving level. Optional food, Baker stall cakes, Catherby lobster restock, and mule coins. Change MULE_NAME before using mule mode.',
     settingsSchema: {
         target: {
             type: 'string',

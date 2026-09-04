@@ -23,7 +23,7 @@ Most scripts dismiss the welcome screen on start.
 
 ## Scripts
 
-**Alchgility** (`Alchgility.js`). High Alch between obstacles on the Gnome Stronghold agility course. Needs Magic 55.
+**Alchgility** (`Alchgility.js`). WARNING: High Alchs the whole inventory while running the Gnome Stronghold agility course. Needs Magic 55.
 
 https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/Alchgility.js
 

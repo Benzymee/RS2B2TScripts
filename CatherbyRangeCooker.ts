@@ -1,8 +1,7 @@
 /// <reference path="./dev/rs2b0t-abi.d.ts" />
 
 /**
- * CatherbyRangeCooker — withdraw raw fish from Catherby bank, cook on the bank-house Range, deposit.
- * Dropdown: Shrimp, Anchovies, Raw sardine, Raw herring, or Everything (at cooking level).
+ * CatherbyRangeCooker. Cooks raw fish from Catherby bank on the Range next to the bank.
  * Completely vibe coded by @.benzyme on Discord via Cursor AI
  * Self-contained ESM for rs2b0t Load local script / Load URL.
  */
@@ -1017,7 +1016,7 @@ export default defineBot({
     category: 'Cooking',
     tags: ['cooking', 'catherby', 'range', 'shrimp', 'anchovies', 'sardine', 'herring', 'bank'],
     description:
-        "Benzyme's Catherby Range Cooker — withdraws raw fish from the Catherby bank, cooks on the bank-house Range, deposits cooked fish. Pick Shrimp, Anchovies, Raw sardine, Raw herring, or Everything at your cooking level.",
+        'Withdraws raw fish from Catherby bank, cooks them on the Range next to the bank, and deposits the cooked fish.',
     settingsSchema: {
         fishMode: {
             type: 'string',

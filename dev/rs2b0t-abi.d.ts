@@ -7,6 +7,7 @@ declare global {
         bool(key: string, fallback?: boolean): boolean;
         str(key: string, fallback?: string): string;
         num?(key: string, fallback?: number): number;
+        tile?(key: string, fallback?: TileLike): TileLike;
     }
 
     interface BotEvent {
@@ -92,6 +93,7 @@ declare global {
     interface EntityQuery<T> {
         where(pred: (entity: T) => any): EntityQuery<T>;
         name(...names: string[]): EntityQuery<T>;
+        action(op: string): EntityQuery<T>;
         within(tiles: number): EntityQuery<T>;
         inside?(box: AreaBox): EntityQuery<T>;
         nearest(): T | null | undefined;
@@ -235,6 +237,7 @@ declare global {
     interface SkillsApi {
         xp(skill: string): number;
         level(skill: string): number;
+        effective(skill: string): number;
     }
 
     interface ChatDialogApi {

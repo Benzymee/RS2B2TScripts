@@ -1,10 +1,5 @@
 /**
- * Alchgility. High Level Alchemy while running the Gnome Stronghold agility course.
- * Alchs the pack except Nature runes, Fire runes, coins, and a fire staff.
- * Three High Alchs in a row (each waits out the 5-tick animation), then click
- * the gnome obstacle at its pinned tile. High Alch is an OPHELDT packet so the
- * inventory tab stays open. No casting until that obstacle gives agility XP.
- * Drops beer, kebabs, caskets, and strange fruit (never alchs those).
+ * Alchgility. High Alch while running the Gnome Stronghold agility course.
  * Completely vibe coded by @.benzyme on Discord via Cursor AI
  * Self-contained ESM for rs2b0t Load local script / Load URL.
  */
@@ -1492,7 +1487,7 @@ export default defineBot({
     category: 'Agility',
     tags: ['agility', 'gnome', 'alchemy', 'high alchemy', 'alch', 'inventory'],
     description:
-        "Benzyme's Alchgility. High Alchs 3 items (waits out each 5-tick animation), then does the next Gnome Stronghold obstacle at its pinned tile. Leaves Nature runes, Fire runes, coins, and a fire staff alone. Drops beer, kebabs, caskets, and strange fruit. Needs Magic 55 plus Nature runes and Fire runes or a fire staff to alch. The course keeps running if alchemy cannot cast.",
+        'High Alch between obstacles on the Gnome Stronghold agility course. Leaves Nature runes, Fire runes, coins, and a fire staff alone. The course still runs if alchemy cannot cast. Needs Magic 55.',
     settingsSchema: {
         obstacles: {
             type: 'string',

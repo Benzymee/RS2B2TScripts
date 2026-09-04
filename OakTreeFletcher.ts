@@ -1,9 +1,7 @@
 /// <reference path="./dev/rs2b0t-abi.d.ts" />
 
 /**
- * OakTreeFletcher — chop Oaks at 3166,3416 (20t leash), bank.
- * If fletching is on: oak shortbows at 20 / oak longbows at 25, then bank those.
- * Knife required to fletch; missing knife → nearest bank, else Lumbridge castle spawn.
+ * OakTreeFletcher. Chops oak trees north of Varrock and banks the logs.
  * Completely vibe coded by @.benzyme on Discord via Cursor AI
  * Self-contained ESM for rs2b0t Load local script / Load URL.
  */
@@ -1244,7 +1242,7 @@ export default defineBot({
     category: 'Fletching',
     tags: ['woodcutting', 'fletching', 'oak', 'shortbow', 'longbow'],
     description:
-        'Chops oaks north of Varrock (3166,3416). Banks logs. If fletching is on: oak shortbows at 20 / oak longbows at 25 — then banks those. Knife required to fletch (bank, else Lumbridge castle spawn).',
+        'Chops oak trees north of Varrock and banks the logs. Optional fletching into oak shortbows at 20 or longbows at 25.',
     settingsSchema: {
         fletchLogs: {
             type: 'boolean',

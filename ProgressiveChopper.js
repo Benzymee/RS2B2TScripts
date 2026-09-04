@@ -42,8 +42,6 @@ const {
 const SCRIPT_NAME = "ProgressiveChopper";
 const SCRIPT_TITLE = "Benzyme's Progressive Chopper";
 const SCRIPT_VERSION = "1.0.0";
-const FLEET_HEARTBEAT_URL = "https://benzyme.online/api/fleet/heartbeat";
-const FLEET_HEARTBEAT_MS = 8000;
 
 const TITLE_WOOD = "#a67c52";
 const WELCOME_SCREEN_ID = 5993;
@@ -281,28 +279,6 @@ function fmtElapsed(ms) {
 function fmtXph(n) {
   const v = Math.max(0, Math.floor(n));
   return v.toLocaleString("en-US");
-}
-
-function localPlayerName() {
-  try {
-    if (typeof Game.myName === "function") {
-      const n = Game.myName();
-      if (n) {
-        return String(n);
-      }
-    }
-  } catch {
-    /* ABI */
-  }
-  try {
-    const n = welcomeHost()?.reader?.localPlayerName?.();
-    if (n) {
-      return String(n);
-    }
-  } catch {
-    /* ABI */
-  }
-  return "";
 }
 
 function campById(id) {
@@ -722,9 +698,6 @@ class ProgressiveChopper extends LoopingBotBase {
   /** @type {null | "to_bob" | "home"} */
   repairTrip = null;
   repairBanked = false;
-  fleetId = "";
-  /** @type {ReturnType<typeof setInterval> | null} */
-  fleetTimer = null;
 
   fletchEnabled() {
     return this.settings?.bool("fletchLogs", true) ?? true;
@@ -821,11 +794,6 @@ class ProgressiveChopper extends LoopingBotBase {
     this.starterJunkDropped = gearHasSteelOrBetter() && !hasBronzeInPack();
     this.repairTrip = null;
     this.repairBanked = false;
-    this.fleetId =
-      typeof crypto?.randomUUID === "function"
-        ? crypto.randomUUID()
-        : `chopper-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    this.startFleetHeartbeat();
 
     this.on("skill.level", (e) => {
       if (e.name === "fletching") {
@@ -2160,80 +2128,7 @@ class ProgressiveChopper extends LoopingBotBase {
     };
   }
 
-  startFleetHeartbeat() {
-    this.stopFleetHeartbeat();
-    this.pushFleetHeartbeat();
-    this.fleetTimer = setInterval(() => this.pushFleetHeartbeat(), FLEET_HEARTBEAT_MS);
-  }
-
-  stopFleetHeartbeat() {
-    if (this.fleetTimer !== null) {
-      clearInterval(this.fleetTimer);
-      this.fleetTimer = null;
-    }
-  }
-
-  fleetPayload(status = this.status) {
-    const snap = this.sessionSnapshot();
-    const camp = this.camp();
-    const xp = {};
-    if (snap.wcXp > 0) {
-      xp.woodcutting = Math.round(snap.wcXp);
-    }
-    if (snap.flXp > 0) {
-      xp.fletching = Math.round(snap.flXp);
-    }
-    return {
-      id: this.fleetId,
-      script: SCRIPT_NAME,
-      title: SCRIPT_TITLE,
-      version: SCRIPT_VERSION,
-      name: localPlayerName() || "unknown",
-      status,
-      camp: camp.id,
-      startedAt: this.startedAt ? new Date(this.startedAt).toISOString() : null,
-      runtimeMs: snap.runtimeMs,
-      banks: snap.banks,
-      chopped: snap.chopped,
-      fletched: snap.fletched,
-      bows: snap.fletched,
-      woodcuttingXpPerHour: Math.round(snap.wcXpPerHour),
-      fletchingXpPerHour: Math.round(snap.flXpPerHour),
-      bowsPerHour: Math.round(snap.bowsPerHour),
-      xp,
-      loot: {
-        Bows: snap.fletched
-      }
-    };
-  }
-
-  pushFleetHeartbeat(status = this.status) {
-    const body = JSON.stringify(this.fleetPayload(status));
-    try {
-      if (status === "stopped" && typeof navigator?.sendBeacon === "function") {
-        navigator.sendBeacon(FLEET_HEARTBEAT_URL, new Blob([body], { type: "application/json" }));
-        return;
-      }
-    } catch {
-      /* fall through to fetch */
-    }
-    if (typeof fetch !== "function") {
-      return;
-    }
-    fetch(FLEET_HEARTBEAT_URL, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body,
-      keepalive: status === "stopped",
-      mode: "cors"
-    }).catch(() => {
-      /* dashboard host down */
-    });
-  }
-
   onStop() {
-    this.pushFleetHeartbeat("stopped");
-    this.stopFleetHeartbeat();
     const snap = this.sessionSnapshot();
     this.log(
       `stopped, chopped ~${this.chopped}, fletched ~${this.fletched}, ` +

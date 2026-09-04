@@ -27,8 +27,6 @@ const {
 const SCRIPT_NAME = "Alchgility";
 const SCRIPT_TITLE = "Benzyme's Alchgility";
 const SCRIPT_VERSION = "1.8.0";
-const FLEET_HEARTBEAT_URL = "https://benzyme.online/api/fleet/heartbeat";
-const FLEET_HEARTBEAT_MS = 8e3;
 const WELCOME_SCREEN_ID = 5993;
 const MAGIC_TAB = 6;
 const INV_TAB = 3;
@@ -160,25 +158,6 @@ function fmtElapsed(ms) {
 function fmtXph(n) {
   const v = Math.max(0, Math.floor(n));
   return v.toLocaleString("en-US");
-}
-function localPlayerName() {
-  try {
-    if (typeof Game.myName === "function") {
-      const n = Game.myName();
-      if (n) {
-        return String(n);
-      }
-    }
-  } catch {
-  }
-  try {
-    const n = welcomeHost()?.reader?.localPlayerName?.();
-    if (n) {
-      return String(n);
-    }
-  } catch {
-  }
-  return "";
 }
 function normName(name) {
   return String(name ?? "").toLowerCase().replace(/-/g, " ").replace(/\s+/g, " ").trim();
@@ -596,8 +575,6 @@ class Alchgility extends LoopingBotBase {
   obstacleXpBefore = null;
   walkBlockedKey = "";
   walkBlockedUntil = 0;
-  fleetId = "";
-  fleetTimer = null;
   async onStart() {
     await Execution.delayUntil(() => Game.ingame() && Game.tile() !== null, 0);
     if (typeof Traversal?.preload === "function") {
@@ -624,9 +601,7 @@ class Alchgility extends LoopingBotBase {
     this.obstacleXpBefore = null;
     this.walkBlockedKey = "";
     this.walkBlockedUntil = 0;
-    this.fleetId = typeof crypto?.randomUUID === "function" ? crypto.randomUUID() : `alchgility-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     this.syncSettings();
-    this.startFleetHeartbeat();
     const magic = Skills.level("magic");
     this.log(
       `Benzyme's Alchgility, Gnome agility + High Level Alchemy (Magic ${magic}, need ${SPELL.level}, Agility ${Skills.level("agility")})`
@@ -645,8 +620,6 @@ class Alchgility extends LoopingBotBase {
     this.status = "ready";
   }
   onStop() {
-    this.pushFleetHeartbeat("stopped");
-    this.stopFleetHeartbeat();
     const snap = this.sessionSnapshot();
     this.log(
       `stopped, ${this.laps} laps, ${this.casts} high alchs, ${fmtXph(this.gpAlched)}gp, +${fmtXph(snap.magicXp)} magic xp, +${fmtXph(snap.agilityXp)} agility xp (${this.status})`
@@ -671,71 +644,6 @@ class Alchgility extends LoopingBotBase {
       magicXpPerHour: perHour(magicXp),
       agilityXpPerHour: perHour(agilityXp)
     };
-  }
-  startFleetHeartbeat() {
-    this.stopFleetHeartbeat();
-    this.pushFleetHeartbeat();
-    this.fleetTimer = setInterval(() => this.pushFleetHeartbeat(), FLEET_HEARTBEAT_MS);
-  }
-  stopFleetHeartbeat() {
-    if (this.fleetTimer !== null) {
-      clearInterval(this.fleetTimer);
-      this.fleetTimer = null;
-    }
-  }
-  fleetPayload(status = this.status) {
-    const snap = this.sessionSnapshot();
-    const xp = {};
-    if (snap.magicXp > 0) {
-      xp.magic = Math.round(snap.magicXp);
-    }
-    if (snap.agilityXp > 0) {
-      xp.agility = Math.round(snap.agilityXp);
-    }
-    return {
-      id: this.fleetId,
-      script: SCRIPT_NAME,
-      title: SCRIPT_TITLE,
-      version: SCRIPT_VERSION,
-      name: localPlayerName() || "unknown",
-      status,
-      startedAt: this.startedAt ? new Date(this.startedAt).toISOString() : null,
-      runtimeMs: snap.runtimeMs,
-      alchs: snap.alchs,
-      gp: Math.round(snap.gp),
-      laps: snap.laps,
-      obstacles: snap.obstacles,
-      alchsPerHour: Math.round(snap.alchsPerHour),
-      gpPerHour: Math.round(snap.gpPerHour),
-      magicXpPerHour: Math.round(snap.magicXpPerHour),
-      agilityXpPerHour: Math.round(snap.agilityXpPerHour),
-      xp,
-      loot: {
-        "High Alchs": snap.alchs,
-        GP: Math.round(snap.gp)
-      }
-    };
-  }
-  pushFleetHeartbeat(status = this.status) {
-    const body = JSON.stringify(this.fleetPayload(status));
-    try {
-      if (status === "stopped" && typeof navigator?.sendBeacon === "function") {
-        navigator.sendBeacon(FLEET_HEARTBEAT_URL, new Blob([body], { type: "application/json" }));
-        return;
-      }
-    } catch {
-    }
-    if (typeof fetch !== "function") {
-      return;
-    }
-    fetch(FLEET_HEARTBEAT_URL, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body,
-      keepalive: status === "stopped",
-      mode: "cors"
-    }).catch(() => {
-    });
   }
   syncSettings() {
     const s = this.settings;

@@ -9,7 +9,7 @@
  * Self-contained ESM for rs2b0t Load local script / Load URL.
  */
 
-/// <reference path="./rs2b0t-abi.d.ts" />
+/// <reference path="./dev/rs2b0t-abi.d.ts" />
 
 const SUPPORTED_API_VERSION = 1;
 

@@ -1,4 +1,4 @@
-/// <reference path="./rs2b0t-abi.d.ts" />
+/// <reference path="./dev/rs2b0t-abi.d.ts" />
 
 /**
  * CatherbyNetFisher — small-net shrimp at Catherby (Net+Bait spots only).

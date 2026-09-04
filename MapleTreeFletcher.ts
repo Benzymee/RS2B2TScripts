@@ -1,4 +1,4 @@
-/// <reference path="./rs2b0t-abi.d.ts" />
+/// <reference path="./dev/rs2b0t-abi.d.ts" />
 
 /**
  * MapleTreeFletcher — chop Maple trees at 2726,3500 (20t leash), bank.

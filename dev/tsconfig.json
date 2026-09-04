@@ -9,5 +9,5 @@
         "skipLibCheck": true,
         "noEmit": true
     },
-    "include": ["*.ts", "rs2b0t-abi.d.ts"]
+    "include": ["../*.ts", "./rs2b0t-abi.d.ts"]
 }

@@ -1,14 +1,9 @@
 /// <reference path="./dev/rs2b0t-abi.d.ts" />
 
 /**
- * EdgevilleBodyRunes: craft Body runes, bank at Edgeville.
- * Starts at Edgeville bank (3092,3492), keeps a Body talisman or Body tiara,
- * fills the pack with Pure or Rune essence, walks south-west to the body
- * ruins (3053,3445), enters (tiara click or talisman-on-ruins), crafts,
- * portals out, and banks the runes. Completely vibe coded by @.benzyme on
- * Discord via Cursor AI. Self-contained ESM for rs2b0t Load local script / Load URL.
- *
- * Versioning: start at 1.0; each update bumps 1.1, 1.2, 1.3, …
+ * EdgevilleBodyRunes. Crafts Body runes from Edgeville bank.
+ * Completely vibe coded by @.benzyme on Discord via Cursor AI
+ * Self-contained ESM for rs2b0t Load local script / Load URL.
  */
 const SUPPORTED_API_VERSION = 1;
 const abi = globalThis.__rs2b0t;
@@ -1532,7 +1527,7 @@ export default defineBot({
         'bank'
     ],
     description:
-        'Crafts Body runes. Starts at Edgeville bank (3092,3492), withdraws a Body talisman or Body tiara and fills the pack with Pure or Rune essence, walks the recorded pin path to the body ruins (3053,3445), enters, crafts, portals out, and banks at Edgeville. Needs Runecrafting 20.',
+        'Crafts Body runes from Edgeville. Withdraws essence, walks to the body ruins, enters with a Body tiara or talisman, crafts, then banks. Needs Runecrafting 20.',
     settingsSchema: {},
     create: () => new EdgevilleBodyRunes()
 });

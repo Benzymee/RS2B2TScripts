@@ -1,5 +1,5 @@
 /**
- * Alchgility. High Alch between obstacles on the Gnome Stronghold agility course.
+ * Alchgility. WARNING: High Alchs the whole inventory on the Gnome Stronghold agility course.
  * Load URL: https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/Alchgility.js
  */
 const SUPPORTED_API_VERSION = 1;
@@ -1224,7 +1224,7 @@ var Alchgility_default = defineBot({
   version: SCRIPT_VERSION,
   category: "Agility",
   tags: ["agility", "gnome", "alchemy", "high alchemy", "alch", "inventory"],
-  description: "High Alch between obstacles on the Gnome Stronghold agility course. Leaves Nature runes, Fire runes, coins, and a fire staff alone. The course still runs if alchemy cannot cast. Needs Magic 55.",
+  description: "WARNING: High Alchs the whole inventory while running the Gnome Stronghold agility course. Leaves Nature runes, Fire runes, coins, and a fire staff alone. Needs Magic 55.",
   settingsSchema: {
     obstacles: {
       type: "string",

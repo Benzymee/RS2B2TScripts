@@ -1,5 +1,6 @@
 /**
  * FaladorTreeFletcher. Chops regular trees west of Falador.
+ *
  * Load URL: https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/FaladorTreeFletcher.js
  */
 const SUPPORTED_API_VERSION = 1;

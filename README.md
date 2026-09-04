@@ -21,7 +21,7 @@ Most scripts dismiss the welcome screen on start.
 
 **Mule note:** a few scripts trade to a hardcoded player name (`MULE_NAME` near the top of the file). Change that name before you run mule mode, or the trade will sit there waiting for the wrong person.
 
-## Scripts
+## Scripts: COPY THE LINK INTO THE BOT URL SPOT WHERE YOU CHOOSE A SCRIPT AND CLICK LOAD TO LOAD THE SCRIPT
 
 **Alchgility** (`Alchgility.js`). WARNING: High Alchs the whole inventory while running the Gnome Stronghold agility course. Needs Magic 55.
 

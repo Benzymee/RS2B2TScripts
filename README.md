@@ -14,8 +14,8 @@
 
 1. Load the bot client via url: https://w1.rs2b2t.com/rs2b0t/ (Make an account via https://rs2b2t.com/register if you haven't already)
 2. Log into your account
-3. Click browse up the top right of the client
-4. Download a script and locate/run it off your PC
+3. Click **Load URL** up the top right of the client
+4. Paste a **jsDelivr** link from the list below (not a github.com or raw.githubusercontent.com link; those are blocked by the browser)
 
 Most scripts dismiss the welcome screen on start.
 
@@ -23,30 +23,58 @@ Most scripts dismiss the welcome screen on start.
 
 ## Scripts
 
-**Alchgility** (`Alchgility.ts`). High Alch between obstacles on the Gnome Stronghold agility course. Needs Magic 55.
+**Alchgility** (`Alchgility.js`). High Alch between obstacles on the Gnome Stronghold agility course. Needs Magic 55.
 
-**EdgevilleBodyRunes** (`EdgevilleBodyRunes.ts`). Crafts Body runes from Edgeville bank. Needs Runecrafting 20.
+https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/Alchgility.js
 
-**MapleTreeFletcher** (`MapleTreeFletcher.ts`). Chops maple trees near Seers Village. Optional fletching into maple shortbows at 50 or longbows at 55.
+**EdgevilleBodyRunes** (`EdgevilleBodyRunes.js`). Crafts Body runes from Edgeville bank. Needs Runecrafting 20.
 
-**OakTreeFletcher** (`OakTreeFletcher.ts`). Chops oak trees north of Varrock. Optional fletching into oak shortbows at 20 or longbows at 25.
+https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/EdgevilleBodyRunes.js
 
-**OakTreeFletcherSell** (`OakTreeFletcherSell.ts`). Same oak camp, then sells fletched bows at Varrock General Store and banks the coins.
+**MapleTreeFletcher** (`MapleTreeFletcher.js`). Chops maple trees near Seers Village. Optional fletching into maple shortbows at 50 or longbows at 55.
 
-**WillowTreeFletcher** (`WillowTreeFletcher.ts`). Chops willow trees at Draynor. Optional fletching into willow shortbows at 35 or longbows at 40.
+https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/MapleTreeFletcher.js
 
-**FaladorTreeFletcher** (`FaladorTreeFletcher.ts`). Chops regular trees west of Falador. Optional fletching into arrow shafts, shortbows at 5, or longbows at 10.
+**OakTreeFletcher** (`OakTreeFletcher.js`). Chops oak trees north of Varrock. Optional fletching into oak shortbows at 20 or longbows at 25.
 
-**CatherbyRangeCooker** (`CatherbyRangeCooker.ts`). Cooks raw fish from Catherby bank on the Range next to the bank.
+https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/OakTreeFletcher.js
 
-**CatherbySwordfish** (`CatherbySwordfish.ts`). Harpoons tuna and swordfish at Catherby. Optional cook, sell to Harry, or mule noted fish.
+**OakTreeFletcherSell** (`OakTreeFletcherSell.js`). Same oak camp, then sells fletched bows at Varrock General Store and banks the coins.
 
-**CatherbyLobsters** (`CatherbyLobsters.ts`). Cage-fishes lobsters at Catherby. Optional cook or sell raw lobster to Harry.
+https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/OakTreeFletcherSell.js
 
-**CatherbyNetFisher** (`CatherbyNetFisher.ts`). Small-net fishes shrimp at Catherby. Optional cook on the way to the bank.
+**WillowTreeFletcher** (`WillowTreeFletcher.js`). Chops willow trees at Draynor. Optional fletching into willow shortbows at 35 or longbows at 40.
 
-**BankCleaner** (`BankCleaner.ts`). Opens the nearest bank and sorts stacks by type.
+https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/WillowTreeFletcher.js
 
-**ArdougneThiever** (`ArdougneThiever.ts`). Pickpockets in East Ardougne. Auto target from Thieving level, with optional food, cake stall, and mule.
+**FaladorTreeFletcher** (`FaladorTreeFletcher.js`). Chops regular trees west of Falador. Optional fletching into arrow shafts, shortbows at 5, or longbows at 10.
 
-**InventoryAlcher** (`InventoryAlcher.ts`). High Level Alchemy from the inventory. Named item list, or ALCH INVENTORY for the rest of the pack. Needs Magic 55.
+https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/FaladorTreeFletcher.js
+
+**CatherbyRangeCooker** (`CatherbyRangeCooker.js`). Cooks raw fish from Catherby bank on the Range next to the bank.
+
+https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/CatherbyRangeCooker.js
+
+**CatherbySwordfish** (`CatherbySwordfish.js`). Harpoons tuna and swordfish at Catherby. Optional cook, sell to Harry, or mule noted fish.
+
+https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/CatherbySwordfish.js
+
+**CatherbyLobsters** (`CatherbyLobsters.js`). Cage-fishes lobsters at Catherby. Optional cook or sell raw lobster to Harry.
+
+https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/CatherbyLobsters.js
+
+**CatherbyNetFisher** (`CatherbyNetFisher.js`). Small-net fishes shrimp at Catherby. Optional cook on the way to the bank.
+
+https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/CatherbyNetFisher.js
+
+**BankCleaner** (`BankCleaner.js`). Opens the nearest bank and sorts stacks by type.
+
+https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/BankCleaner.js
+
+**ArdougneThiever** (`ArdougneThiever.js`). Pickpockets in East Ardougne. Auto target from Thieving level, with optional food, cake stall, and mule.
+
+https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/ArdougneThiever.js
+
+**InventoryAlcher** (`InventoryAlcher.js`). High Level Alchemy from the inventory. Named item list, or ALCH INVENTORY for the rest of the pack. Needs Magic 55.
+
+https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/InventoryAlcher.js

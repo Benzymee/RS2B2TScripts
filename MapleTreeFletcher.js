@@ -1,5 +1,6 @@
 /**
  * MapleTreeFletcher. Chops maple trees near Seers Village.
+ *
  * Load URL: https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/MapleTreeFletcher.js
  */
 const SUPPORTED_API_VERSION = 1;

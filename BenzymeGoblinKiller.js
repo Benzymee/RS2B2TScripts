@@ -1,5 +1,6 @@
 /**
  * BenzymeGoblinKiller. Kills Lumbridge oak goblins. Hops to giant rats if the camp is crowded.
+ * Banks at Al Kharid (this world has no Lumbridge bank chest).
  *
  * Load URL: https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/BenzymeGoblinKiller.js
  */
@@ -40,8 +41,8 @@ const {
 
 const SCRIPT_NAME = 'BenzymeGoblinKiller';
 /** Display / paint version — bump minor on each update (v2 → v2.1 → v2.2 …). */
-const SCRIPT_VERSION = '2.16';
-const SCRIPT_VERSION_FULL = '2.16.0';
+const SCRIPT_VERSION = '2.17';
+const SCRIPT_VERSION_FULL = '2.17.0';
 
 /** Post-login welcome modal interface id (Close Window top-right). */
 const WELCOME_SCREEN_ID = 5993;
@@ -98,10 +99,8 @@ const STEEL_SCIM_COST = 320;
 /** Train at camp this long when Zeke has no Steel scimitar stock. */
 const STEEL_RESTOCK_MS = 10 * 60 * 1000;
 
-/** Ground-floor Bank chest on the Lumbridge castle path (not the upstairs booths). */
-const LUMBRIDGE_BANK_CHEST = new Tile(3220, 3216, 0);
-const LUMBRIDGE_BANK_STAND = new Tile(3220, 3217, 0);
-const BANK_CHEST_NAME = 'Bank chest';
+/** Al Kharid bank booths. Lumbridge has no bank chest on this world. */
+const ALKHARID_BANK_STAND = new Tile(3269, 3167, 0);
 const BANK_BOOTH_NAME = 'Bank booth';
 
 /** Lumbridge courtyard Men (same stand as other Benzyme thieving scripts). */
@@ -2386,8 +2385,7 @@ class BenzymeGoblinKiller extends LoopingBotBase {
     }
 
     /**
-     * Locate and open the nearest bank (web-walks if needed).
-     * Prefers the Lumbridge path Bank chest so we do not walk to Al Kharid or Draynor.
+     * Open Al Kharid bank. Walks the toll (or the long way around if broke / jammed).
      * @returns {Promise<boolean>}
      */
     async findAndOpenBank() {
@@ -2395,69 +2393,52 @@ class BenzymeGoblinKiller extends LoopingBotBase {
             return true;
         }
         this.status = 'find bank';
-        this.log('finding nearest bank for gear prep');
-        if (await this.openLumbridgeBankChest()) {
+        this.log('opening Al-Kharid bank for gear prep');
+        if (await this.openAlkharidBank()) {
             return true;
         }
         if (typeof Banking !== 'undefined' && Banking && typeof Banking.open === 'function') {
-            const chest = await Banking.open({
-                stand: LUMBRIDGE_BANK_STAND,
-                boothName: BANK_CHEST_NAME,
-                boothOp: 'Use',
-                destination: {
-                    name: 'Lumbridge',
-                    tile: LUMBRIDGE_BANK_STAND,
-                    access: { name: BANK_CHEST_NAME, op: 'Use' }
-                },
-                log: m => this.log(`  ${m}`)
-            });
-            if (chest) {
-                return true;
-            }
-            this.log('Lumbridge bank chest did not open — trying the nearest booth');
+            this.log('booth click missed, trying Banking.open at Al-Kharid');
             return !!(await Banking.open({
+                stand: ALKHARID_BANK_STAND,
+                boothName: BANK_BOOTH_NAME,
+                boothOp: 'Use-quickly',
+                destination: {
+                    name: 'Al Kharid',
+                    tile: ALKHARID_BANK_STAND,
+                    access: { name: BANK_BOOTH_NAME, op: 'Use-quickly' }
+                },
                 log: m => this.log(`  ${m}`)
             }));
         }
         if (typeof Bank.openNearest === 'function') {
-            if (await Bank.openNearest(BANK_CHEST_NAME, 'Use', m => this.log(`  ${m}`))) {
-                return true;
-            }
             return !!(await Bank.openNearest(BANK_BOOTH_NAME, 'Use-quickly', m => this.log(`  ${m}`)));
         }
-        this.log('WARNING: Banking.open unavailable — cannot find a bank');
+        this.log('WARNING: Banking.open unavailable, cannot find a bank');
         return false;
     }
 
-    async openLumbridgeBankChest() {
-        let chest = findBankObject(BANK_CHEST_NAME);
+    async openAlkharidBank() {
         const here = Game.tile();
-        const far =
-            !chest ||
-            (typeof chest.distance === 'function' ? chest.distance() > 8 : tileDist(here, LUMBRIDGE_BANK_CHEST) > 8);
+        const far = !here || tileDist(here, ALKHARID_BANK_STAND) > 8;
         if (far) {
-            this.status = 'walk to bank chest';
+            this.status = 'walk to Al-Kharid bank';
             this.log(
-                `walking to Lumbridge bank chest ${LUMBRIDGE_BANK_CHEST.x},${LUMBRIDGE_BANK_CHEST.z}`
+                `walking to Al-Kharid bank ${ALKHARID_BANK_STAND.x},${ALKHARID_BANK_STAND.z}`
             );
-            await Traversal.walkResilient(LUMBRIDGE_BANK_STAND, {
-                radius: 2,
-                attempts: 3,
-                timeoutMs: 60_000,
-                log: m => this.log(`  ${m}`)
-            });
-            chest = findBankObject(BANK_CHEST_NAME);
+            await this.walkViaAlkharidGate(ALKHARID_BANK_STAND, 2, { allowToll: true });
         }
-        if (!chest) {
-            this.log(`no '${BANK_CHEST_NAME}' in the scene`);
+        let booth = findBankObject(BANK_BOOTH_NAME);
+        if (!booth || (typeof booth.distance === 'function' && booth.distance() > 8)) {
+            this.log(`no '${BANK_BOOTH_NAME}' at Al-Kharid bank`);
             return false;
         }
-        const op = bankObjectOp(chest) ?? 'Use';
-        const t = typeof chest.tile === 'function' ? chest.tile() : LUMBRIDGE_BANK_CHEST;
-        this.status = `open ${BANK_CHEST_NAME}`;
-        this.log(`${op} ${BANK_CHEST_NAME} @ ${t.x},${t.z}`);
-        if (typeof chest.interact === 'function') {
-            await chest.interact(op);
+        const op = bankObjectOp(booth) ?? 'Use-quickly';
+        const t = typeof booth.tile === 'function' ? booth.tile() : ALKHARID_BANK_STAND;
+        this.status = `open ${BANK_BOOTH_NAME}`;
+        this.log(`${op} ${BANK_BOOTH_NAME} @ ${t.x},${t.z}`);
+        if (typeof booth.interact === 'function') {
+            await booth.interact(op);
         }
         return !!(await Execution.delayUntil(() => Bank.isOpen(), 8000));
     }
@@ -3153,7 +3134,7 @@ class BenzymeGoblinKiller extends LoopingBotBase {
         return true;
     }
 
-    async walkViaAlkharidGate(dest, radius = 4) {
+    async walkViaAlkharidGate(dest, radius = 4, opts = {}) {
         const here = Game.tile();
         if (!here || !dest) {
             return false;
@@ -3167,7 +3148,7 @@ class BenzymeGoblinKiller extends LoopingBotBase {
             }));
         }
 
-        if (this.shouldAvoidAlkGate()) {
+        if (!opts.allowToll && this.shouldAvoidAlkGate()) {
             return await this.walkAlkAround(dest, radius);
         }
 
@@ -3395,7 +3376,7 @@ export default defineBot({
     category: 'Combat',
     tags: ['goblin', 'giant-rat', 'lumbridge', 'al-kharid', 'melee', 'thieving', 'scimitar', 'dagger', 'loadout', 'death-recovery', 'xp', 'prayer', 'bank', 'tutorial', 'benzyme'],
     description:
-        'Kills Lumbridge oak goblins. Hops to giant rats if more than 5 players fight goblins. Optional bronze dagger, loadout, and Steel scimitar upgrade. Banks at the Lumbridge path chest.',
+        'Kills Lumbridge oak goblins. Hops to giant rats if more than 5 players fight goblins. Banks at Al Kharid. Optional bronze dagger, loadout, and Steel scimitar upgrade.',
     settingsSchema: {
         useBronzeDagger: {
             type: 'boolean',

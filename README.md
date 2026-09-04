@@ -31,6 +31,10 @@ https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/Alchgility.js
 
 https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/EdgevilleBodyRunes.js
 
+**ProgressiveChopper** (`ProgressiveChopper.js`). Chops Falador trees, then oaks, willows, and Seers maples as woodcutting and fletching unlock each camp. Optional fletching into bows.
+
+https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/ProgressiveChopper.js
+
 **MapleTreeFletcher** (`MapleTreeFletcher.js`). Chops maple trees near Seers Village. Optional fletching into maple shortbows at 50 or longbows at 55.
 
 https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/MapleTreeFletcher.js

@@ -1,5 +1,6 @@
 /**
  * CatherbyLobsters. Cage-fishes lobsters at Catherby.
+ *
  * Load URL: https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/CatherbyLobsters.js
  */
 const SUPPORTED_API_VERSION = 1;

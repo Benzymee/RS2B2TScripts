@@ -1,10 +1,7 @@
 /// <reference path="./dev/rs2b0t-abi.d.ts" />
 
 /**
- * WillowTreeFletcher — chop Willows at 3087,3235 (20t leash), bank.
- * If fletching is on: willow shortbows at 35 / willow longbows at 40, then bank those.
- * Knife required to fletch; missing knife → nearest bank, else Lumbridge castle spawn.
- * Broken rune axe: nearest bank 1k, walk to Bob, repair, walk back.
+ * WillowTreeFletcher. Chops willow trees at Draynor and banks the logs.
  * Completely vibe coded by @.benzyme on Discord via Cursor AI
  * Self-contained ESM for rs2b0t Load local script / Load URL.
  */
@@ -1352,7 +1349,7 @@ export default defineBot({
     category: 'Fletching',
     tags: ['woodcutting', 'fletching', 'willow', 'shortbow', 'longbow'],
     description:
-        'Chops willows at Draynor (3087,3235). Banks logs. If fletching is on: willow shortbows at 35 / willow longbows at 40 — then banks those. Knife required to fletch (bank, else Lumbridge castle spawn). Broken rune axe: withdraws 1k, walks to Bob, repairs, then returns.',
+        'Chops willow trees at Draynor and banks the logs. Optional fletching into willow shortbows at 35 or longbows at 40. Repairs a broken axe at Bob in Lumbridge.',
     settingsSchema: {
         fletchLogs: {
             type: 'boolean',

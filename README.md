@@ -17,7 +17,7 @@
 3. Click browse up the top right of the client
 4. Download a script and locate/run it off your PC
 
-Most scripts dismiss the welcome screen on start. Quest scripts skip Tutorial Island if you are still there.
+Most scripts dismiss the welcome screen on start.
 
 **Mule note:** a few scripts trade to a hardcoded player name (`MULE_NAME` near the top of the file). Change that name before you run mule mode, or the trade will sit there waiting for the wrong person.
 

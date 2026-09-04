@@ -1,10 +1,7 @@
 /// <reference path="./dev/rs2b0t-abi.d.ts" />
 
 /**
- * InventoryAlcher — High Level Alchemy with an allowlist or an opt-in dump of the pack.
- * ALCH INVENTORY is off by default. A blank item list uses that checkbox.
- * Named items (comma-separated) are the only things alched when the box is filled.
- * Stand spot walks you back if a random event moves you.
+ * InventoryAlcher. High Level Alchemy from the inventory.
  * Completely vibe coded by @.benzyme on Discord via Cursor AI
  * Self-contained ESM for rs2b0t Load local script / Load URL.
  */
@@ -1025,7 +1022,7 @@ export default defineBot({
     category: 'Magic',
     tags: ['magic', 'alch', 'high alchemy', 'inventory', 'utility'],
     description:
-        "Benzyme's InventoryAlcher. High Level Alchemy with safeguards: ALCH INVENTORY is off by default. Tick it to alch the pack except Nature runes and coins, or list exact item names/IDs in the text box (comma-separated). A filled list always wins. Optional stand spot walks you back after random events. Needs Magic 55, Nature runes, and Fire runes or a fire staff.",
+        'High Level Alchemy. Alch a named list of items, or tick ALCH INVENTORY to alch the pack except Nature runes, Fire runes, coins, and a fire staff. Optional stand spot. Needs Magic 55.',
     settingsSchema: {
         standSpot: {
             type: 'boolean',

@@ -1,10 +1,7 @@
 /// <reference path="./dev/rs2b0t-abi.d.ts" />
 
 /**
- * BankCleaner — open a bank and pack every stack into a correlated order.
- * Does not mouse-drag: 2004scape has no "sort bank" button. A drag only sends
- * INV_BUTTOND (swap two slots). This script sends that swap packet directly,
- * which is the fastest rearrange the server accepts.
+ * BankCleaner. Opens a bank and sorts stacks by type.
  * Completely vibe coded by @.benzyme on Discord via Cursor AI
  * Self-contained ESM for rs2b0t Load local script / Load URL.
  */
@@ -1169,7 +1166,7 @@ export default defineBot({
     category: 'Utility',
     tags: ['bank', 'sort', 'utility', 'cleaner'],
     description:
-        "Benzyme's Bank Cleaner — opens the nearest bank and packs stacks by family (runes, staves, ores, bars, food, gear, …). Uses bank slot-swap packets (what a drag sends) instead of mouse-dragging. Stand at a booth or let it walk to one.",
+        'Opens the nearest bank and sorts stacks by type, such as runes, ores, food, and gear.',
     settingsSchema: {
         depositFirst: {
             type: 'boolean',

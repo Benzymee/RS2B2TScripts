@@ -1,11 +1,7 @@
 /// <reference path="./dev/rs2b0t-abi.d.ts" />
 
 /**
- * MapleTreeFletcher — chop Maple trees at 2726,3500 (20t leash), bank.
- * If fletching is on: maple shortbows at 50 / maple longbows at 55, then bank those.
- * Knife required to fletch (inventory, else bank). Seers Village: stops if none available.
- * Broken axe: withdraw 1k at Seers, boat Ardougne → Brimhaven → Musa → Port Sarim,
- * walk to Bob in Lumbridge, repair, then boat back and resume chopping.
+ * MapleTreeFletcher. Chops maple trees near Seers Village and banks the logs.
  * Completely vibe coded by @.benzyme on Discord via Cursor AI
  * Self-contained ESM for rs2b0t Load local script / Load URL.
  */
@@ -2061,7 +2057,7 @@ export default defineBot({
     category: 'Fletching',
     tags: ['woodcutting', 'fletching', 'maple', 'shortbow', 'longbow'],
     description:
-        "Chops maples near Seers' Village (2726,3500). Banks logs. If fletching is on: maple shortbows at 50 / maple longbows at 55, then banks those. Stops if fletching is on and there is no knife. Broken rune axe: withdraws 1k at Seers, boats Ardougne to Brimhaven to Port Sarim, repairs at Bob, boats back.",
+        'Chops maple trees near Seers Village and banks the logs. Optional fletching into maple shortbows at 50 or longbows at 55. Repairs a broken axe at Bob in Lumbridge.',
     settingsSchema: {
         fletchLogs: {
             type: 'boolean',

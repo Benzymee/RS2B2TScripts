@@ -35,6 +35,10 @@ https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/ArdougneThiever.js
 
 https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/BankCleaner.js
 
+**BenzymeGoblinKiller** (`BenzymeGoblinKiller.js`). Kills Lumbridge oak goblins. Hops to giant rats if more than 5 players fight goblins. Optional bronze dagger, loadout, and Steel scimitar upgrade.
+
+https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/BenzymeGoblinKiller.js
+
 **CatherbyLobsters** (`CatherbyLobsters.js`). Cage-fishes lobsters at Catherby. Optional cook or sell raw lobster to Harry.
 
 https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/CatherbyLobsters.js

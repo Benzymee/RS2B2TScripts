@@ -355,6 +355,8 @@ declare global {
         Players: PlayersApi;
         Shop: ShopApi;
         Trade: TradeApi;
+        Loadouts?: { all?: () => any[] };
+        SettingsStore?: { displayString?: (a: string, b: string, opts?: unknown) => string };
         Traversal: TraversalApi;
         DirectNavigator: DirectNavigatorApi;
         Tile: typeof Tile;

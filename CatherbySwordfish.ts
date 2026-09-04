@@ -1,12 +1,7 @@
 /// <reference path="./dev/rs2b0t-abi.d.ts" />
 
 /**
- * CatherbySwordfish — harpoon tuna/swordfish at Catherby (Cage+Harpoon spots only).
- * Harry sand / mid beach first; cape via sand corridor; never the east rocks (I can't reach that).
- * Withdraws Harpoon from bank before fishing. If none in bank, buys one from Harry.
- * Optional cook on bank-house Range (tuna + swordfish), optional sell catch to Harry, then return to shore.
- * Optional mule (on by default): once banked tuna ≥ 1000 OR swordfish ≥ 1000 (not combined),
- * withdraw that type as notes and trade them to "eoc" at Catherby bank, then keep fishing.
+ * CatherbySwordfish. Harpoons tuna and swordfish at Catherby.
  * Completely vibe coded by @.benzyme on Discord via Cursor AI
  * Self-contained ESM for rs2b0t Load local script / Load URL.
  */
@@ -2717,7 +2712,7 @@ export default defineBot({
     category: 'Fishing',
     tags: ['fishing', 'catherby', 'harpoon', 'tuna', 'swordfish', 'bank', 'cook', 'harry', 'mule'],
     description:
-        "Benzyme's Catherby Swordfish — harpoons tuna/swordfish on Cage+Harpoon spots (Harry sand / mid beach first; cape via sand corridor; never the east rocks). Withdraws Harpoon from bank before fishing; buys one from Harry if missing. Optional cook on way (tuna Cooking 30+, swordfish 45+); optional sell raw catch to Harry instead of banking. Mule mode (on by default): trades to eoc only when tuna ≥ 1000 or swordfish ≥ 1000 (each type counted separately, not combined). Withdraws that type as notes at Catherby bank, leaves the other type if it is under 1000, then keeps fishing.",
+        'Harpoons tuna and swordfish at Catherby. Optional cook, sell to Harry, or mule noted fish once a stack reaches 1000. Change MULE_NAME before using mule mode.',
     settingsSchema: {
         muleOn: {
             type: 'boolean',

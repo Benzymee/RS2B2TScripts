@@ -1,5 +1,6 @@
 /**
  * OakTreeFletcherSell. Chops oaks, fletches bows, and sells them in Varrock.
+ *
  * Load URL: https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/OakTreeFletcherSell.js
  */
 const SUPPORTED_API_VERSION = 1;

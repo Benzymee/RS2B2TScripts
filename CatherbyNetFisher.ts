@@ -1,10 +1,7 @@
 /// <reference path="./dev/rs2b0t-abi.d.ts" />
 
 /**
- * CatherbyNetFisher — small-net shrimp at Catherby (Net+Bait spots only).
- * Scans Harry's sand (2836–2838), mid-beach (2842), and east sand (2845); never walks the east rocks or cape.
- * Start: bank open → deposit all → unequip all → deposit again → withdraw Small fishing net only.
- * Optional cook on the bank-house Range on the way to the bank, then bank + return.
+ * CatherbyNetFisher. Small-net fishes shrimp at Catherby.
  * Completely vibe coded by @.benzyme on Discord via Cursor AI
  * Self-contained ESM for rs2b0t Load local script / Load URL.
  */
@@ -1430,7 +1427,7 @@ export default defineBot({
     category: 'Fishing',
     tags: ['fishing', 'catherby', 'net', 'shrimp', 'bank', 'cook'],
     description:
-        "Benzyme's Catherby Fisher — on start always deposits, unequips, banks everything, withdraws Small fishing net only, then small-net shrimp at Net+Bait spots on Harry sand and mid-beach. Never walks the east rocks or cape. Optional cook on bank-house Range on the way to bank.",
+        'Small-net fishes shrimp at Catherby. Withdraws a small fishing net, then optional cook on the Range next to the bank on the way to deposit.',
     settingsSchema: {
         cookOnWay: {
             type: 'boolean',

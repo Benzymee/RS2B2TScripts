@@ -1,5 +1,6 @@
 /**
  * OakTreeFletcher. Chops oak trees north of Varrock.
+ *
  * Load URL: https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/OakTreeFletcher.js
  */
 const SUPPORTED_API_VERSION = 1;

@@ -1,10 +1,10 @@
 /**
- * ProgressiveChopper. Falador trees -> Varrock oaks -> Draynor willows -> Seers maples -> Edgeville yews.
+ * ProgressiveChopper. Falador trees -> Varrock oaks -> Draynor willows -> Seers maples -> backyard yews.
  * Moves on when woodcutting (and fletching, if that toggle is on) can use the next tree.
- * At fletching 65: Edgeville yews, yew shortbows (u), then yew longbows (u) at 70. Banks at Edgeville.
- * After buying a Steel axe from Bob, drops the Bronze axe and leftover coins.
+ * At fletching 65: yews behind Varrock castle, yew shortbows (u), then yew longbows (u) at 70.
+ * Banks at Varrock west. After buying a Steel axe from Bob, drops the Bronze axe and leftover coins.
  * If fletching is on and there is no Knife in the bank, picks up the Lumbridge castle spawn
- * (Edgeville yews stop instead if the Edgeville bank has none).
+ * (backyard yews stop instead if the Varrock west bank has none).
  *
  * Load URL: https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/ProgressiveChopper.js
  * Completely vibe coded by @.benzyme on Discord via Cursor AI
@@ -44,13 +44,13 @@ const {
 
 const SCRIPT_NAME = "ProgressiveChopper";
 const SCRIPT_TITLE = "Benzyme's Progressive Chopper";
-const SCRIPT_VERSION = "1.1.0";
+const SCRIPT_VERSION = "1.2.0";
 
 const TITLE_WOOD = "#a67c52";
 const WELCOME_SCREEN_ID = 5993;
 
 const GEAR_KNIFE_SPAWN = new Tile(3224, 3202, 0);
-const EDGEVILLE_BANK = new Tile(3093, 3493, 0);
+const VARROCK_WEST_BANK = new Tile(3185, 3440, 0);
 const BANK_OPEN_RADIUS = 8;
 const GEAR_BOB_STAND = new Tile(3231, 3203, 0);
 const GEAR_STEEL_AXE = "Steel axe";
@@ -184,7 +184,7 @@ const CAMPS = [
   },
   {
     id: "yew",
-    label: "yews (Edgeville)",
+    label: "yews (Varrock castle)",
     treeName: "Yew",
     wood: "yew",
     wcLevel: 60,
@@ -194,8 +194,8 @@ const CAMPS = [
     shortLabel: "Yew shortbow (u)",
     longLabel: "Yew longbow (u)",
     logLabel: "Yew logs",
-    anchor: new Tile(3087, 3476, 0),
-    leash: 16,
+    anchor: new Tile(3214, 3503, 0),
+    leash: 20,
     waitName: "yew"
   }
 ];
@@ -496,8 +496,8 @@ function nearBob(tile = Game.tile()) {
   return nearTile(tile, GEAR_BOB_STAND, 12);
 }
 
-function nearEdgevilleBank(tile = Game.tile()) {
-  return nearTile(tile, EDGEVILLE_BANK, BANK_OPEN_RADIUS);
+function nearVarrockWestBank(tile = Game.tile()) {
+  return nearTile(tile, VARROCK_WEST_BANK, BANK_OPEN_RADIUS);
 }
 
 function otherPlayersNear(tile, dist = 2) {
@@ -1180,7 +1180,7 @@ class ProgressiveChopper extends LoopingBotBase {
     if (!Bank.isOpen()) {
       this.log(
         this.camp().id === "yew"
-          ? "gear: Edgeville bank for Broken axe + coins (repair)"
+          ? "gear: Varrock west bank for Broken axe + coins (repair)"
           : "gear: bank for Broken axe + coins (repair)"
       );
       if (!(await this.openCampBank())) {
@@ -1667,7 +1667,7 @@ class ProgressiveChopper extends LoopingBotBase {
     if (this.gearReady && this.fletchEnabled() && !gearHasKnife()) {
       this.log(
         this.camp().id === "yew"
-          ? "gear: Knife missing, checking Edgeville bank"
+          ? "gear: Knife missing, checking Varrock west bank"
           : "gear: Knife missing, checking nearest bank"
       );
       this.gearReady = false;
@@ -1761,12 +1761,12 @@ class ProgressiveChopper extends LoopingBotBase {
   }
 
   async bootstrapWcGear() {
-    this.status = this.camp().id === "yew" ? "gear: Edgeville bank" : "gear: bank";
+    this.status = this.camp().id === "yew" ? "gear: Varrock west bank" : "gear: bank";
 
     if (!Bank.isOpen()) {
       this.log(
         this.camp().id === "yew"
-          ? "gear: opening Edgeville bank for best axe / knife"
+          ? "gear: opening Varrock west bank for best axe / knife"
           : "gear: opening bank for best axe / knife"
       );
       if (!(await this.openCampBank())) {
@@ -1904,14 +1904,14 @@ class ProgressiveChopper extends LoopingBotBase {
   stopNoKnife(context) {
     this.status = "no knife, stopped";
     this.log(
-      `${context}: no Knife in inventory or Edgeville bank, stopping (withdraw a Knife, then restart)`
+      `${context}: no Knife in inventory or Varrock west bank, stopping (withdraw a Knife, then restart)`
     );
     stopScript();
   }
 
-  async openEdgevilleBank() {
+  async openVarrockWestBank() {
     if (Bank.isOpen()) {
-      if (nearEdgevilleBank(Game.tile())) {
+      if (nearVarrockWestBank(Game.tile())) {
         return true;
       }
       this.log("wrong bank open, closing");
@@ -1920,39 +1920,39 @@ class ProgressiveChopper extends LoopingBotBase {
     }
 
     const here = Game.tile();
-    if (here && !nearEdgevilleBank(here)) {
-      this.status = "walking to Edgeville bank";
-      this.log(`walking to Edgeville bank ${EDGEVILLE_BANK.x},${EDGEVILLE_BANK.z}`);
-      const ok = await Traversal.walkResilient(EDGEVILLE_BANK, {
+    if (here && !nearVarrockWestBank(here)) {
+      this.status = "walking to Varrock west bank";
+      this.log(`walking to Varrock west bank ${VARROCK_WEST_BANK.x},${VARROCK_WEST_BANK.z}`);
+      const ok = await Traversal.walkResilient(VARROCK_WEST_BANK, {
         radius: 4,
         log: (m) => this.log(`  ${m}`)
       });
       if (!ok) {
-        this.log("path to Edgeville bank failed, retrying");
+        this.log("path to Varrock west bank failed, retrying");
         return false;
       }
     }
 
-    if (!nearEdgevilleBank(Game.tile())) {
+    if (!nearVarrockWestBank(Game.tile())) {
       return false;
     }
 
-    this.status = "opening Edgeville bank";
-    this.log("opening Edgeville bank booth");
+    this.status = "opening Varrock west bank";
+    this.log("opening Varrock west bank booth");
     if (typeof Bank.openBooth === "function") {
-      return !!(await Bank.openBooth(EDGEVILLE_BANK, "Bank booth", "Use-quickly", (m) =>
+      return !!(await Bank.openBooth(VARROCK_WEST_BANK, "Bank booth", "Use-quickly", (m) =>
         this.log(`  ${m}`)
       ));
     }
     return !!(await Banking.open({
-      stand: EDGEVILLE_BANK,
+      stand: VARROCK_WEST_BANK,
       log: (m) => this.log(`  ${m}`)
     }));
   }
 
   async openCampBank() {
     if (this.camp().id === "yew") {
-      return await this.openEdgevilleBank();
+      return await this.openVarrockWestBank();
     }
     return !!(await Banking.open({ log: (m) => this.log(`  ${m}`) }));
   }
@@ -2163,7 +2163,7 @@ class ProgressiveChopper extends LoopingBotBase {
       this.gearReady = false;
       this.log(
         this.camp().id === "yew"
-          ? "no Knife in inventory, will check Edgeville bank"
+          ? "no Knife in inventory, will check Varrock west bank"
           : "WARNING: no Knife in inventory, checking nearest bank"
       );
       await Execution.delayTicks(2);
@@ -2264,10 +2264,10 @@ class ProgressiveChopper extends LoopingBotBase {
     const logs = this.logCount();
     const shafts = this.shaftCount();
     const dest = nextCamp ?? camp;
-    const edgeville = camp.id === "yew" && dest.id === "yew";
-    this.status = edgeville ? "banking Edgeville" : "banking";
+    const backyard = camp.id === "yew" && dest.id === "yew";
+    this.status = backyard ? "banking Varrock west" : "banking";
     this.log(
-      (edgeville ? "banking at Edgeville" : "banking") +
+      (backyard ? "banking at Varrock west" : "banking") +
         (shorts ? ` ${shorts} ${camp.shortLabel}` : "") +
         (bows - shorts > 0 ? ` ${bows - shorts} ${camp.longLabel}` : "") +
         (shafts && plan.id !== "shafts" ? ` ${shafts} arrow shafts` : "") +
@@ -2276,7 +2276,7 @@ class ProgressiveChopper extends LoopingBotBase {
     );
 
     await Banking.bankNearest({
-      ...(edgeville ? { destination: { name: "Edgeville", tile: EDGEVILLE_BANK } } : {}),
+      ...(backyard ? { destination: { name: "Varrock West", tile: VARROCK_WEST_BANK } } : {}),
       deposit: (name) => {
         if (isKeepTool(name) || isAxeItemName(name)) {
           return false;
@@ -2309,7 +2309,7 @@ class ProgressiveChopper extends LoopingBotBase {
           if ((Bank.count("Knife") || 0) > 0) {
             this.log("gear: withdrawing Knife");
             await Bank.withdrawX("Knife", 1);
-          } else if (edgeville) {
+          } else if (backyard) {
             this.stopNoKnife("banking");
           } else {
             this.gearReady = false;
@@ -2328,7 +2328,7 @@ class ProgressiveChopper extends LoopingBotBase {
       this.status = "gear: repair";
       return;
     }
-    if (this.fletchEnabled() && dest.id === "yew" && !gearHasKnife() && !edgeville) {
+    if (this.fletchEnabled() && dest.id === "yew" && !gearHasKnife() && !backyard) {
       await this.pickupLumbridgeKnife();
     }
     this.status = `returning to ${dest.waitName}s`;
@@ -2369,7 +2369,7 @@ class ProgressiveChopper extends LoopingBotBase {
       SCRIPT_TITLE,
       `time ${fmtElapsed(snap.runtimeMs)} · ${this.status}`,
       `Woodcutting ${Skills.level("woodcutting")} · Fletching ${Skills.level("fletching")}`,
-      `${camp.label} · ${plan.label}${plan.bank ? (camp.id === "yew" ? " + Edgeville bank" : " + bank") : ""}`,
+      `${camp.label} · ${plan.label}${plan.bank ? (camp.id === "yew" ? " + Varrock west bank" : " + bank") : ""}`,
       `chopped ${snap.chopped} · fletched ${snap.fletched} · trips ${snap.banks}`,
       `WC ${fmtXph(snap.wcXpPerHour)}/hr  (+${Math.round(snap.wcXp)} xp)`,
       `Fletch ${fmtXph(snap.flXpPerHour)}/hr  (+${Math.round(snap.flXp)} xp)`
@@ -2398,16 +2398,16 @@ export default defineBot({
   name: SCRIPT_NAME,
   version: SCRIPT_VERSION,
   category: "Woodcutting",
-  tags: ["woodcutting", "fletching", "progressive", "trees", "oak", "willow", "maple", "yew", "edgeville"],
+  tags: ["woodcutting", "fletching", "progressive", "trees", "oak", "willow", "maple", "yew", "varrock"],
   description:
-    "Progressive chopper: Falador regular trees, Varrock oaks, Draynor willows, Seers maples, then Edgeville yews at fletching 65. Yew shortbows (u) at 65 / longbows (u) at 70, banked at Edgeville. Moves on when woodcutting (and fletching, if enabled) can use the next tree. Optional fletching into bows. Picks up the Lumbridge knife if fletching is on and none is in the bank. Keeps the best usable axe even if Attack is too low to wield. Drops the Bronze axe and leftover coins after buying a Steel axe from Bob.",
+    "Progressive chopper: Falador regular trees, Varrock oaks, Draynor willows, Seers maples, then backyard yews behind Varrock castle at fletching 65. Yew shortbows (u) at 65 / longbows (u) at 70, banked at Varrock west. Moves on when woodcutting (and fletching, if enabled) can use the next tree. Optional fletching into bows. Picks up the Lumbridge knife if fletching is on and none is in the bank. Keeps the best usable axe even if Attack is too low to wield. Drops the Bronze axe and leftover coins after buying a Steel axe from Bob.",
   settingsSchema: {
     fletchLogs: {
       type: "boolean",
       default: true,
       label: "Fletch logs into bows",
       group: "Fletching",
-      help: "When on: fletch logs into shafts or bows by level (needs a Knife), then bank the bows. At 65: yew shortbows (u), then longbows (u) at 70. Picks up the Lumbridge castle knife if none is in the bank (Edgeville yews stop if the Edgeville bank has none). When off: bank the logs and progress by woodcutting level only."
+      help: "When on: fletch logs into shafts or bows by level (needs a Knife), then bank the bows. At 65: yew shortbows (u), then longbows (u) at 70. Picks up the Lumbridge castle knife if none is in the bank (backyard yews stop if the Varrock west bank has none). When off: bank the logs and progress by woodcutting level only."
     }
   },
   create: () => new ProgressiveChopper()

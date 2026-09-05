@@ -117,18 +117,6 @@ const BOAT_DIALOG_AVOID = [
 ];
 const TALK_OP = "Talk-to";
 
-const KEEP_TOOLS = [
-  "knife",
-  "broken axe",
-  "bronze axe",
-  "iron axe",
-  "steel axe",
-  "black axe",
-  "mithril axe",
-  "adamant axe",
-  "rune axe"
-];
-
 const CAMPS = [
   {
     id: "regular",
@@ -365,6 +353,15 @@ function gearBestHeldAxe() {
   return bestAxe(Skills.level("woodcutting"), (n) => gearAxeCount(n) > 0);
 }
 
+function bestUsableAxe() {
+  const wc = Skills.level("woodcutting");
+  return (
+    bestAxe(wc, (n) => gearAxeCount(n) > 0 || (Bank.isOpen() && (Bank.count(n) || 0) > 0)) ??
+    gearBestHeldAxe() ??
+    null
+  );
+}
+
 function gearHasSteelOrBetter() {
   const steelRank = gearAxeRank(GEAR_STEEL_AXE);
   for (const t of AXES) {
@@ -574,12 +571,31 @@ function chopOp(actions) {
   return actions.find((a) => /chop/i.test(a)) ?? null;
 }
 
+function isAxeItemName(name) {
+  const n = normName(name);
+  if (n === "broken axe") {
+    return true;
+  }
+  return AXES.some((t) => t.name.toLowerCase() === n);
+}
+
 function isKeepTool(name) {
   if (!name) {
     return false;
   }
-  const n = name.toLowerCase();
-  return KEEP_TOOLS.some((k) => n === k || n.includes(k));
+  const n = normName(name);
+  if (n === "knife") {
+    return true;
+  }
+  if (n === "broken axe") {
+    return true;
+  }
+  const best = bestUsableAxe();
+  if (best && n === normName(best)) {
+    return true;
+  }
+  const held = gearBestHeldAxe();
+  return !!(held && n === normName(held));
 }
 
 function normName(name) {
@@ -1124,10 +1140,7 @@ class ProgressiveChopper extends LoopingBotBase {
     const after = Inventory.count(GEAR_BROKEN_AXE) || 0;
     if (after < before || !gearHasBrokenAxe()) {
       this.log("gear: axe repaired at Bob, heading back to camp");
-      const held = gearBestHeldAxe();
-      if (held && !Equipment.contains(held) && canWieldTool(held, Skills.level("attack"))) {
-        await Equipment.equip(held);
-      }
+      await this.wieldOrKeepBestAxe();
       if (!gearBestHeldAxe() || (this.fletchEnabled() && !gearHasKnife())) {
         this.gearReady = false;
       }
@@ -1765,31 +1778,18 @@ class ProgressiveChopper extends LoopingBotBase {
 
     await gearWaitBankLoaded();
 
-    this.log("gear: depositing all except Knife");
-    await Bank.depositAllMatching((name) => {
-      const n = (name ?? "").toLowerCase();
-      return !!n && n !== "knife";
-    });
+    this.log("gear: depositing extras (keep knife and best axe, even if unwieldable)");
+    await Bank.depositAllMatching((name) => !isKeepTool(name));
     await Execution.delayTicks(1);
 
-    const wc = Skills.level("woodcutting");
-    const best = bestAxe(wc, (n) => gearAxeCount(n) > 0 || (Bank.count(n) || 0) > 0);
-
-    if (!best && !gearHasBrokenAxe() && (Bank.count(GEAR_BROKEN_AXE) || 0) === 0) {
-      this.log(`gear: no usable axe in bank/pack for WC ${wc}, waiting`);
-      await Bank.close();
-      await Execution.delayTicks(8);
-      return true;
-    }
-
-    if (best && gearAxeCount(best) === 0 && (Bank.count(best) || 0) > 0) {
-      this.log(`gear: withdrawing ${best}`);
-      if (!(await Bank.withdrawX(best, 1))) {
-        this.log(`gear: withdraw failed for ${best}`);
-        await Execution.delayTicks(2);
+    if (!(await this.ensureBestAxeFromOpenBank())) {
+      const wc = Skills.level("woodcutting");
+      if (!gearHasBrokenAxe() && (Bank.count(GEAR_BROKEN_AXE) || 0) === 0) {
+        this.log(`gear: no usable axe in bank/pack for WC ${wc}, waiting`);
+        await Bank.close();
+        await Execution.delayTicks(8);
         return true;
       }
-      await Execution.delayTicks(1);
     }
 
     if (this.fletchEnabled() && !gearHasKnife()) {
@@ -1841,15 +1841,7 @@ class ProgressiveChopper extends LoopingBotBase {
       return await this.repairBrokenAxeAtBob();
     }
 
-    const held = gearBestHeldAxe();
-    if (held && !Equipment.contains(held) && canWieldTool(held, Skills.level("attack"))) {
-      this.status = `gear: wield ${held}`;
-      this.log(`gear: wielding ${held}`);
-      await Equipment.equip(held);
-      await Execution.delayTicks(1);
-    } else if (held && !canWieldTool(held, Skills.level("attack"))) {
-      this.log(`gear: keeping ${held} in pack (Attack too low to wield)`);
-    }
+    await this.wieldOrKeepBestAxe();
 
     if (this.fletchEnabled() && !gearHasKnife()) {
       if (this.camp().id === "yew") {
@@ -1872,6 +1864,41 @@ class ProgressiveChopper extends LoopingBotBase {
       return await this.runSteelAxeBuy();
     }
     return true;
+  }
+
+  async ensureBestAxeFromOpenBank() {
+    const wc = Skills.level("woodcutting");
+    const best = bestAxe(wc, (n) => gearAxeCount(n) > 0 || (Bank.isOpen() && (Bank.count(n) || 0) > 0));
+    if (!best) {
+      return false;
+    }
+    if (gearAxeCount(best) === 0 && Bank.isOpen() && (Bank.count(best) || 0) > 0) {
+      this.log(`gear: withdrawing ${best}`);
+      if (!(await Bank.withdrawX(best, 1))) {
+        this.log(`gear: withdraw failed for ${best}`);
+        return false;
+      }
+      await Execution.delayTicks(1);
+    }
+    return gearAxeCount(best) > 0;
+  }
+
+  async wieldOrKeepBestAxe() {
+    const held = gearBestHeldAxe();
+    if (!held) {
+      return;
+    }
+    if (Equipment.contains(held)) {
+      return;
+    }
+    if (canWieldTool(held, Skills.level("attack"))) {
+      this.status = `gear: wield ${held}`;
+      this.log(`gear: wielding ${held}`);
+      await Equipment.equip(held);
+      await Execution.delayTicks(1);
+      return;
+    }
+    this.log(`gear: keeping ${held} in pack (Attack too low to wield)`);
   }
 
   stopNoKnife(context) {
@@ -2014,10 +2041,7 @@ class ProgressiveChopper extends LoopingBotBase {
       }
       this.needSteelBuy = false;
       await Bank.close();
-      const held = gearBestHeldAxe();
-      if (held && !Equipment.contains(held) && canWieldTool(held, Skills.level("attack"))) {
-        await Equipment.equip(held);
-      }
+      await this.wieldOrKeepBestAxe();
       return true;
     }
 
@@ -2083,10 +2107,7 @@ class ProgressiveChopper extends LoopingBotBase {
     await Shop.close();
     await Execution.delayTicks(1);
 
-    if (!Equipment.contains(GEAR_STEEL_AXE) && canWieldTool(GEAR_STEEL_AXE, Skills.level("attack"))) {
-      await Equipment.equip(GEAR_STEEL_AXE);
-      await Execution.delayTicks(1);
-    }
+    await this.wieldOrKeepBestAxe();
     return await this.maybeDropStarterJunk();
   }
 
@@ -2257,7 +2278,7 @@ class ProgressiveChopper extends LoopingBotBase {
     await Banking.bankNearest({
       ...(edgeville ? { destination: { name: "Edgeville", tile: EDGEVILLE_BANK } } : {}),
       deposit: (name) => {
-        if (isKeepTool(name)) {
+        if (isKeepTool(name) || isAxeItemName(name)) {
           return false;
         }
         if (isShaft(name)) {
@@ -2294,6 +2315,7 @@ class ProgressiveChopper extends LoopingBotBase {
             this.gearReady = false;
           }
         }
+        await this.ensureBestAxeFromOpenBank();
         this.maybeQueueSteelBuy();
       },
       returnTo: dest.anchor,
@@ -2301,6 +2323,7 @@ class ProgressiveChopper extends LoopingBotBase {
     });
 
     this.bankTrips++;
+    await this.wieldOrKeepBestAxe();
     if (this.repairTrip === "to_bob") {
       this.status = "gear: repair";
       return;
@@ -2377,7 +2400,7 @@ export default defineBot({
   category: "Woodcutting",
   tags: ["woodcutting", "fletching", "progressive", "trees", "oak", "willow", "maple", "yew", "edgeville"],
   description:
-    "Progressive chopper: Falador regular trees, Varrock oaks, Draynor willows, Seers maples, then Edgeville yews at fletching 65. Yew shortbows (u) at 65 / longbows (u) at 70, banked at Edgeville. Moves on when woodcutting (and fletching, if enabled) can use the next tree. Optional fletching into bows. Picks up the Lumbridge knife if fletching is on and none is in the bank. Drops the Bronze axe and leftover coins after buying a Steel axe from Bob.",
+    "Progressive chopper: Falador regular trees, Varrock oaks, Draynor willows, Seers maples, then Edgeville yews at fletching 65. Yew shortbows (u) at 65 / longbows (u) at 70, banked at Edgeville. Moves on when woodcutting (and fletching, if enabled) can use the next tree. Optional fletching into bows. Picks up the Lumbridge knife if fletching is on and none is in the bank. Keeps the best usable axe even if Attack is too low to wield. Drops the Bronze axe and leftover coins after buying a Steel axe from Bob.",
   settingsSchema: {
     fletchLogs: {
       type: "boolean",

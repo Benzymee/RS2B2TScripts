@@ -83,7 +83,7 @@ https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/OakTreeFletcher.js
 
 https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/OakTreeFletcherSell.js
 
-**ProgressiveChopper** (`ProgressiveChopper.js`). Chops Falador trees, then oaks, willows, and Seers maples as woodcutting and fletching unlock each camp. Optional fletching into bows.
+**ProgressiveChopper** (`ProgressiveChopper.js`). Chops Falador trees, then oaks, willows, Seers maples, and Edgeville yews as woodcutting and fletching unlock each camp. Optional fletching into bows: yew shortbows (u) at 65 and longbows (u) at 70, banked at Edgeville. Picks up the Lumbridge knife if needed. After buying a Steel axe from Bob, drops the Bronze axe and leftover coins.
 
 https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/ProgressiveChopper.js
 

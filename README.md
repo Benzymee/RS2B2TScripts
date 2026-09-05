@@ -31,6 +31,10 @@ https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/Alchgility.js
 
 https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/ArdougneThiever.js
 
+**BackyardYews** (`BackyardYews.js`). Chops yew trees behind Varrock castle. Optional fletching into yew shortbows (u) at 65 or longbows (u) at 70, then banks at Varrock west.
+
+https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/BackyardYews.js
+
 **BankCleaner** (`BankCleaner.js`). Opens the nearest bank and sorts stacks by type.
 
 https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/BankCleaner.js

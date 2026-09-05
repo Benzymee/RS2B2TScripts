@@ -59,6 +59,10 @@ https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/CatherbySwordfish.js
 
 https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/EdgevilleBodyRunes.js
 
+**EdgevilleYewFletcher** (`EdgevilleYewFletcher.js`). Chops yew trees south of Edgeville. Optional fletching into yew shortbows (u) at 65 or longbows (u) at 70.
+
+https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/EdgevilleYewFletcher.js
+
 **FaladorTreeFletcher** (`FaladorTreeFletcher.js`). Chops regular trees west of Falador. Optional fletching into arrow shafts, shortbows at 5, or longbows at 10.
 
 https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/FaladorTreeFletcher.js

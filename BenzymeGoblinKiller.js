@@ -2,7 +2,7 @@
  * BenzymeGoblinKiller. Kills Lumbridge oak goblins. Hops to giant rats if the camp is crowded.
  * Banks at Al Kharid (this world has no Lumbridge bank chest).
  *
- * Load URL: https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/BenzymeGoblinKiller.js
+ * Load URL: https://benzymee.github.io/RS2B2TScripts/BenzymeGoblinKiller.js
  */
 const SUPPORTED_API_VERSION = 1;
 const abi = globalThis.__rs2b0t;

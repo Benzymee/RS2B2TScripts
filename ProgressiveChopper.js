@@ -44,13 +44,15 @@ const {
 
 const SCRIPT_NAME = "ProgressiveChopper";
 const SCRIPT_TITLE = "Benzyme's Progressive Chopper";
-const SCRIPT_VERSION = "1.3.1";
+const SCRIPT_VERSION = "1.3.2";
 
 const TITLE_WOOD = "#a67c52";
 const WELCOME_SCREEN_ID = 5993;
 
 const GEAR_KNIFE_SPAWN = new Tile(3224, 3202, 0);
 const FALADOR_EAST_BANK = new Tile(3013, 3355, 0);
+/** East of the keep, on the park road. Bank <-> yews must not cut through castle doors. */
+const FALADOR_YEW_VIA = new Tile(3008, 3342, 0);
 const BANK_OPEN_RADIUS = 8;
 const GEAR_BOB_STAND = new Tile(3231, 3203, 0);
 const GEAR_STEEL_AXE = "Steel axe";
@@ -194,7 +196,7 @@ const CAMPS = [
     shortLabel: "Yew shortbow (u)",
     longLabel: "Yew longbow (u)",
     logLabel: "Yew logs",
-    anchor: new Tile(2987, 3340, 0),
+    anchor: new Tile(2994, 3338, 0),
     leash: 18,
     waitName: "yew"
   }
@@ -506,6 +508,19 @@ function faladorYewAnchor() {
 
 function nearFaladorYews(tile = Game.tile()) {
   return nearTile(tile, faladorYewAnchor(), 24);
+}
+
+function inFaladorCastle(tile = Game.tile()) {
+  return inBox(tile, 2958, 3330, 2986, 3356);
+}
+
+function eastOfFaladorCastle(tile = Game.tile()) {
+  return !!tile && tile.x >= 2995;
+}
+
+function atFaladorYewCamp(tile = Game.tile()) {
+  const camp = campById("yew");
+  return nearTile(tile, camp.anchor, camp.leash) && !inFaladorCastle(tile);
 }
 
 function otherPlayersNear(tile, dist = 2) {
@@ -1019,17 +1034,14 @@ class ProgressiveChopper extends LoopingBotBase {
       return;
     }
 
-    if (Tile.from(here).distanceTo(camp.anchor) > camp.leash) {
+    if (this.awayFromCamp(camp, here)) {
       if (this.repairTrip) {
         await Execution.delayTicks(1);
         return;
       }
       this.status = `walking to ${camp.waitName}s`;
       this.log(`walking to ${camp.label}`);
-      await Traversal.walkResilient(camp.anchor, {
-        radius: 4,
-        log: (m) => this.log(`  ${m}`)
-      });
+      await this.walkToCamp(camp);
       return;
     }
 
@@ -1042,7 +1054,12 @@ class ProgressiveChopper extends LoopingBotBase {
     const tree = this.findTree();
     if (!tree) {
       this.status = `waiting for ${camp.waitName}`;
-      await Traversal.walkTo(camp.anchor, { radius: 3, timeoutMs: 10_000 });
+      if (camp.id === "yew" && inFaladorCastle(Game.tile())) {
+        this.log("inside Falador castle with no yews, walking out to the park");
+        await this.walkFaladorYewRoute(camp.anchor, 4);
+      } else {
+        await Traversal.walkTo(camp.anchor, { radius: 3, timeoutMs: 10_000 });
+      }
       await Execution.delayTicks(2);
       return;
     }
@@ -1318,7 +1335,7 @@ class ProgressiveChopper extends LoopingBotBase {
   async travelHomeFromBob() {
     const camp = this.camp();
     const here = Game.tile();
-    if (here && Tile.from(here).distanceTo(camp.anchor) <= camp.leash) {
+    if (here && !this.awayFromCamp(camp, here)) {
       this.log("gear: back at camp");
       this.repairTrip = null;
       this.repairBanked = false;
@@ -1332,10 +1349,7 @@ class ProgressiveChopper extends LoopingBotBase {
     if (!kandarinNeedsBoat(here) && camp.id !== "maple") {
       this.status = "gear: walk camp";
       this.log(`gear: walking back to ${camp.label}`);
-      await Traversal.walkResilient(camp.anchor, {
-        radius: 4,
-        log: (m) => this.log(`  ${m}`)
-      });
+      await this.walkToCamp(camp);
       return true;
     }
 
@@ -1349,10 +1363,7 @@ class ProgressiveChopper extends LoopingBotBase {
     if (region === "seers" || region === "ardougne" || region === "catherby") {
       this.status = "gear: walk camp";
       this.log(`gear: walking back to ${camp.label}`);
-      await Traversal.walkResilient(camp.anchor, {
-        radius: 4,
-        log: (m) => this.log(`  ${m}`)
-      });
+      await this.walkToCamp(camp);
       return true;
     }
 
@@ -1925,6 +1936,69 @@ class ProgressiveChopper extends LoopingBotBase {
     stopScript();
   }
 
+  awayFromCamp(camp, tile = Game.tile()) {
+    if (!tile) {
+      return true;
+    }
+    if (camp.id === "yew") {
+      return !atFaladorYewCamp(tile);
+    }
+    return Tile.from(tile).distanceTo(camp.anchor) > camp.leash;
+  }
+
+  async walkToCamp(camp) {
+    if (camp.id === "yew") {
+      return this.walkFaladorYewRoute(camp.anchor, 4);
+    }
+    return Traversal.walkResilient(camp.anchor, {
+      radius: 4,
+      log: (m) => this.log(`  ${m}`)
+    });
+  }
+
+  /**
+   * Bank <-> Falador yews stay on the park road east of the keep. A single
+   * walkResilient to the grove treats the courtyard (radius 4 past the doors)
+   * as arrived, which is how we get stuck waiting for yews inside the castle.
+   */
+  async walkFaladorYewRoute(dest, radius = 4) {
+    const destTile = Tile.from(dest);
+    let here = Game.tile();
+    if (here && nearTile(here, destTile, radius) && !inFaladorCastle(here)) {
+      return true;
+    }
+
+    const fromBankToGrove = !!here && here.z >= 3350 && destTile.z <= 3344;
+    const needVia = inFaladorCastle(here) || !eastOfFaladorCastle(here) || fromBankToGrove;
+    if (here && needVia && !nearTile(here, FALADOR_YEW_VIA, 6)) {
+      this.log(`walking around Falador castle via ${FALADOR_YEW_VIA.x},${FALADOR_YEW_VIA.z}`);
+      await Traversal.walkResilient(FALADOR_YEW_VIA, {
+        radius: 4,
+        log: (m) => this.log(`  ${m}`)
+      });
+    }
+
+    here = Game.tile();
+    if (here && nearTile(here, destTile, radius) && !inFaladorCastle(here)) {
+      return true;
+    }
+
+    await Traversal.walkResilient(destTile, {
+      radius,
+      log: (m) => this.log(`  ${m}`)
+    });
+
+    if (inFaladorCastle(Game.tile())) {
+      this.log("path dumped us in Falador castle, walking out to the park");
+      await Traversal.walkResilient(FALADOR_YEW_VIA, {
+        radius: 4,
+        log: (m) => this.log(`  ${m}`)
+      });
+      return !inFaladorCastle(Game.tile());
+    }
+    return true;
+  }
+
   async openFaladorEastBank() {
     if (Bank.isOpen()) {
       if (nearFaladorEastBank(Game.tile())) {
@@ -1939,11 +2013,8 @@ class ProgressiveChopper extends LoopingBotBase {
     if (here && !nearFaladorEastBank(here)) {
       this.status = "walking to Falador east bank";
       this.log(`walking to Falador east bank ${FALADOR_EAST_BANK.x},${FALADOR_EAST_BANK.z}`);
-      const ok = await Traversal.walkResilient(FALADOR_EAST_BANK, {
-        radius: 4,
-        log: (m) => this.log(`  ${m}`)
-      });
-      if (!ok) {
+      const ok = await this.walkFaladorYewRoute(FALADOR_EAST_BANK, 4);
+      if (!ok || !nearFaladorEastBank(Game.tile())) {
         this.log("path to Falador east bank failed, retrying");
         return false;
       }
@@ -2387,12 +2458,9 @@ class ProgressiveChopper extends LoopingBotBase {
 
     this.status = `returning to ${dest.waitName}s`;
     const here = Game.tile();
-    if (here && Tile.from(here).distanceTo(dest.anchor) > dest.leash) {
+    if (this.awayFromCamp(dest, here)) {
       this.log(`walking back to ${dest.label} ${dest.anchor.x},${dest.anchor.z}`);
-      await Traversal.walkResilient(dest.anchor, {
-        radius: 4,
-        log: (m) => this.log(`  ${m}`)
-      });
+      await this.walkToCamp(dest);
     }
   }
 

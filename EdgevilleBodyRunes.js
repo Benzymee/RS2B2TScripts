@@ -1,7 +1,7 @@
 /**
  * EdgevilleBodyRunes. Crafts Body runes from Edgeville bank.
  *
- * Load URL: https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/EdgevilleBodyRunes.js
+ * Load URL: https://benzymee.github.io/RS2B2TScripts/EdgevilleBodyRunes.js
  */
 const SUPPORTED_API_VERSION = 1;
 const abi = globalThis.__rs2b0t;

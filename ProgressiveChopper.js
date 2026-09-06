@@ -1,5 +1,5 @@
 /**
- * ProgressiveChopper. Falador trees -> Varrock oaks -> Draynor willows -> Seers maples -> Falador yews.
+ * ProgressiveChopper. Falador trees through Falador south yews as woodcutting unlocks.
  * Moves on when woodcutting (and fletching, if that toggle is on) can use the next tree.
  * At fletching 65: yews south of Falador, yew shortbows (u), then yew longbows (u) at 70.
  * This world has no Lumbridge bank. From Lumbridge (Bob / knife spawn) it banks at Draynor.

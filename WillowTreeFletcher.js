@@ -1,7 +1,7 @@
 /**
  * WillowTreeFletcher. Chops willow trees at Draynor.
  *
- * Load URL: https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/WillowTreeFletcher.js
+ * Load URL: https://benzymee.github.io/RS2B2TScripts/WillowTreeFletcher.js
  */
 const SUPPORTED_API_VERSION = 1;
 const abi = globalThis.__rs2b0t;

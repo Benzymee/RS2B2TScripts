@@ -87,7 +87,7 @@ https://benzymee.github.io/RS2B2TScripts/OakTreeFletcher.js
 
 https://benzymee.github.io/RS2B2TScripts/OakTreeFletcherSell.js
 
-**ProgressiveChopper** (`ProgressiveChopper.js`). Chops Falador trees, then oaks, willows, Seers maples, and Falador yews as woodcutting and fletching unlock each camp. Picks up the Lumbridge knife if needed. Keeps the best usable axe even if Attack is too low to wield. After buying a Steel axe from Bob, drops the Bronze axe and leftover coins.
+**ProgressiveChopper** (`ProgressiveChopper.js`). Chops Falador trees, then oaks, willows, Seers maples, and Falador yews as woodcutting and fletching unlock each camp. This world has no Lumbridge bank: from Lumbridge it uses Draynor. Picks up the Lumbridge knife if needed. Keeps the best usable axe even if Attack is too low to wield. After buying a Steel axe from Bob, drops the Bronze axe and leftover coins.
 
 https://benzymee.github.io/RS2B2TScripts/ProgressiveChopper.js
 

@@ -53,13 +53,13 @@ const GEAR_KNIFE_SPAWN = new Tile(3224, 3202, 0);
 const FALADOR_EAST_BANK = new Tile(3013, 3355, 0);
 /** South gate / just outside the wall. Bank -> yews goes here first, never the park. */
 const FALADOR_SOUTH_GATE = new Tile(3008, 3327, 0);
-/** Yew clusters south of Falador, outside the walls. */
+/** Stands beside each south-Falador yew. 3042,3320 is the tree tile and is blocked. */
 const FALADOR_YEW_PINS = [
-  new Tile(3042, 3320, 0),
+  new Tile(3037, 3316, 0),
   new Tile(3017, 3309, 0),
   new Tile(2995, 3311, 0)
 ];
-const FALADOR_YEW_PIN_RADIUS = 10;
+const FALADOR_YEW_PIN_RADIUS = 12;
 const BANK_OPEN_RADIUS = 8;
 const GEAR_BOB_STAND = new Tile(3231, 3203, 0);
 const GEAR_STEEL_AXE = "Steel axe";
@@ -1112,7 +1112,7 @@ class ProgressiveChopper extends LoopingBotBase {
       this.status = `waiting for ${camp.waitName}`;
       if (camp.id === "yew" && !southOfFaladorWalls(Game.tile())) {
         this.log("not south of Falador walls, walking to the yew grove");
-        await this.walkFaladorYewRoute(nearestFaladorYewPin(), 4);
+        await this.walkFaladorYewRoute(camp.anchor, 4);
       } else if (camp.id === "yew") {
         await this.checkNextFaladorYewPin();
       } else {
@@ -2008,15 +2008,16 @@ class ProgressiveChopper extends LoopingBotBase {
     const dest = nextFaladorYewPin();
     this.status = `checking yews (${dest.x},${dest.z})`;
     this.log(`no choppable yew here, checking grove ${dest.x},${dest.z}`);
-    await Traversal.walkResilient(dest, {
-      radius: 3,
-      log: (m) => this.log(`  ${m}`)
-    });
+    const ok = await this.walkFaladorYewRoute(dest, 4);
+    const here = Game.tile();
+    if (!ok || (here && Tile.from(here).distanceTo(dest) > 8)) {
+      this.log(`grove ${dest.x},${dest.z} not reachable, skipping`);
+    }
   }
 
   async walkToCamp(camp) {
     if (camp.id === "yew") {
-      return this.walkFaladorYewRoute(nearestFaladorYewPin(), 4);
+      return this.walkFaladorYewRoute(camp.anchor, 4);
     }
     return Traversal.walkResilient(camp.anchor, {
       radius: 4,
@@ -2065,6 +2066,12 @@ class ProgressiveChopper extends LoopingBotBase {
         radius,
         log: (m) => this.log(`  ${m}`)
       });
+    }
+
+    const now = Game.tile();
+    if (destIsGrove && now && Tile.from(now).distanceTo(destTile) > 8) {
+      this.log(`grove stand ${destTile.x},${destTile.z} unreachable, leaving it`);
+      return false;
     }
     return southOfFaladorWalls(Game.tile()) || !destIsGrove;
   }

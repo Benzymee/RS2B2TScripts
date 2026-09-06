@@ -1,7 +1,7 @@
 /**
  * ArdougneThiever. Pickpockets in East Ardougne.
  *
- * Load URL: https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/ArdougneThiever.js
+ * Load URL: https://benzymee.github.io/RS2B2TScripts/ArdougneThiever.js
  */
 const SUPPORTED_API_VERSION = 1;
 const abi = globalThis.__rs2b0t;

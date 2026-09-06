@@ -530,6 +530,20 @@ function nearestFaladorYewPin(tile = Game.tile()) {
   return best;
 }
 
+function faladorYewPinIndex(tile = Game.tile()) {
+  const pin = nearestFaladorYewPin(tile);
+  return FALADOR_YEW_PINS.findIndex((p) => p.x === pin.x && p.z === pin.z);
+}
+
+function nextFaladorYewPin(tile = Game.tile()) {
+  const here = tile;
+  if (here && nearAnyFaladorYewPin(here, FALADOR_YEW_PIN_RADIUS)) {
+    const i = faladorYewPinIndex(here);
+    return FALADOR_YEW_PINS[(i + 1) % FALADOR_YEW_PINS.length];
+  }
+  return nearestFaladorYewPin(here);
+}
+
 function nearAnyFaladorYewPin(tile = Game.tile(), radius = FALADOR_YEW_PIN_RADIUS) {
   if (!tile) {
     return false;
@@ -1100,7 +1114,7 @@ class ProgressiveChopper extends LoopingBotBase {
         this.log("not south of Falador walls, walking to the yew grove");
         await this.walkFaladorYewRoute(nearestFaladorYewPin(), 4);
       } else if (camp.id === "yew") {
-        await Traversal.walkTo(nearestFaladorYewPin(), { radius: 3, timeoutMs: 10_000 });
+        await this.checkNextFaladorYewPin();
       } else {
         await Traversal.walkTo(camp.anchor, { radius: 3, timeoutMs: 10_000 });
       }
@@ -1988,6 +2002,16 @@ class ProgressiveChopper extends LoopingBotBase {
       return !atFaladorYewCamp(tile);
     }
     return Tile.from(tile).distanceTo(camp.anchor) > camp.leash;
+  }
+
+  async checkNextFaladorYewPin() {
+    const dest = nextFaladorYewPin();
+    this.status = `checking yews (${dest.x},${dest.z})`;
+    this.log(`no choppable yew here, checking grove ${dest.x},${dest.z}`);
+    await Traversal.walkResilient(dest, {
+      radius: 3,
+      log: (m) => this.log(`  ${m}`)
+    });
   }
 
   async walkToCamp(camp) {

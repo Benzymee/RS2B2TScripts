@@ -44,7 +44,7 @@ const {
 
 const SCRIPT_NAME = "ProgressiveChopper";
 const SCRIPT_TITLE = "Benzyme's Progressive Chopper";
-const SCRIPT_VERSION = "1.3.0";
+const SCRIPT_VERSION = "1.3.1";
 
 const TITLE_WOOD = "#a67c52";
 const WELCOME_SCREEN_ID = 5993;
@@ -500,6 +500,14 @@ function nearFaladorEastBank(tile = Game.tile()) {
   return nearTile(tile, FALADOR_EAST_BANK, BANK_OPEN_RADIUS);
 }
 
+function faladorYewAnchor() {
+  return campById("yew").anchor;
+}
+
+function nearFaladorYews(tile = Game.tile()) {
+  return nearTile(tile, faladorYewAnchor(), 24);
+}
+
 function otherPlayersNear(tile, dist = 2) {
   if (!tile || typeof Players?.query !== "function") {
     return 0;
@@ -796,6 +804,14 @@ class ProgressiveChopper extends LoopingBotBase {
 
   desiredCamp() {
     return pickCamp(Skills.level("woodcutting"), Skills.level("fletching"), this.fletchEnabled());
+  }
+
+  /**
+   * Once yews are the target camp, never use nearest-bank (that is Varrock from oaks,
+   * or Edgeville from the old backyard pin). Always Falador east.
+   */
+  usesFaladorEastBank() {
+    return this.camp().id === "yew" || this.desiredCamp().id === "yew" || nearFaladorYews();
   }
 
   currentPlan() {
@@ -1951,7 +1967,7 @@ class ProgressiveChopper extends LoopingBotBase {
   }
 
   async openCampBank() {
-    if (this.camp().id === "yew") {
+    if (this.usesFaladorEastBank()) {
       return await this.openFaladorEastBank();
     }
     return !!(await Banking.open({ log: (m) => this.log(`  ${m}`) }));
@@ -2307,10 +2323,10 @@ class ProgressiveChopper extends LoopingBotBase {
     const logs = this.logCount();
     const shafts = this.shaftCount();
     const dest = nextCamp ?? camp;
-    const yewBank = camp.id === "yew";
+    const yewBank = this.usesFaladorEastBank() || dest.id === "yew";
     this.status = yewBank ? "banking Falador east" : "banking";
     this.log(
-      (yewBank ? "banking at Falador east" : "banking") +
+      (yewBank ? "banking at Falador east (not Varrock)" : "banking") +
         (shorts ? ` ${shorts} ${camp.shortLabel}` : "") +
         (bows - shorts > 0 ? ` ${bows - shorts} ${camp.longLabel}` : "") +
         (shafts && plan.id !== "shafts" ? ` ${shafts} arrow shafts` : "") +
@@ -2446,7 +2462,7 @@ export default defineBot({
   category: "Woodcutting",
   tags: ["woodcutting", "fletching", "progressive", "trees", "oak", "willow", "maple", "yew", "falador"],
   description:
-    "Progressive chopper: Falador regular trees, Varrock oaks, Draynor willows, Seers maples, then Falador yews at fletching 65. Yew shortbows (u) at 65 / longbows (u) at 70, banked at Falador east. Moves on when woodcutting (and fletching, if enabled) can use the next tree. Optional fletching into bows. Picks up the Lumbridge knife if fletching is on and none is in the bank. Keeps the best usable axe even if Attack is too low to wield. Drops the Bronze axe and leftover coins after buying a Steel axe from Bob.",
+    "Progressive chopper: Falador regular trees, Varrock oaks, Draynor willows, Seers maples, then Falador yews at fletching 65. Yew shortbows (u) at 65 / longbows (u) at 70. Once yews are unlocked, banks at Falador east, not Varrock. Moves on when woodcutting (and fletching, if enabled) can use the next tree. Optional fletching into bows. Picks up the Lumbridge knife if fletching is on and none is in the bank. Keeps the best usable axe even if Attack is too low to wield. Drops the Bronze axe and leftover coins after buying a Steel axe from Bob.",
   settingsSchema: {
     fletchLogs: {
       type: "boolean",

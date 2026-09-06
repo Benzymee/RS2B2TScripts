@@ -1,7 +1,7 @@
 /**
  * CatherbyRangeCooker. Cooks raw fish from Catherby bank on the Range next to the bank.
  *
- * Load URL: https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/CatherbyRangeCooker.js
+ * Load URL: https://benzymee.github.io/RS2B2TScripts/CatherbyRangeCooker.js
  */
 const SUPPORTED_API_VERSION = 1;
 const abi = globalThis.__rs2b0t;

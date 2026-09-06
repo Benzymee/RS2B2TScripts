@@ -1,4 +1,4 @@
-/** Shared rs2b0t Load-URL ABI types for standalone TypeScript scripts. */
+/** Type definitions for the rs2b0t Load URL ABI. */
 
 export {};
 

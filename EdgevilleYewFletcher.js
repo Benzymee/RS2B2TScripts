@@ -1,7 +1,7 @@
 /**
  * EdgevilleYewFletcher. Chops yew trees south of Edgeville. Optional fletching into unstrung bows.
  *
- * Load URL: https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/EdgevilleYewFletcher.js
+ * Load URL: https://benzymee.github.io/RS2B2TScripts/EdgevilleYewFletcher.js
  */
 const SUPPORTED_API_VERSION = 1;
 const abi = globalThis.__rs2b0t;

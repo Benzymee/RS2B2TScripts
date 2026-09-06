@@ -44,7 +44,7 @@ const {
 
 const SCRIPT_NAME = "ProgressiveChopper";
 const SCRIPT_TITLE = "Benzyme's Progressive Chopper";
-const SCRIPT_VERSION = "1.3.3";
+const SCRIPT_VERSION = "1.3.4";
 
 const TITLE_WOOD = "#a67c52";
 const WELCOME_SCREEN_ID = 5993;
@@ -53,6 +53,13 @@ const GEAR_KNIFE_SPAWN = new Tile(3224, 3202, 0);
 const FALADOR_EAST_BANK = new Tile(3013, 3355, 0);
 /** South gate / just outside the wall. Bank -> yews goes here first, never the park. */
 const FALADOR_SOUTH_GATE = new Tile(3008, 3327, 0);
+/** Yew clusters south of Falador, outside the walls. */
+const FALADOR_YEW_PINS = [
+  new Tile(3042, 3320, 0),
+  new Tile(3017, 3309, 0),
+  new Tile(2995, 3311, 0)
+];
+const FALADOR_YEW_PIN_RADIUS = 10;
 const BANK_OPEN_RADIUS = 8;
 const GEAR_BOB_STAND = new Tile(3231, 3203, 0);
 const GEAR_STEEL_AXE = "Steel axe";
@@ -196,8 +203,8 @@ const CAMPS = [
     shortLabel: "Yew shortbow (u)",
     longLabel: "Yew longbow (u)",
     logLabel: "Yew logs",
-    anchor: new Tile(3006, 3317, 0),
-    leash: 16,
+    anchor: new Tile(3017, 3309, 0),
+    leash: 12,
     waitName: "yew"
   }
 ];
@@ -506,8 +513,44 @@ function faladorYewAnchor() {
   return campById("yew").anchor;
 }
 
+function nearestFaladorYewPin(tile = Game.tile()) {
+  if (!tile) {
+    return FALADOR_YEW_PINS[1];
+  }
+  const here = Tile.from(tile);
+  let best = FALADOR_YEW_PINS[0];
+  let bestD = Infinity;
+  for (const pin of FALADOR_YEW_PINS) {
+    const d = here.distanceTo(pin);
+    if (d < bestD) {
+      bestD = d;
+      best = pin;
+    }
+  }
+  return best;
+}
+
+function nearAnyFaladorYewPin(tile = Game.tile(), radius = FALADOR_YEW_PIN_RADIUS) {
+  if (!tile) {
+    return false;
+  }
+  const here = Tile.from(tile);
+  return FALADOR_YEW_PINS.some((pin) => here.distanceTo(pin) <= radius);
+}
+
+function yewInFaladorGrove(locTile) {
+  if (!locTile) {
+    return false;
+  }
+  const t = Tile.from(locTile);
+  if (t.z > 3324) {
+    return false;
+  }
+  return FALADOR_YEW_PINS.some((pin) => t.distanceTo(pin) <= FALADOR_YEW_PIN_RADIUS);
+}
+
 function nearFaladorYews(tile = Game.tile()) {
-  return nearTile(tile, faladorYewAnchor(), 20);
+  return nearAnyFaladorYewPin(tile, 20);
 }
 
 function inFaladorCastle(tile = Game.tile()) {
@@ -519,8 +562,7 @@ function southOfFaladorWalls(tile = Game.tile()) {
 }
 
 function atFaladorYewCamp(tile = Game.tile()) {
-  const camp = campById("yew");
-  return nearTile(tile, camp.anchor, camp.leash) && southOfFaladorWalls(tile) && !inFaladorCastle(tile);
+  return nearAnyFaladorYewPin(tile, 14) && southOfFaladorWalls(tile) && !inFaladorCastle(tile);
 }
 
 function otherPlayersNear(tile, dist = 2) {
@@ -1056,7 +1098,9 @@ class ProgressiveChopper extends LoopingBotBase {
       this.status = `waiting for ${camp.waitName}`;
       if (camp.id === "yew" && !southOfFaladorWalls(Game.tile())) {
         this.log("not south of Falador walls, walking to the yew grove");
-        await this.walkFaladorYewRoute(camp.anchor, 4);
+        await this.walkFaladorYewRoute(nearestFaladorYewPin(), 4);
+      } else if (camp.id === "yew") {
+        await Traversal.walkTo(nearestFaladorYewPin(), { radius: 3, timeoutMs: 10_000 });
       } else {
         await Traversal.walkTo(camp.anchor, { radius: 3, timeoutMs: 10_000 });
       }
@@ -1948,7 +1992,7 @@ class ProgressiveChopper extends LoopingBotBase {
 
   async walkToCamp(camp) {
     if (camp.id === "yew") {
-      return this.walkFaladorYewRoute(camp.anchor, 4);
+      return this.walkFaladorYewRoute(nearestFaladorYewPin(), 4);
     }
     return Traversal.walkResilient(camp.anchor, {
       radius: 4,
@@ -2215,13 +2259,20 @@ class ProgressiveChopper extends LoopingBotBase {
     return pool[0] ?? null;
   }
 
+  treeInCamp(locTile, camp) {
+    if (camp.id === "yew") {
+      return yewInFaladorGrove(locTile);
+    }
+    return Tile.from(locTile).distanceTo(camp.anchor) <= camp.leash;
+  }
+
   findTree() {
     const camp = this.camp();
     return this.pickChopTree(
       Locs.query()
         .name(camp.treeName)
         .where((l) => chopOp(l.actions()) !== null)
-        .where((l) => Tile.from(l.tile()).distanceTo(camp.anchor) <= camp.leash)
+        .where((l) => this.treeInCamp(l.tile(), camp))
     );
   }
 
@@ -2231,7 +2282,7 @@ class ProgressiveChopper extends LoopingBotBase {
       Locs.query()
         .name(camp.treeName)
         .where((l) => chopOp(l.actions()) !== null)
-        .where((l) => Tile.from(l.tile()).distanceTo(camp.anchor) <= camp.leash)
+        .where((l) => this.treeInCamp(l.tile(), camp))
         .where((l) => l.distance() <= maxDistFromPlayer)
     );
   }

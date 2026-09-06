@@ -1,7 +1,7 @@
 /**
  * BankCleaner. Opens the nearest bank and sorts stacks by type.
  *
- * Load URL: https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/BankCleaner.js
+ * Load URL: https://benzymee.github.io/RS2B2TScripts/BankCleaner.js
  */
 const SUPPORTED_API_VERSION = 1;
 const abi = globalThis.__rs2b0t;

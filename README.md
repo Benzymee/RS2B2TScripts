@@ -15,7 +15,7 @@
 1. Load the bot client via url: https://w1.rs2b2t.com/rs2b0t/ (Make an account via https://rs2b2t.com/register if you haven't already)
 2. Log into your account
 3. Click **Load URL** up the top right of the client
-4. Paste a **jsDelivr** link from the list below (not a github.com or raw.githubusercontent.com link; those are blocked by the browser)
+4. Paste a **GitHub Pages** link from the list below (not a github.com, raw.githubusercontent.com, or jsDelivr `@main` link; those are blocked or can stay stale)
 
 Most scripts dismiss the welcome screen on start.
 
@@ -25,67 +25,67 @@ Most scripts dismiss the welcome screen on start.
 
 **Alchgility** (`Alchgility.js`). WARNING: High Alchs the whole inventory while running the Gnome Stronghold agility course. Needs Magic 55.
 
-https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/Alchgility.js
+https://benzymee.github.io/RS2B2TScripts/Alchgility.js
 
 **ArdougneThiever** (`ArdougneThiever.js`). Pickpockets in East Ardougne. Auto target from Thieving level, with optional food, cake stall, and mule.
 
-https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/ArdougneThiever.js
+https://benzymee.github.io/RS2B2TScripts/ArdougneThiever.js
 
 **BackyardYews** (`BackyardYews.js`). Chops yew trees behind Varrock castle. Optional fletching into yew shortbows (u) at 65 or longbows (u) at 70, then banks at Varrock west.
 
-https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/BackyardYews.js
+https://benzymee.github.io/RS2B2TScripts/BackyardYews.js
 
 **BankCleaner** (`BankCleaner.js`). Opens the nearest bank and sorts stacks by type.
 
-https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/BankCleaner.js
+https://benzymee.github.io/RS2B2TScripts/BankCleaner.js
 
 **BenzymeGoblinKiller** (`BenzymeGoblinKiller.js`). Kills Lumbridge oak goblins. Banks at Al Kharid. Hops to giant rats if more than 5 players fight goblins. Optional bronze dagger, loadout, and Steel scimitar upgrade.
 
-https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/BenzymeGoblinKiller.js
+https://benzymee.github.io/RS2B2TScripts/BenzymeGoblinKiller.js
 
 **CatherbyLobsters** (`CatherbyLobsters.js`). Cage-fishes lobsters at Catherby. Optional cook or sell raw lobster to Harry.
 
-https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/CatherbyLobsters.js
+https://benzymee.github.io/RS2B2TScripts/CatherbyLobsters.js
 
 **CatherbyNetFisher** (`CatherbyNetFisher.js`). Small-net fishes shrimp at Catherby. Optional cook on the way to the bank.
 
-https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/CatherbyNetFisher.js
+https://benzymee.github.io/RS2B2TScripts/CatherbyNetFisher.js
 
 **CatherbyRangeCooker** (`CatherbyRangeCooker.js`). Cooks raw fish from Catherby bank on the Range next to the bank.
 
-https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/CatherbyRangeCooker.js
+https://benzymee.github.io/RS2B2TScripts/CatherbyRangeCooker.js
 
 **CatherbySwordfish** (`CatherbySwordfish.js`). Harpoons tuna and swordfish at Catherby. Optional cook, sell to Harry, or mule noted fish.
 
-https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/CatherbySwordfish.js
+https://benzymee.github.io/RS2B2TScripts/CatherbySwordfish.js
 
 **EdgevilleBodyRunes** (`EdgevilleBodyRunes.js`). Crafts Body runes from Edgeville bank. Needs Runecrafting 20.
 
-https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/EdgevilleBodyRunes.js
+https://benzymee.github.io/RS2B2TScripts/EdgevilleBodyRunes.js
 
 **EdgevilleYewFletcher** (`EdgevilleYewFletcher.js`). Chops yew trees south of Edgeville. Optional fletching into yew shortbows (u) at 65 or longbows (u) at 70.
 
-https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/EdgevilleYewFletcher.js
+https://benzymee.github.io/RS2B2TScripts/EdgevilleYewFletcher.js
 
 **FaladorTreeFletcher** (`FaladorTreeFletcher.js`). Chops regular trees west of Falador. Optional fletching into arrow shafts, shortbows at 5, or longbows at 10.
 
-https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/FaladorTreeFletcher.js
+https://benzymee.github.io/RS2B2TScripts/FaladorTreeFletcher.js
 
 **InventoryAlcher** (`InventoryAlcher.js`). High Level Alchemy from the inventory. Named item list, or ALCH INVENTORY for the rest of the pack. Needs Magic 55.
 
-https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/InventoryAlcher.js
+https://benzymee.github.io/RS2B2TScripts/InventoryAlcher.js
 
 **MapleTreeFletcher** (`MapleTreeFletcher.js`). Chops maple trees near Seers Village. Optional fletching into maple shortbows at 50 or longbows at 55.
 
-https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/MapleTreeFletcher.js
+https://benzymee.github.io/RS2B2TScripts/MapleTreeFletcher.js
 
 **OakTreeFletcher** (`OakTreeFletcher.js`). Chops oak trees north of Varrock. Optional fletching into oak shortbows at 20 or longbows at 25.
 
-https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/OakTreeFletcher.js
+https://benzymee.github.io/RS2B2TScripts/OakTreeFletcher.js
 
 **OakTreeFletcherSell** (`OakTreeFletcherSell.js`). Same oak camp, then sells fletched bows at Varrock General Store and banks the coins.
 
-https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/OakTreeFletcherSell.js
+https://benzymee.github.io/RS2B2TScripts/OakTreeFletcherSell.js
 
 **ProgressiveChopper** (`ProgressiveChopper.js`). Chops Falador trees, then oaks, willows, Seers maples, and Falador yews as woodcutting and fletching unlock each camp. Optional fletching into bows: yew shortbows (u) at 65 and longbows (u) at 70. Once yews are unlocked, banks at Falador east, not Varrock. Picks up the Lumbridge knife if needed. Keeps the best usable axe even if Attack is too low to wield. After buying a Steel axe from Bob, drops the Bronze axe and leftover coins.
 
@@ -93,4 +93,4 @@ https://benzymee.github.io/RS2B2TScripts/ProgressiveChopper.js
 
 **WillowTreeFletcher** (`WillowTreeFletcher.js`). Chops willow trees at Draynor. Optional fletching into willow shortbows at 35 or longbows at 40.
 
-https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/WillowTreeFletcher.js
+https://benzymee.github.io/RS2B2TScripts/WillowTreeFletcher.js

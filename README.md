@@ -89,7 +89,7 @@ https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/OakTreeFletcherSell.js
 
 **ProgressiveChopper** (`ProgressiveChopper.js`). Chops Falador trees, then oaks, willows, Seers maples, and Falador yews as woodcutting and fletching unlock each camp. Optional fletching into bows: yew shortbows (u) at 65 and longbows (u) at 70. Once yews are unlocked, banks at Falador east, not Varrock. Picks up the Lumbridge knife if needed. Keeps the best usable axe even if Attack is too low to wield. After buying a Steel axe from Bob, drops the Bronze axe and leftover coins.
 
-https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/ProgressiveChopper.js
+https://benzymee.github.io/RS2B2TScripts/ProgressiveChopper.js
 
 **WillowTreeFletcher** (`WillowTreeFletcher.js`). Chops willow trees at Draynor. Optional fletching into willow shortbows at 35 or longbows at 40.
 

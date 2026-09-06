@@ -6,7 +6,7 @@
  * If fletching is on and there is no Knife in the bank, picks up the Lumbridge castle spawn
  * (Falador yews stop instead if the Falador east bank has none).
  *
- * Load URL: https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/ProgressiveChopper.js
+ * Load URL: https://benzymee.github.io/RS2B2TScripts/ProgressiveChopper.js
  * Completely vibe coded by @.benzyme on Discord via Cursor AI
  * Self-contained ESM for rs2b0t Load local script / Load URL.
  */

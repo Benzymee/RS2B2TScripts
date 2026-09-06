@@ -1,7 +1,7 @@
 /**
  * CatherbySwordfish. Harpoons tuna and swordfish at Catherby.
  *
- * Load URL: https://cdn.jsdelivr.net/gh/Benzymee/RS2B2TScripts@main/CatherbySwordfish.js
+ * Load URL: https://benzymee.github.io/RS2B2TScripts/CatherbySwordfish.js
  */
 const SUPPORTED_API_VERSION = 1;
 const abi = globalThis.__rs2b0t;

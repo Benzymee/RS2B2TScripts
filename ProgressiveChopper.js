@@ -44,15 +44,15 @@ const {
 
 const SCRIPT_NAME = "ProgressiveChopper";
 const SCRIPT_TITLE = "Benzyme's Progressive Chopper";
-const SCRIPT_VERSION = "1.3.2";
+const SCRIPT_VERSION = "1.3.3";
 
 const TITLE_WOOD = "#a67c52";
 const WELCOME_SCREEN_ID = 5993;
 
 const GEAR_KNIFE_SPAWN = new Tile(3224, 3202, 0);
 const FALADOR_EAST_BANK = new Tile(3013, 3355, 0);
-/** East of the keep, on the park road. Bank <-> yews must not cut through castle doors. */
-const FALADOR_YEW_VIA = new Tile(3008, 3342, 0);
+/** South gate / just outside the wall. Bank -> yews goes here first, never the park. */
+const FALADOR_SOUTH_GATE = new Tile(3008, 3327, 0);
 const BANK_OPEN_RADIUS = 8;
 const GEAR_BOB_STAND = new Tile(3231, 3203, 0);
 const GEAR_STEEL_AXE = "Steel axe";
@@ -186,7 +186,7 @@ const CAMPS = [
   },
   {
     id: "yew",
-    label: "yews (Falador)",
+    label: "yews (Falador south)",
     treeName: "Yew",
     wood: "yew",
     wcLevel: 60,
@@ -196,8 +196,8 @@ const CAMPS = [
     shortLabel: "Yew shortbow (u)",
     longLabel: "Yew longbow (u)",
     logLabel: "Yew logs",
-    anchor: new Tile(2994, 3338, 0),
-    leash: 18,
+    anchor: new Tile(3006, 3317, 0),
+    leash: 16,
     waitName: "yew"
   }
 ];
@@ -507,20 +507,20 @@ function faladorYewAnchor() {
 }
 
 function nearFaladorYews(tile = Game.tile()) {
-  return nearTile(tile, faladorYewAnchor(), 24);
+  return nearTile(tile, faladorYewAnchor(), 20);
 }
 
 function inFaladorCastle(tile = Game.tile()) {
   return inBox(tile, 2958, 3330, 2986, 3356);
 }
 
-function eastOfFaladorCastle(tile = Game.tile()) {
-  return !!tile && tile.x >= 2995;
+function southOfFaladorWalls(tile = Game.tile()) {
+  return !!tile && tile.z <= 3324;
 }
 
 function atFaladorYewCamp(tile = Game.tile()) {
   const camp = campById("yew");
-  return nearTile(tile, camp.anchor, camp.leash) && !inFaladorCastle(tile);
+  return nearTile(tile, camp.anchor, camp.leash) && southOfFaladorWalls(tile) && !inFaladorCastle(tile);
 }
 
 function otherPlayersNear(tile, dist = 2) {
@@ -1054,8 +1054,8 @@ class ProgressiveChopper extends LoopingBotBase {
     const tree = this.findTree();
     if (!tree) {
       this.status = `waiting for ${camp.waitName}`;
-      if (camp.id === "yew" && inFaladorCastle(Game.tile())) {
-        this.log("inside Falador castle with no yews, walking out to the park");
+      if (camp.id === "yew" && !southOfFaladorWalls(Game.tile())) {
+        this.log("not south of Falador walls, walking to the yew grove");
         await this.walkFaladorYewRoute(camp.anchor, 4);
       } else {
         await Traversal.walkTo(camp.anchor, { radius: 3, timeoutMs: 10_000 });
@@ -1957,29 +1957,28 @@ class ProgressiveChopper extends LoopingBotBase {
   }
 
   /**
-   * Bank <-> Falador yews stay on the park road east of the keep. A single
-   * walkResilient to the grove treats the courtyard (radius 4 past the doors)
-   * as arrived, which is how we get stuck waiting for yews inside the castle.
+   * Yews live south of the city wall. Leave Falador by the south gate, then
+   * walk the grove. Never route through the castle or the east park.
    */
   async walkFaladorYewRoute(dest, radius = 4) {
     const destTile = Tile.from(dest);
     let here = Game.tile();
-    if (here && nearTile(here, destTile, radius) && !inFaladorCastle(here)) {
+    if (here && nearTile(here, destTile, radius) && southOfFaladorWalls(here) && !inFaladorCastle(here)) {
       return true;
     }
 
-    const fromBankToGrove = !!here && here.z >= 3350 && destTile.z <= 3344;
-    const needVia = inFaladorCastle(here) || !eastOfFaladorCastle(here) || fromBankToGrove;
-    if (here && needVia && !nearTile(here, FALADOR_YEW_VIA, 6)) {
-      this.log(`walking around Falador castle via ${FALADOR_YEW_VIA.x},${FALADOR_YEW_VIA.z}`);
-      await Traversal.walkResilient(FALADOR_YEW_VIA, {
+    const destIsGrove = destTile.z <= 3324;
+    const stillInCity = !!here && (inFaladorCastle(here) || here.z >= 3327);
+    if (here && destIsGrove && stillInCity && !nearTile(here, FALADOR_SOUTH_GATE, 5)) {
+      this.log(`leaving Falador south via ${FALADOR_SOUTH_GATE.x},${FALADOR_SOUTH_GATE.z}`);
+      await Traversal.walkResilient(FALADOR_SOUTH_GATE, {
         radius: 4,
         log: (m) => this.log(`  ${m}`)
       });
     }
 
     here = Game.tile();
-    if (here && nearTile(here, destTile, radius) && !inFaladorCastle(here)) {
+    if (here && nearTile(here, destTile, radius) && (!destIsGrove || southOfFaladorWalls(here))) {
       return true;
     }
 
@@ -1988,15 +1987,18 @@ class ProgressiveChopper extends LoopingBotBase {
       log: (m) => this.log(`  ${m}`)
     });
 
-    if (inFaladorCastle(Game.tile())) {
-      this.log("path dumped us in Falador castle, walking out to the park");
-      await Traversal.walkResilient(FALADOR_YEW_VIA, {
+    if (destIsGrove && !southOfFaladorWalls(Game.tile())) {
+      this.log("still inside Falador, walking out the south gate");
+      await Traversal.walkResilient(FALADOR_SOUTH_GATE, {
         radius: 4,
         log: (m) => this.log(`  ${m}`)
       });
-      return !inFaladorCastle(Game.tile());
+      await Traversal.walkResilient(destTile, {
+        radius,
+        log: (m) => this.log(`  ${m}`)
+      });
     }
-    return true;
+    return southOfFaladorWalls(Game.tile()) || !destIsGrove;
   }
 
   async openFaladorEastBank() {

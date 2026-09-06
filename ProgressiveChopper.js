@@ -133,7 +133,7 @@ const CAMPS = [
     longLabel: "Longbow",
     logLabel: "Logs",
     anchor: new Tile(2953, 3407, 0),
-    leash: 15,
+    leash: 400,
     waitName: "tree"
   },
   {

@@ -8,7 +8,7 @@
 </p>
 
 
-<p align="center">Scripts designed for use on the <a href="https://rs2b2t.com/">https://rs2b2t.com/</a> server.</p>
+<p align="center">Load URL scripts for the <a href="https://rs2b2t.com/">https://rs2b2t.com/</a> bot.</p>
 
 <p align="center"><u><b>THESE SCRIPTS CAN BE USED FOR WHATEVER YOU LIKE REGARDING YOUR OWN SCRIPTS/PERSONAL USE JUST PLEASE GIVE ME CREDIT.. IF YOU FEEL LIKE IT</b></u></p>
 

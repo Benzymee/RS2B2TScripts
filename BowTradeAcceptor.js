@@ -38,7 +38,7 @@ if (!Trade || typeof Trade.active !== 'function') {
 
 const SCRIPT_NAME = 'BowTradeAcceptor';
 const SCRIPT_TITLE = "Benzyme's Bow Trade Acceptor";
-const SCRIPT_VERSION = '1.0.0';
+const SCRIPT_VERSION = '1.0.1';
 const WELCOME_SCREEN_ID = 5993;
 
 const TRADE_REQUEST_COOLDOWN_TICKS = 9;
@@ -172,18 +172,36 @@ function isBowOrUnstrung(name) {
     return /(^| )bow$/.test(n);
 }
 
+function realOfferItems(items) {
+    return (items ?? []).filter(i => {
+        if (!i) {
+            return false;
+        }
+        const n = (i.name ?? '').trim();
+        const c = Math.max(0, i.count ?? 0);
+        return n !== '' && c > 0;
+    });
+}
+
 function bowUnits(items) {
-    return (items ?? [])
+    return realOfferItems(items)
         .filter(i => isBowOrUnstrung(i.name))
         .reduce((s, o) => s + Math.max(1, o.count), 0);
 }
 
 function offerHasOnlyBows(items) {
-    const list = items ?? [];
+    const list = realOfferItems(items);
     if (list.length <= 0) {
         return false;
     }
     return list.every(i => isBowOrUnstrung(i.name));
+}
+
+function ownOfferHasItems() {
+    if (typeof Trade.myOffer !== 'function') {
+        return false;
+    }
+    return realOfferItems(Trade.myOffer()).length > 0;
 }
 
 function invBowCount() {
@@ -452,7 +470,7 @@ class BowTradeAcceptor extends LoopingBot {
             return;
         }
 
-        if (typeof Trade.myOffer === 'function' && Trade.myOffer().length > 0) {
+        if (ownOfferHasItems()) {
             this.status = 'declining, own offer not empty';
             this.log('safety: own offer not empty, declining');
             await Trade.decline();

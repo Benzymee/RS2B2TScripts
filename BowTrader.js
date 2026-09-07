@@ -42,8 +42,31 @@ if (!Bank || !Banking || typeof Banking.open !== 'function') {
 
 const SCRIPT_NAME = 'BowTrader';
 const SCRIPT_TITLE = "Benzyme's Bow Trader";
-const SCRIPT_VERSION = '1.0.1';
+const SCRIPT_VERSION = '1.0.3';
 const WELCOME_SCREEN_ID = 5993;
+
+function T(x, z, level = 0) {
+    return new Tile(x, z, level);
+}
+
+const BANK_RADIUS = 8;
+const BANK_STANDS = [
+    { name: 'Lumbridge', stand: T(3208, 3220, 2) },
+    { name: 'Draynor', stand: T(3092, 3244) },
+    { name: 'Al Kharid', stand: T(3269, 3167) },
+    { name: 'Varrock west', stand: T(3185, 3440) },
+    { name: 'Varrock east', stand: T(3253, 3420) },
+    { name: 'Edgeville', stand: T(3093, 3493) },
+    { name: 'Falador west', stand: T(2946, 3368) },
+    { name: 'Falador east', stand: T(3013, 3355) },
+    { name: 'Catherby', stand: T(2809, 3441) },
+    { name: 'Seers', stand: T(2726, 3491) },
+    { name: 'Fishing Guild', stand: T(2586, 3420) },
+    { name: 'Ardougne north', stand: T(2615, 3332) },
+    { name: 'Ardougne south', stand: T(2655, 3286) },
+    { name: 'Yanille', stand: T(2612, 3093) },
+    { name: 'Grand Tree', stand: T(2445, 3425, 1) }
+];
 
 const TRADE_RANGE = 2;
 const TRADE_REQUEST_COOLDOWN_TICKS = 9;
@@ -201,14 +224,28 @@ function isNotedBow(item) {
     if (!item || !isBowOrUnstrung(item.name)) {
         return false;
     }
-    const cert = certIsNote(item.id);
-    if (cert === true) {
+    if (Math.max(1, item.count) > 1) {
         return true;
     }
-    if (cert === false) {
+    return certIsNote(item.id) === true;
+}
+
+function realOfferItems(items) {
+    return (items ?? []).filter(i => {
+        if (!i) {
+            return false;
+        }
+        const n = (i.name ?? '').trim();
+        const c = Math.max(0, i.count ?? 0);
+        return n !== '' && c > 0;
+    });
+}
+
+function offerHasBows() {
+    if (typeof Trade.myOffer !== 'function') {
         return false;
     }
-    return Math.max(1, item.count) > 1;
+    return realOfferItems(Trade.myOffer()).some(i => isBowOrUnstrung(i.name));
 }
 
 function invBowItems() {
@@ -287,13 +324,6 @@ function invBowNames() {
     return names;
 }
 
-function offerHasBows() {
-    if (typeof Trade.myOffer !== 'function') {
-        return false;
-    }
-    return Trade.myOffer().some(i => isBowOrUnstrung(i.name));
-}
-
 function parseTradeWishName(e) {
     const fromUser = (e?.username ?? '').trim();
     if (fromUser) {
@@ -308,6 +338,50 @@ function namesMatch(a, b) {
     return normName(a) !== '' && normName(a) === normName(b);
 }
 
+function cheb(a, b) {
+    if (!a || !b) {
+        return Infinity;
+    }
+    return Math.max(Math.abs(a.x - b.x), Math.abs((a.z ?? a.y) - (b.z ?? b.y)));
+}
+
+function tileDist(a, b) {
+    if (!a || !b) {
+        return Infinity;
+    }
+    const from = Tile.from(a);
+    const to = Tile.from(b);
+    if (typeof from.distanceTo === 'function') {
+        return from.distanceTo(to);
+    }
+    return cheb(from, to);
+}
+
+function nearestBank(tile) {
+    let best = BANK_STANDS[0];
+    let bestD = Infinity;
+    for (const bank of BANK_STANDS) {
+        const d = tileDist(tile, bank.stand);
+        if (d < bestD) {
+            bestD = d;
+            best = bank;
+        }
+    }
+    return best;
+}
+
+function nearBank(tile, bank, radius = BANK_RADIUS) {
+    return tileDist(tile, bank.stand) <= radius;
+}
+
+function pureWalkOpts(extra) {
+    return {
+        useTeleportCatalog: false,
+        policy: { useTeleports: false },
+        ...extra
+    };
+}
+
 class BowTrader extends LoopingBot {
     status = 'starting';
     startedAt = 0;
@@ -318,6 +392,11 @@ class BowTrader extends LoopingBot {
     nextRequestTick = 0;
     /** Noted bows withdrawn and ready to trade. */
     readyToTrade = false;
+    noteWithdrawTries = 0;
+    offerWait = 0;
+    lastHeldBows = 0;
+    /** Ignore empty-pack bank for a few ticks after a trade closes. */
+    settleUntil = 0;
 
     partnerName() {
         const fromSettings =
@@ -337,6 +416,10 @@ class BowTrader extends LoopingBot {
         this.pendingFrom = null;
         this.nextRequestTick = 0;
         this.readyToTrade = false;
+        this.noteWithdrawTries = 0;
+        this.offerWait = 0;
+        this.lastHeldBows = 0;
+        this.settleUntil = 0;
 
         this.on('chat.message', e => {
             if (!WISHES_TRADE_RE.test(e?.text ?? '')) {
@@ -381,6 +464,7 @@ class BowTrader extends LoopingBot {
             await this.handleActiveTrade();
             return;
         }
+        this.offerWait = 0;
 
         const who = this.partnerName();
         if (!who) {
@@ -389,12 +473,18 @@ class BowTrader extends LoopingBot {
             return;
         }
 
+        if (Date.now() < this.settleUntil && invBowCount() <= 0) {
+            this.status = 'waiting for bows to return';
+            await Execution.delayTicks(1);
+            return;
+        }
+
         if (!this.readyToTrade) {
             await this.bankNotedBows();
             return;
         }
 
-        if (notedBowCount() <= 0 && invBowCount() <= 0) {
+        if (invBowCount() <= 0) {
             this.readyToTrade = false;
             await this.bankNotedBows();
             return;
@@ -406,6 +496,33 @@ class BowTrader extends LoopingBot {
         }
 
         await this.findAndRequest(who);
+    }
+
+    async walkToNearestBank() {
+        const here = Game.tile();
+        const bank = nearestBank(here);
+        if (here && nearBank(here, bank)) {
+            return bank;
+        }
+        this.status = `run to ${bank.name} bank`;
+        this.log(`running to ${bank.name} bank ${bank.stand.x},${bank.stand.z}`);
+        const walkOpts = pureWalkOpts({
+            radius: 3,
+            timeoutMs: 180_000,
+            log: m => this.log(`  ${m}`)
+        });
+        let ok = false;
+        if (typeof Traversal.walkResilient === 'function') {
+            ok = !!(await Traversal.walkResilient(bank.stand, walkOpts));
+        } else if (typeof Traversal.walkTo === 'function') {
+            ok = !!(await Traversal.walkTo(bank.stand, walkOpts));
+        }
+        if (!ok) {
+            this.log(`path to ${bank.name} bank failed, retrying`);
+            await Execution.delayTicks(3);
+            return null;
+        }
+        return bank;
     }
 
     async waitBankLoaded() {
@@ -510,9 +627,22 @@ class BowTrader extends LoopingBot {
         this.readyToTrade = false;
 
         if (!Bank.isOpen()) {
-            this.log('opening nearest bank');
-            if (!(await Banking.open({ log: m => this.log(`  ${m}`) }))) {
-                this.log('could not open bank, retrying');
+            const bank = await this.walkToNearestBank();
+            if (!bank) {
+                return;
+            }
+            if (!nearBank(Game.tile(), bank)) {
+                return;
+            }
+            this.status = `opening ${bank.name} bank`;
+            this.log(`opening ${bank.name} bank`);
+            if (
+                !(await Banking.open({
+                    stand: bank.stand,
+                    log: m => this.log(`  ${m}`)
+                }))
+            ) {
+                this.log(`could not open ${bank.name} bank, retrying`);
                 await Execution.delayTicks(3);
                 return;
             }
@@ -551,21 +681,25 @@ class BowTrader extends LoopingBot {
 
         if (banked > 0) {
             const notedOk = await this.withdrawAllBowsNoted();
-            if (!notedOk && unnotedBowCount() > 0) {
-                this.log('withdraw came out unnoted, re-depositing');
-                if (typeof Bank.depositAllMatching === 'function') {
-                    await Bank.depositAllMatching((name, id) => {
-                        const item = { name, id };
-                        return isBowOrUnstrung(name) && !isNotedBow(item);
-                    });
-                }
-                await Execution.delayTicks(2);
-                return;
-            }
-            if (notedBowCount() <= 0 && invBowCount() <= 0) {
+            if (invBowCount() <= 0) {
                 this.log('withdraw did not land bows, retrying');
                 await Execution.delayTicks(2);
                 return;
+            }
+            if (!notedOk && unnotedBowCount() > 0 && this.noteWithdrawTries < 2) {
+                this.noteWithdrawTries++;
+                this.log(
+                    `withdraw came out unnoted, re-depositing (try ${this.noteWithdrawTries}/2)`
+                );
+                if (typeof Bank.depositAllMatching === 'function') {
+                    await Bank.depositAllMatching(name => isBowOrUnstrung(name));
+                }
+                await this.ensureBankNoteMode(true);
+                await Execution.delayTicks(2);
+                return;
+            }
+            if (!notedOk && unnotedBowCount() > 0) {
+                this.log('note mode did not stick, trading the bows as withdrawn');
             }
         }
 
@@ -577,7 +711,8 @@ class BowTrader extends LoopingBot {
         }
 
         this.readyToTrade = true;
-        this.log(`holding ${notedBowCount() || invBowCount()} noted bows, looking for partner`);
+        this.noteWithdrawTries = 0;
+        this.log(`holding ${invBowCount()} bows, looking for partner`);
         this.status = 'find partner';
     }
 
@@ -646,13 +781,17 @@ class BowTrader extends LoopingBot {
 
     async offerBows() {
         if (typeof Trade.offerAll !== 'function') {
-            this.log('Trade.offerAll missing, declining');
-            await Trade.decline();
+            this.log('Trade.offerAll missing');
             return false;
         }
 
+        const names = invBowNames();
+        if (names.length <= 0) {
+            return offerHasBows();
+        }
+
         let offeredOk = false;
-        for (const name of invBowNames()) {
+        for (const name of names) {
             let thisOk = !!(await Trade.offerAll(name, i => isBowOrUnstrung(i.name)));
             if (!thisOk) {
                 thisOk = !!(await Trade.offerAll(name));
@@ -661,47 +800,52 @@ class BowTrader extends LoopingBot {
                 offeredOk = true;
             }
         }
-        if (!offeredOk) {
-            this.log('offerAll bows failed, declining');
-            await Trade.decline();
-            return false;
-        }
         await Execution.delayUntil(
             () => offerHasBows() || Trade.onConfirmScreen() || !Trade.active(),
             TRADE_OFFER_WAIT_MS
         );
-        return true;
+        return offeredOk || offerHasBows();
     }
 
     async handleActiveTrade() {
+        this.settleUntil = Date.now() + 4_000;
         const want = this.partnerName();
         const who = typeof Trade.partner === 'function' ? Trade.partner() : null;
         if (who && want && !namesMatch(who, want)) {
             this.log(`declining trade with ${who}, want ${want}`);
             await Trade.decline();
             this.pendingFrom = null;
+            this.offerWait = 0;
             return;
         }
 
         if (Trade.onConfirmScreen()) {
             this.status = 'confirming trade';
-            const before = invBowCount();
+            this.offerWait = 0;
+            const before = Math.max(invBowCount(), this.lastHeldBows || 0);
             await Trade.accept();
             await Execution.delayUntil(() => !Trade.active(), TRADE_CONFIRM_WAIT_MS);
             if (!Trade.active()) {
-                const sent = Math.max(0, before - invBowCount());
-                this.trades++;
-                this.bowsSent += sent;
+                await Execution.delayTicks(2);
+                const after = invBowCount();
+                const sent = Math.max(0, before - after);
                 this.pendingFrom = null;
-                this.log(
-                    `trade complete` +
-                        (sent > 0 ? ` (${sent} bows)` : '') +
-                        `, total trades ${this.trades}`
-                );
-                if (invBowCount() <= 0) {
-                    this.readyToTrade = false;
-                    this.status = 'to bank';
+                if (sent > 0 || after <= 0) {
+                    this.trades++;
+                    this.bowsSent += sent;
+                    this.log(
+                        `trade complete` +
+                            (sent > 0 ? ` (${sent} bows)` : '') +
+                            `, total trades ${this.trades}`
+                    );
+                    if (after <= 0) {
+                        this.readyToTrade = false;
+                        this.status = 'to bank';
+                    } else {
+                        this.status = 'find partner';
+                    }
                 } else {
+                    this.log('trade closed without sending, will re-request');
                     this.status = 'find partner';
                 }
             } else {
@@ -716,16 +860,26 @@ class BowTrader extends LoopingBot {
         }
 
         if (!offerHasBows()) {
-            if (invBowCount() <= 0) {
-                this.log('no bows in pack, declining');
-                await Trade.decline();
+            if (invBowCount() > 0) {
+                this.status = 'offering bows';
+                this.lastHeldBows = invBowCount();
+                await this.offerBows();
+                this.offerWait = 0;
                 return;
             }
-            this.status = 'offering bows';
-            await this.offerBows();
+            this.offerWait++;
+            this.status = 'waiting for offer to show';
+            if (this.offerWait > 20) {
+                this.log('offer never showed, leaving trade');
+                await Trade.decline();
+                this.offerWait = 0;
+            }
+            await Execution.delayTicks(1);
             return;
         }
 
+        this.offerWait = 0;
+        this.lastHeldBows = Math.max(this.lastHeldBows || 0, invBowCount());
         this.status = `accepting offer (${who ?? want})`;
         await Trade.accept();
         await Execution.delayUntil(
@@ -768,7 +922,7 @@ export default defineBot({
     category: 'Utility',
     tags: ['trade', 'mule', 'bow', 'unstrung', 'fletching'],
     description:
-        "Benzyme's Bow Trader. Banks everything at the nearest bank, withdraws every bow and unstrung bow as notes, then trades those notes to the named player. After a trade, banks again if more bows remain. Set Partner name.",
+        "Benzyme's Bow Trader. Runs to the nearest bank, deposits everything, withdraws every bow and unstrung bow as notes, then trades those notes to the named player. After a trade, banks again if more bows remain. Set Partner name.",
     settingsSchema: {
         partnerName: {
             type: 'string',

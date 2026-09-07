@@ -43,6 +43,14 @@ https://benzymee.github.io/RS2B2TScripts/BankCleaner.js
 
 https://benzymee.github.io/RS2B2TScripts/BenzymeGoblinKiller.js
 
+**BowTradeAcceptor** (`BowTradeAcceptor.js`). Stands still and accepts incoming trades of bows and unstrung bows. Optional Partner name filter. Declines mixed offers.
+
+https://benzymee.github.io/RS2B2TScripts/BowTradeAcceptor.js
+
+**BowTrader** (`BowTrader.js`). Banks at the nearest bank, withdraws every bow and unstrung bow as notes, then trades those notes to a named player. Set Partner name.
+
+https://benzymee.github.io/RS2B2TScripts/BowTrader.js
+
 **CatherbyLobsters** (`CatherbyLobsters.js`). Cage-fishes lobsters at Catherby. Optional cook or sell raw lobster to Harry.
 
 https://benzymee.github.io/RS2B2TScripts/CatherbyLobsters.js

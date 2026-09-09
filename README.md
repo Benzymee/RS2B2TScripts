@@ -87,7 +87,7 @@ https://benzymee.github.io/RS2B2TScripts/EdgevilleYewFletcher.js
 
 https://benzymee.github.io/RS2B2TScripts/FaladorTreeFletcher.js
 
-**InventoryAlcher** (`InventoryAlcher.js`). High Level Alchemy from the inventory. Named item list, or ALCH INVENTORY for the rest of the pack. Needs Magic 55.
+**InventoryAlcher** (`InventoryAlcher.js`). High Level Alchemy from the inventory. Named item list, or ALCH INVENTORY for the rest of the pack. Optional Raise a kitten: keep raw fish and a Ball of wool, feed and play. Needs Magic 55.
 
 https://benzymee.github.io/RS2B2TScripts/InventoryAlcher.js
 

@@ -1,8 +1,3 @@
-/**
- * AIOQuester. Completes Lost City 2004 quests and gathers required items.
- *
- * Load URL: https://benzymee.github.io/RS2B2TScripts/AIOQuester.js
- */
 if(typeof process==="undefined"){globalThis.process={env:{}}};
 
 // src/bot/runtime/ScriptRegistry.ts
@@ -54206,6 +54201,9 @@ var BRONZE_MED_HELM = "Bronze med helm";
 var BKF_TILE = {
   SECRET_WALL_OUT: new Tile(3016, 3516, 0),
   SECRET_WALL_IN: new Tile(3016, 3517, 0),
+  SECRET_LADDER: new Tile(3015, 3518, 0),
+  GRILL_LADDER_TOP: new Tile(3021, 3511, 1),
+  GRILL_LADDER_BOTTOM: new Tile(3021, 3512, 0),
   GRILL: new Tile(3025, 3508, 0),
   HOLE: new Tile(3031, 3508, 1),
   CABBAGE_FIELD: new Tile(3053, 3306, 0)
@@ -54226,6 +54224,22 @@ function isBlackKnightFortressInterior(t) {
     return false;
   }
   return true;
+}
+function isSecretPassageLanding(t) {
+  if (t === null || t.level !== 0) {
+    return false;
+  }
+  return t.x >= 3014 && t.x <= 3017 && t.z >= 3517 && t.z <= 3521;
+}
+function chebyshev2(a, b) {
+  return Math.max(Math.abs(a.x - b.x), Math.abs(a.z - b.z));
+}
+function canUseLoc(loc) {
+  try {
+    return Reachability.canReach(loc.tile(), { adjacentOk: true, maxSteps: 64 });
+  } catch {
+    return false;
+  }
 }
 var listened = false;
 function decide22(snap) {
@@ -54257,6 +54271,9 @@ async function handleFortressTalk(log) {
 }
 function locNamed(name, op, within3) {
   return Locs.query().name(name).action(op).within(within3).nearest();
+}
+function locNamedReachable(name, op, within3) {
+  return Locs.query().name(name).action(op).within(within3).where(canUseLoc).nearest();
 }
 async function enterFortress(log) {
   if (isBlackKnightFortressInterior(Game.tile()) || locNamed("Grill", "Listen-at", 12) !== null) {
@@ -54297,9 +54314,11 @@ async function enterFortress(log) {
 }
 function targetLocInScene(dest) {
   if (dest.x === BKF_TILE.GRILL.x && dest.z === BKF_TILE.GRILL.z) {
-    return locNamed("Grill", "Listen-at", 12) !== null;
+    const grill = locNamed("Grill", "Listen-at", 12);
+    return grill !== null && canUseLoc(grill);
   }
-  return Locs.query().name("Hole").within(8).nearest() !== null;
+  const hole = Locs.query().name("Hole").within(8).nearest();
+  return hole !== null && canUseLoc(hole);
 }
 async function climbToward(dest, log) {
   const here2 = Game.tile();
@@ -54320,7 +54339,7 @@ async function climbToward(dest, log) {
   if (op === null) {
     return true;
   }
-  const ladder = locNamed("Ladder", op, 8);
+  const ladder = locNamedReachable("Ladder", op, 8);
   if (!ladder) {
     return false;
   }
@@ -54336,31 +54355,93 @@ async function climbToward(dest, log) {
   return true;
 }
 async function openNearbyBarrier(log) {
-  const wall = Locs.query().action("Push").within(3).where((l) => l.id === SECRET_WALL_ID || (l.name ?? "").toLowerCase() === "wall").nearest();
-  if (wall && !isBlackKnightFortressInterior(Game.tile())) {
+  const here2 = Game.tile();
+  if (isSecretPassageLanding(here2)) {
+    return false;
+  }
+  const wall = Locs.query().action("Push").within(3).where((l) => (l.id === SECRET_WALL_ID || (l.name ?? "").toLowerCase() === "wall") && canUseLoc(l)).nearest();
+  if (wall && (!isBlackKnightFortressInterior(here2) || chebyshev2(wall.tile(), BKF_TILE.HOLE) <= 6)) {
     log("pushing a fortress wall");
+    const mark2 = GameMessages.mark();
     await wall.interact("Push");
     await Execution.delayTicks(3);
-    return true;
+    return !GameMessages.sawSince(mark2, CANT_REACH);
   }
-  const door = Locs.query().action("Open").within(3).where((l) => /^(sturdy door|door)$/i.test(l.name ?? "")).nearest();
+  const door = Locs.query().action("Open").within(3).where((l) => /^(sturdy door|door)$/i.test(l.name ?? "") && canUseLoc(l)).nearest();
   if (!door) {
     return false;
   }
   log(`opening ${door.name ?? "door"}`);
+  const mark = GameMessages.mark();
   await door.interact("Open");
   await handleFortressTalk(log);
   await Execution.delayTicks(2);
+  if (GameMessages.sawSince(mark, CANT_REACH)) {
+    log("that door is not reachable from here");
+    return false;
+  }
   return true;
+}
+async function climbAt2(stand, op, log) {
+  const here2 = Game.tile();
+  if (here2 === null) {
+    return false;
+  }
+  if (here2.level !== stand.level || chebyshev2(here2, stand) > 1) {
+    log(`walking to the fortress ladder at (${stand.x},${stand.z})`);
+    if (!await Traversal.walkResilient(stand, { radius: 1, attempts: 4, timeoutMs: 60000, log })) {
+      return false;
+    }
+  }
+  const ladder = locNamedReachable("Ladder", op, 6);
+  if (!ladder) {
+    return false;
+  }
+  const fromLevel = Game.tile()?.level;
+  log(`${op} the fortress ladder`);
+  if (!await ladder.interact(op)) {
+    return false;
+  }
+  const moved = await Execution.delayUntil(() => {
+    const t = Game.tile();
+    return t !== null && t.level !== fromLevel;
+  }, 8000);
+  await settleScene();
+  return moved;
 }
 async function approachInside(dest, log) {
   await handleFortressTalk(log);
+  const here2 = Game.tile();
+  if (here2 === null) {
+    return;
+  }
+  const toGrill = dest.x === BKF_TILE.GRILL.x && dest.z === BKF_TILE.GRILL.z;
+  const toHole = dest.x === BKF_TILE.HOLE.x && dest.z === BKF_TILE.HOLE.z;
+  if (isSecretPassageLanding(here2)) {
+    await climbAt2(BKF_TILE.SECRET_LADDER, "Climb-up", log);
+    return;
+  }
+  if (toGrill && here2.level === 1) {
+    if (chebyshev2(here2, BKF_TILE.GRILL_LADDER_TOP) <= 1) {
+      await climbAt2(BKF_TILE.GRILL_LADDER_TOP, "Climb-down", log);
+      return;
+    }
+    if (await openNearbyBarrier(log)) {
+      return;
+    }
+    await DirectNavigator.walkTo(BKF_TILE.GRILL_LADDER_TOP, 1, 8000);
+    return;
+  }
+  if (toHole && here2.level === 0 && (locNamedReachable("Grill", "Listen-at", 12) !== null || chebyshev2(here2, BKF_TILE.GRILL_LADDER_BOTTOM) <= 6)) {
+    await climbAt2(BKF_TILE.GRILL_LADDER_BOTTOM, "Climb-up", log);
+    return;
+  }
   if (await openNearbyBarrier(log)) {
     return;
   }
   if (await climbToward(dest, log)) {
-    const here2 = Game.tile();
-    if (here2 !== null && here2.level !== dest.level) {
+    const now = Game.tile();
+    if (now !== null && now.level !== dest.level) {
       return;
     }
   }
@@ -54369,7 +54450,7 @@ async function approachInside(dest, log) {
 async function listenAtGrill(log) {
   const mark = GameMessages.mark();
   const grill = locNamed("Grill", "Listen-at", 12);
-  if (!grill) {
+  if (!grill || !canUseLoc(grill)) {
     await approachInside(BKF_TILE.GRILL, log);
     return false;
   }
@@ -79177,7 +79258,7 @@ async function walkTo9(dest, radius, log) {
   }
   return Traversal.walkResilient(dest, { ...WALK4, radius, log });
 }
-function chebyshev2(a, b) {
+function chebyshev3(a, b) {
   return a.level === b.level ? Math.max(Math.abs(a.x - b.x), Math.abs(a.z - b.z)) : Number.POSITIVE_INFINITY;
 }
 async function drain() {
@@ -79194,7 +79275,7 @@ async function drain() {
   }
   await Modals.closeIfOpen();
 }
-async function climbAt2(stand, op, log) {
+async function climbAt3(stand, op, log) {
   if (!await walkTo9(stand, 1, log)) {
     return false;
   }
@@ -79421,7 +79502,7 @@ async function ringBell(log) {
   for (let i2 = 0;i2 < RING_ATTEMPTS; i2++) {
     const here4 = Game.tile();
     const maiden = Npcs.query().name("Grail Maiden").nearest();
-    if (!here4 || !maiden || chebyshev2(here4, maiden.tile()) > 4) {
+    if (!here4 || !maiden || chebyshev3(here4, maiden.tile()) > 4) {
       await Execution.delayTicks(2);
       continue;
     }
@@ -79485,7 +79566,7 @@ async function realmLeg(log) {
     return talkThrough(FISHER_KING.npc, FISHER_KING.prefer, log);
   }
   if (insideCastle) {
-    return climbAt2(GRAIL_TILE.CASTLE_STAIR, "Climb-up", log);
+    return climbAt3(GRAIL_TILE.CASTLE_STAIR, "Climb-up", log);
   }
   if (!Inventory.contains(ITEM6.BELL) && GroundItems.query().name(ITEM6.BELL).within(16).nearest() === null) {
     if (!await walkTo9(FISHERMAN.anchor, 1, log)) {
@@ -90295,7 +90376,7 @@ var REACH = { adjacentOk: true, maxSteps: 2000 };
 function here8() {
   return Game.tile();
 }
-function chebyshev3(a, b) {
+function chebyshev4(a, b) {
   return Math.max(Math.abs(a.x - b.x), Math.abs(a.z - b.z));
 }
 async function settleWalk(spoke = () => false) {
@@ -90353,10 +90434,10 @@ function seamsInScene(within6 = HOP_SEARCH) {
   return found;
 }
 function reportStuck(dest, from, log) {
-  const mine = chebyshev3(from, dest);
+  const mine = chebyshev4(from, dest);
   const seams = seamsInScene(SWEEP_SEARCH).slice(0, 12).map((loc) => {
     const at2 = loc.tile();
-    return `${loc.id}@${at2.x},${at2.z}L${at2.level}` + ` gain${mine - chebyshev3(at2, dest)}${seamReachable(at2) ? "" : " walled"}`;
+    return `${loc.id}@${at2.x},${at2.z}L${at2.level}` + ` gain${mine - chebyshev4(at2, dest)}${seamReachable(at2) ? "" : " walled"}`;
   }).join(" ");
   log(`pass:   seams in reach of (${from.x},${from.z}): ${seams}`);
   const nearby = Locs.query().within(20).results().filter((loc) => loc.actions().length > 0);
@@ -90370,9 +90451,9 @@ async function standBeside2(at2, dest, note, skip = 0, named = []) {
     if (skip === 0 && named.some(on)) {
       return "stood";
     }
-  } else if (skip === 0 && me && me.level === at2.level && chebyshev3(me, at2) <= 1) {
+  } else if (skip === 0 && me && me.level === at2.level && chebyshev4(me, at2) <= 1) {
     return "stood";
-  } else if (skip === 0 && me && me.level === at2.level && chebyshev3(me, at2) <= 4 && Reachability.canReach(new Tile(at2.x, at2.z, at2.level), { ...REACH, maxSteps: 64 })) {
+  } else if (skip === 0 && me && me.level === at2.level && chebyshev4(me, at2) <= 4 && Reachability.canReach(new Tile(at2.x, at2.z, at2.level), { ...REACH, maxSteps: 64 })) {
     return "stood";
   }
   const ring = [];
@@ -90390,7 +90471,7 @@ async function standBeside2(at2, dest, note, skip = 0, named = []) {
       note(`neither tile of the door at ${at2.x},${at2.z} is reachable — it belongs to another cell`);
       return "no";
     }
-    if (me !== null && me.level === at2.level && chebyshev3(me, at2) <= SERVER_PATH_RANGE) {
+    if (me !== null && me.level === at2.level && chebyshev4(me, at2) <= SERVER_PATH_RANGE) {
       note(`no stand beside ${at2.x},${at2.z} the flood will take — sending the op from (${me.x},${me.z}) and letting the server path`);
       return "from-range";
     }
@@ -90412,21 +90493,21 @@ function hopsToward(dest, from) {
   const found = [];
   const jumps = [];
   let filtered = 0;
-  const mine = chebyshev3(from, dest);
+  const mine = chebyshev4(from, dest);
   for (const kind of HOP_KINDS) {
     const all = Locs.query().where((loc) => loc.id === kind.loc && (kind.below === undefined || loc.tile().z < kind.below)).action(kind.op).within(HOP_SEARCH).results();
     const locs = all.filter((loc) => !kind.when || kind.when(dest, { ...from, level: dest.level }, loc.tile()));
     filtered += all.length - locs.length;
     for (const loc of locs) {
-      const lands = (kind.landing?.(loc.tile()) ?? []).filter((tile) => chebyshev3(tile, from) > MIN_GAIN);
-      const best = lands.length === 0 ? undefined : Math.min(...lands.map((tile) => chebyshev3(tile, dest)));
+      const lands = (kind.landing?.(loc.tile()) ?? []).filter((tile) => chebyshev4(tile, from) > MIN_GAIN);
+      const best = lands.length === 0 ? undefined : Math.min(...lands.map((tile) => chebyshev4(tile, dest)));
       (best !== undefined && best + MIN_GAIN <= mine ? jumps : found).push(loc);
     }
   }
-  const byDistance = (a, b) => chebyshev3(a.tile(), dest) - chebyshev3(b.tile(), dest);
-  const gains = (loc) => chebyshev3(loc.tile(), dest) + MIN_GAIN <= mine;
+  const byDistance = (a, b) => chebyshev4(a.tile(), dest) - chebyshev4(b.tile(), dest);
+  const gains = (loc) => chebyshev4(loc.tile(), dest) + MIN_GAIN <= mine;
   const open2 = (loc) => seamOpen(loc);
-  const ordered = orderSeams(found, (loc) => ({ gains: gains(loc), open: open2(loc) }), (loc) => chebyshev3(loc.tile(), dest));
+  const ordered = orderSeams(found, (loc) => ({ gains: gains(loc), open: open2(loc) }), (loc) => chebyshev4(loc.tile(), dest));
   return {
     leading: [...jumps.filter(open2).sort(byDistance), ...ordered.filter((loc) => gains(loc) && open2(loc))],
     trailing: [...ordered.filter((loc) => !(gains(loc) && open2(loc))), ...jumps.filter((loc) => !open2(loc)).sort(byDistance)],
@@ -90435,7 +90516,7 @@ function hopsToward(dest, from) {
 }
 function tag(loc, dest, mine, state2) {
   const at2 = loc.tile();
-  const gain = mine - chebyshev3(at2, dest);
+  const gain = mine - chebyshev4(at2, dest);
   return `${loc.id}@${at2.x},${at2.z}${gain >= 0 ? "+" : ""}${gain}` + (state2 === "fresh" ? "" : `:${state2}`) + (seamReachable(at2) ? "" : ":walled");
 }
 function shortlist(name, list, dest, mine, state2) {
@@ -90512,7 +90593,7 @@ async function tryHops(list, dest, from, log, spent) {
         trace.push(`walked@${now.x},${now.z}`);
       }
       trace.push(`try${attempt + 1}@${now.x},${now.z}${said === null ? "" : `:${said}`}`);
-      if (chebyshev3(now, origin) >= moved) {
+      if (chebyshev4(now, origin) >= moved) {
         break;
       }
       if (said === "refused" || rangedRefusal) {
@@ -90521,10 +90602,10 @@ async function tryHops(list, dest, from, log, spent) {
       if (said === "failed") {
         continue;
       }
-      await Execution.delayUntil(() => chebyshev3(here8() ?? origin, origin) >= moved, said === "crossing" ? CROSS_TIMEOUT_MS : QUIET_MS2);
+      await Execution.delayUntil(() => chebyshev4(here8() ?? origin, origin) >= moved, said === "crossing" ? CROSS_TIMEOUT_MS : QUIET_MS2);
       now = here8() ?? now;
       trace.push(`then@${now.x},${now.z}`);
-      if (chebyshev3(now, origin) >= moved) {
+      if (chebyshev4(now, origin) >= moved) {
         break;
       }
     }
@@ -90534,12 +90615,12 @@ async function tryHops(list, dest, from, log, spent) {
     const settle = verdictSince(mark) === "crossing" ? CROSS_SETTLE_MS : verdictSince(mark) === null ? QUIET_MS2 : 0;
     const left = standTile === null || (settle === 0 ? gone() : await Execution.delayUntil(gone, settle));
     const settled = here8() ?? now;
-    if (chebyshev3(settled, now) > 0) {
+    if (chebyshev4(settled, now) > 0) {
       trace.push(`settled@${settled.x},${settled.z}`);
     }
     now = settled;
     const verdict = verdictSince(mark);
-    if (verdict === "failed" || verdict === "refused" || chebyshev3(now, origin) < moved || !left) {
+    if (verdict === "failed" || verdict === "refused" || chebyshev4(now, origin) < moved || !left) {
       if (stood && stand) {
         spendFrom(spent, key3, stand);
       }
@@ -90550,7 +90631,7 @@ async function tryHops(list, dest, from, log, spent) {
     if (stand) {
       spendFrom(spent, key3, stand);
     }
-    log(`pass: ${op} ${obstacle.name ?? obstacle.id} at (${obstacle.tile().x},${obstacle.tile().z}) → (${now.x},${now.z})` + ` — crossed, ${chebyshev3(now, origin)} tiles from the stand and it is behind us now`);
+    log(`pass: ${op} ${obstacle.name ?? obstacle.id} at (${obstacle.tile().x},${obstacle.tile().z}) → (${now.x},${now.z})` + ` — crossed, ${chebyshev4(now, origin)} tiles from the stand and it is behind us now`);
     return true;
   }
   if (skipped.length > 0) {
@@ -90566,7 +90647,7 @@ async function hopToward(dest, log, spent) {
   const { leading, trailing, filtered } = hopsToward(dest, from);
   const state2 = (loc) => spentStateHere(spent, seamKey(loc), (tile) => Reachability.canReach(new Tile(tile.x, tile.z, tile.level), { adjacentOk: false, maxSteps: REACH.maxSteps }));
   const fresh = (list) => list.filter((loc) => state2(loc) === "fresh");
-  const mine = chebyshev3(from, dest);
+  const mine = chebyshev4(from, dest);
   const back = [...leading, ...trailing].filter((loc) => state2(loc) === "elsewhere");
   log(`pass: at (${from.x},${from.z}) → (${dest.x},${dest.z}) d${mine} —` + ` ${shortlist("lead", fresh(leading), dest, mine, state2)}` + ` | ${shortlist("trail", fresh(trailing), dest, mine, state2)}` + ` | ${shortlist("back", back, dest, mine, state2)}` + (filtered > 0 ? ` | ${filtered} not for this journey` : ""));
   if (await tryHops(fresh(leading), dest, from, log, spent)) {
@@ -90611,8 +90692,8 @@ async function useSeamToward(dest, log) {
       continue;
     }
     const lands = seam.landing ?? target4.tile();
-    if (chebyshev3(lands, dest) + MIN_GAIN > chebyshev3(from, dest)) {
-      passed.push(`${seam.label}@${target4.tile().x},${target4.tile().z}: lands (${lands.x},${lands.z}), no nearer than d${chebyshev3(from, dest)}`);
+    if (chebyshev4(lands, dest) + MIN_GAIN > chebyshev4(from, dest)) {
+      passed.push(`${seam.label}@${target4.tile().x},${target4.tile().z}: lands (${lands.x},${lands.z}), no nearer than d${chebyshev4(from, dest)}`);
       continue;
     }
     if (!seamReachable(target4.tile())) {
@@ -90636,12 +90717,12 @@ async function useSeamToward(dest, log) {
       continue;
     }
     const staged = await settleWalk(() => verdictSince(mark) !== null) ?? from;
-    if (chebyshev3(staged, dest) + MIN_GAIN > chebyshev3(from, dest)) {
-      await Execution.delayUntil(() => chebyshev3(here8() ?? from, from) >= 2, verdictSince(mark) === "crossing" ? CROSS_TIMEOUT_MS : QUIET_MS2);
+    if (chebyshev4(staged, dest) + MIN_GAIN > chebyshev4(from, dest)) {
+      await Execution.delayUntil(() => chebyshev4(here8() ?? from, from) >= 2, verdictSince(mark) === "crossing" ? CROSS_TIMEOUT_MS : QUIET_MS2);
     }
     await settleScene();
     const now = here8() ?? from;
-    if (chebyshev3(now, from) < 2) {
+    if (chebyshev4(now, from) < 2) {
       log(`pass: the ${seam.label} did not cross toward (${dest.x},${dest.z}) — now at (${now.x},${now.z})`);
       continue;
     }
@@ -90754,11 +90835,11 @@ async function crossByRoute(from, dest, log) {
   const after = await settleWalk() ?? before;
   await Execution.delayUntil(() => {
     const t = here8();
-    return t !== null && chebyshev3(t, before) >= 2;
+    return t !== null && chebyshev4(t, before) >= 2;
   }, CROSS_TIMEOUT_MS);
   await settleScene();
   const now = here8() ?? after;
-  if (chebyshev3(now, before) < 2) {
+  if (chebyshev4(now, before) < 2) {
     log(`pass: the routed bridge at (${bridge.tile().x},${bridge.tile().z}) did not carry anyone`);
     return false;
   }
@@ -90771,7 +90852,7 @@ async function sweepPocket(dest, log, spent) {
     return false;
   }
   let skipped = 0;
-  for (const loc of seamsInScene(SWEEP_SEARCH).sort((a, b) => chebyshev3(a.tile(), dest) - chebyshev3(b.tile(), dest))) {
+  for (const loc of seamsInScene(SWEEP_SEARCH).sort((a, b) => chebyshev4(a.tile(), dest) - chebyshev4(b.tile(), dest))) {
     if (!await packRouteBeside(here8() ?? from, loc.tile())) {
       skipped++;
       continue;
@@ -90787,7 +90868,7 @@ async function sweepPocket(dest, log, spent) {
   if (skipped > 0) {
     log(`pass: ${skipped} seam(s) in the scene the pack has no route to from (${here8()?.x},${here8()?.z}) — not walked at`);
   }
-  const probes = SWEEP_DIRS.map(([dx, dz]) => SWEEP_STEPS.map((step2) => new Tile(from.x + dx * step2, from.z + dz * step2, from.level)).find((tile) => chebyshev3(tile, from) > 3 && Reachability.canReach(tile, REACH))).filter((tile) => tile !== undefined).sort((a, b) => chebyshev3(a, dest) - chebyshev3(b, dest));
+  const probes = SWEEP_DIRS.map(([dx, dz]) => SWEEP_STEPS.map((step2) => new Tile(from.x + dx * step2, from.z + dz * step2, from.level)).find((tile) => chebyshev4(tile, from) > 3 && Reachability.canReach(tile, REACH))).filter((tile) => tile !== undefined).sort((a, b) => chebyshev4(a, dest) - chebyshev4(b, dest));
   log(`pass: sweeping ${probes.length} edge(s) of the pocket at (${from.x},${from.z})`);
   for (const probe of probes) {
     if (!await Traversal.walkResilient(probe, { radius: 4, attempts: 1, timeoutMs: 30000, log })) {
@@ -90818,7 +90899,7 @@ async function travelTo(dest, radius, log) {
       log(`pass: arrived at (${at2.x},${at2.z}), within ${radius} of (${dest.x},${dest.z}) after ${hop} crossing(s)`);
       return true;
     }
-    log(`pass: hop ${hop + 1}/${MAX_HOPS} at (${at2?.x},${at2?.z}), d${at2 ? chebyshev3(at2, dest) : -1} to go` + ` — ${navWorthTrying ? "walking it first" : "the pack has no route, crossing instead"}`);
+    log(`pass: hop ${hop + 1}/${MAX_HOPS} at (${at2?.x},${at2?.z}), d${at2 ? chebyshev4(at2, dest) : -1} to go` + ` — ${navWorthTrying ? "walking it first" : "the pack has no route, crossing instead"}`);
     if (navWorthTrying) {
       if (await Traversal.walkResilient(dest, { radius, attempts: 1, timeoutMs: 60000, log })) {
         log(`pass: walked the rest of the way to (${dest.x},${dest.z})`);
@@ -109725,26 +109806,28 @@ class DismissWelcomeModal {
 
 // src/bot/scripts/AIOQuester/questPickerUi.ts
 var MARK = "rs2b0tQuestPicker";
-function page() {
-  return globalThis.document ?? null;
+var POLL_MS = 400;
+function foldLabel(value) {
+  return value.toLowerCase().replace(/['’`]/g, "'").replace(/\s+/g, " ").trim();
 }
 function chipLabel(chip) {
-  return (chip.textContent ?? "").replace(/\s+/g, " ").trim();
+  return foldLabel(chip.textContent ?? "");
 }
 function idForLabel(label, byName, byId3) {
-  const key3 = label.toLowerCase();
+  const key3 = foldLabel(label);
   return byName.get(key3) ?? (byId3.has(key3) ? key3 : null);
 }
 function fireChange(box) {
   box.dispatchEvent(new Event("change", { bubbles: true }));
+  box.dispatchEvent(new Event("input", { bubbles: true }));
 }
 function maps() {
   const records = loadQuestRecords();
   const byName = new Map;
   const byId3 = new Set;
   for (const record of records) {
-    byName.set(record.name.toLowerCase(), record.id);
-    byId3.add(record.id);
+    byName.set(foldLabel(record.name), record.id);
+    byId3.add(foldLabel(record.id));
   }
   return { byName, byId: byId3 };
 }
@@ -109765,34 +109848,66 @@ function questChips(grid) {
   return out;
 }
 function isQuestGrid(grid) {
+  if (grid.classList.contains("rs2b0t-param-row")) {
+    return false;
+  }
   const row = grid.closest(".rs2b0t-param-row");
   const title = row?.querySelector(".rs2b0t-param-label")?.textContent ?? "";
   if (/quest queue/i.test(title)) {
     return true;
   }
-  const labels = [...grid.querySelectorAll("label")].map((node) => chipLabel(node).toLowerCase());
+  const labels = [...grid.querySelectorAll("label")].map((node) => chipLabel(node));
   return labels.includes("cook's assistant") && labels.includes("sheep shearer");
+}
+function alreadyEnhanced(grid) {
+  return grid.dataset[MARK] === "1" || grid.closest('[data-rs2b0t-quest-picker="1"]') !== null || grid.parentElement?.querySelector(":scope > .rs2b0t-param-livepick") !== null || grid.parentElement?.querySelector(":scope > .rs2b0t-param-selectgroup") !== null;
+}
+function chipGrids(root) {
+  const seen = new Set;
+  const out = [];
+  const add = (node) => {
+    if (!node || node.nodeType !== 1) {
+      return;
+    }
+    const el = node;
+    if (seen.has(el) || /\brs2b0t-param-row\b/.test(el.className ?? "")) {
+      return;
+    }
+    seen.add(el);
+    out.push(el);
+  };
+  const { byName, byId: byId3 } = maps();
+  for (const grid of root.querySelectorAll(".rs2b0t-ctl-chips")) {
+    add(grid);
+  }
+  for (const row of root.querySelectorAll(".rs2b0t-param-row")) {
+    const title = row.querySelector(".rs2b0t-param-label")?.textContent ?? "";
+    if (!/quest queue/i.test(title)) {
+      continue;
+    }
+    const firstChip = [...row.querySelectorAll("label")].find((label) => {
+      const box = label.querySelector('input[type="checkbox"]');
+      return box !== null && idForLabel(chipLabel(label), byName, byId3) !== null;
+    });
+    add(firstChip?.parentElement ?? null);
+  }
+  return out;
 }
 function styleColumn(node) {
   Object.assign(node.style, { display: "flex", flexDirection: "column", alignItems: "stretch", gap: "8px" });
 }
-function enhanceGrid(d, grid) {
-  if (grid.dataset[MARK] === "1") {
-    return;
-  }
-  if (grid.closest('[data-rs2b0t-quest-picker="1"]') || grid.parentElement?.querySelector(":scope > .rs2b0t-param-livepick") || grid.parentElement?.querySelector(":scope > .rs2b0t-param-selectgroup")) {
-    return;
-  }
-  if (!isQuestGrid(grid)) {
-    return;
+function enhanceGrid(grid) {
+  if (alreadyEnhanced(grid) || !isQuestGrid(grid)) {
+    return false;
   }
   const parent = grid.parentElement;
-  if (!parent) {
-    return;
+  const d = grid.ownerDocument;
+  if (!parent || !d) {
+    return false;
   }
   const chips = questChips(grid);
   if (chips.length === 0) {
-    return;
+    return false;
   }
   const column = d.createElement("div");
   column.className = "rs2b0t-ctl-multiselect rs2b0t-param-control";
@@ -109878,42 +109993,86 @@ function enhanceGrid(d, grid) {
   column.appendChild(group);
   column.appendChild(divider);
   column.appendChild(grid);
+  return true;
+}
+function documentsToScan(rootDoc) {
+  const docs = [rootDoc];
+  try {
+    for (const frame of rootDoc.querySelectorAll("iframe")) {
+      const child = frame.contentDocument;
+      if (child && child !== rootDoc) {
+        docs.push(child);
+      }
+    }
+  } catch {}
+  return docs;
 }
 function enhanceQuestPicker(root) {
-  const d = page();
-  if (!d) {
-    return 0;
-  }
   let n = 0;
-  for (const grid of root.querySelectorAll(".rs2b0t-ctl-chips")) {
-    const before = grid.dataset[MARK];
-    enhanceGrid(d, grid);
-    if (grid.dataset[MARK] === "1" && before !== "1") {
+  for (const grid of chipGrids(root)) {
+    if (enhanceGrid(grid)) {
       n++;
     }
   }
   return n;
 }
+function enhanceAll(d) {
+  for (const doc of documentsToScan(d)) {
+    enhanceQuestPicker(doc);
+  }
+}
+var installed = false;
 function installQuestPickerUi() {
-  const d = page();
+  if (installed) {
+    return () => {};
+  }
+  const d = globalThis.document ?? null;
   if (!d) {
     return () => {};
   }
-  let observer = null;
-  const start = () => {
-    if (!d.body) {
+  installed = true;
+  const observers = [];
+  let timer = null;
+  const watch = (doc) => {
+    const target5 = doc.body ?? doc.documentElement;
+    if (!target5) {
       return;
     }
-    enhanceQuestPicker(d);
-    observer = new globalThis.MutationObserver(() => enhanceQuestPicker(d));
-    observer.observe(d.body, { childList: true, subtree: true });
+    enhanceQuestPicker(doc);
+    const observer = new globalThis.MutationObserver(() => enhanceAll(d));
+    observer.observe(target5, { childList: true, subtree: true });
+    observers.push(observer);
   };
-  if (d.body) {
+  const start = () => {
+    try {
+      enhanceAll(d);
+      watch(d);
+      for (const doc of documentsToScan(d).slice(1)) {
+        watch(doc);
+      }
+      timer = setInterval(() => {
+        try {
+          enhanceAll(d);
+        } catch {}
+      }, POLL_MS);
+    } catch {
+      installed = false;
+    }
+  };
+  if (d.body || d.readyState !== "loading") {
     start();
   } else {
     d.addEventListener("DOMContentLoaded", start, { once: true });
   }
-  return () => observer?.disconnect();
+  return () => {
+    for (const observer of observers) {
+      observer.disconnect();
+    }
+    if (timer !== null) {
+      clearInterval(timer);
+    }
+    installed = false;
+  };
 }
 
 // src/bot/scripts/AIOQuester/standalone.ts

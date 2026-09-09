@@ -45223,7 +45223,6 @@ var ROPES_BEFORE_TIE = 2;
 var ROPES_AFTER_TIE = 1;
 var KELI_BLOCK_RADIUS = 10;
 var JAIL_GUARD = "Jail guard";
-var GUARD_MELEE_FLOOR = 20;
 var KELI_BLOCKS_DOOR = /get rid of Lady Keli/i;
 function stageOf(snap) {
   return snap.stage ?? PRINCE_STAGE.PREP_FINISHED;
@@ -45294,12 +45293,6 @@ function shouldSeekKeli(keliVisible, onCellSide) {
 function findKeli() {
   return Npcs.query().name(PA_NPC.KELI).withinOf(PA_TILE.DOOR_STAND, KELI_BLOCK_RADIUS).nearest() ?? Npcs.query().name(PA_NPC.KELI).withinOf(PA_TILE.KELI, KELI_BLOCK_RADIUS).nearest() ?? Npcs.query().name(PA_NPC.KELI).within(15).nearest();
 }
-function canFightJailGuards(melee, hp) {
-  return melee >= GUARD_MELEE_FLOOR && hp >= GUARD_MELEE_FLOOR;
-}
-function meleeFloor() {
-  return Math.min(Skills.level("attack"), Skills.level("strength"), Skills.level("defence"));
-}
 function hostileGuard() {
   return Npcs.query().name(JAIL_GUARD).action("Attack").where((n) => n.targetsMe() || Game.inCombat() && n.inCombat && !n.targetsAnotherPlayer()).within(10).nearest();
 }
@@ -45309,34 +45302,6 @@ async function dismissPrompts() {
     await Execution.delayTicks(1);
   }
   await Modals.closeIfOpen();
-}
-async function fightGuards(log) {
-  const retaliate = Game.autoRetaliateOn();
-  Game.setAutoRetaliate(true);
-  const deadline = performance.now() + 90000;
-  try {
-    while (performance.now() < deadline) {
-      if (EventSignal.pending()) {
-        return false;
-      }
-      await Sustain.run();
-      const guard = hostileGuard();
-      if (!guard && !Game.inCombat()) {
-        return true;
-      }
-      if (guard && !guard.targetsMe() && !Game.inCombat()) {
-        if (!await guard.interact("Attack")) {
-          log("jail guard Attack was not sent");
-          return false;
-        }
-      }
-      await Execution.delayTicks(1);
-    }
-    log("jail guards were still up after 90s");
-    return false;
-  } finally {
-    Game.setAutoRetaliate(retaliate);
-  }
 }
 async function fleeAndReenter(log) {
   const retaliate = Game.autoRetaliateOn();
@@ -45357,10 +45322,6 @@ async function fleeAndReenter(log) {
 async function clearOrFleeGuards(log) {
   if (!Game.inCombat() && hostileGuard() === null) {
     return true;
-  }
-  if (canFightJailGuards(meleeFloor(), Skills.level("hitpoints"))) {
-    log("a Jail guard followed in, fighting");
-    return fightGuards(log);
   }
   log("a Jail guard followed in, leaving the house to drop them");
   return fleeAndReenter(log);
@@ -61082,6 +61043,7 @@ var watchtower = {
 var JUNGLE_POTION_QUEST = "Jungle Potion";
 var TRUFITUS = new Tile(2809, 3086, 0);
 var ARDOUGNE_BANK2 = new Tile(2616, 3332, 0);
+var FERRY_GP = 30;
 var JUNGLE_HERBS = [
   {
     key: "snake weed",
@@ -61297,12 +61259,34 @@ function startQuest2(log) {
 function handInHerb(log) {
   return talkToTrufitus(HAND_IN_DIALOGUE, log);
 }
+function karamjaPurse(snap) {
+  if (snap.journal === "inProgress") {
+    return null;
+  }
+  const coins = snap.inv.get("coins") ?? 0;
+  if (coins >= COIN_FLOAT3) {
+    return null;
+  }
+  if (!snap.bankKnown) {
+    return { kind: "scanBank" };
+  }
+  const banked9 = snap.bank?.get("coins") ?? snap.bankCoins ?? 0;
+  if (banked9 > 0) {
+    const qty2 = Math.min(COIN_FLOAT3 - coins, banked9);
+    return qty2 > 0 ? { kind: "withdraw", items: [{ name: "Coins", qty: qty2 }] } : null;
+  }
+  return coins >= FERRY_GP ? null : { kind: "wait", reason: `need ${FERRY_GP} coins for the Brimhaven boat` };
+}
 function decide28(snap) {
   if (snap.journal === "complete") {
     return { kind: "done" };
   }
   if (snap.journal === "unknown") {
     return { kind: "wait", reason: "quest journal not loaded" };
+  }
+  const purse = karamjaPurse(snap);
+  if (purse) {
+    return purse;
   }
   const carried = JUNGLE_HERBS.find((h) => (snap.invIds?.get(h.unidId) ?? 0) > 0);
   if (carried) {

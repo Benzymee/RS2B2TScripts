@@ -50264,7 +50264,7 @@ var AGGIE_RED = { npc: "Aggie", anchor: AGGIE_ANCHOR, leash: 6, prefer: ["Can yo
 var AGGIE_YELLOW = { npc: "Aggie", anchor: AGGIE_ANCHOR, leash: 6, prefer: ["Can you make dyes for me please?", "What do you need to make yellow dye?", "Okay, make me some yellow dye please."] };
 var AGGIE_BLUE = { npc: "Aggie", anchor: AGGIE_ANCHOR, leash: 6, prefer: ["Can you make dyes for me please?", "What do you need to make blue dye?", "Okay, make me some blue dye please."] };
 var WYSON = { npc: "Wyson the gardener", anchor: new Tile(3013, 3377, 0), leash: 10, prefer: ["I'm looking for woad leaves.", "How about 20 coins?"] };
-var GOBLIN_FARM = new Tile(2958, 3507, 0);
+var GOBLIN_FARM = new Tile(2956, 3504, 0);
 var ONION_PATCH = new Tile(3188, 3267, 0);
 var PORT_SARIM_SHOP = { npc: "Wydin", anchor: new Tile(3014, 3204, 0) };
 var VARROCK_FUNDING_MAN = new Tile(3240, 3405, 0);
@@ -50282,27 +50282,6 @@ var FUNDING_MAN_LEASH2 = 24;
 var SAFE_PICKPOCKET_HP2 = 3;
 var FUNDING_STALL_MS2 = 120000;
 var FUNDING_REGEN_WAIT_MS = 60000;
-var GOBLIN_REATTACK_MS = 5000;
-var GOBLIN_REJECT_MS = 15000;
-var GOBLIN_DISENGAGE_GRACE_MS = 5000;
-var goblinMailTargetIndex = null;
-var goblinMailTargetEngaged = false;
-var goblinMailLastAttackAt = 0;
-var goblinMailDisengagedAt = 0;
-var goblinMailRejectedTargetIndex = null;
-var goblinMailRejectedUntil = 0;
-var goblinMailOwner = null;
-function releaseGoblinMailTarget() {
-  goblinMailTargetIndex = null;
-  goblinMailTargetEngaged = false;
-  goblinMailLastAttackAt = 0;
-  goblinMailDisengagedAt = 0;
-}
-function resetGoblinMailCombat() {
-  releaseGoblinMailTarget();
-  goblinMailRejectedTargetIndex = null;
-  goblinMailRejectedUntil = 0;
-}
 var has = (snap, name) => (snap.inv.get(name) ?? 0) > 0;
 var qty = (snap, name) => snap.inv.get(name) ?? 0;
 function combatFoodNames() {
@@ -50540,9 +50519,6 @@ function goblinMailGatherStep(snap, need = 1) {
   const carriedFood = combatFoodCount(snap);
   const heldCoins = qty(snap, "coins");
   const foodReady = inGoblinMailField(snap.tile) ? carriedFood > GOBLIN_MAIL_FOOD_RESTOCK_FLOOR : carriedFood >= GOBLIN_MAIL_FOOD_TARGET;
-  if (!inGoblinMailField(snap.tile) || !foodReady) {
-    resetGoblinMailCombat();
-  }
   if (foodReady) {
     const makeMailSpace = foodAcquisitionSpace(snap, Math.max(1, need) + (heldCoins > 0 ? 0 : 1));
     if (makeMailSpace) {
@@ -50588,133 +50564,69 @@ function goblinMailGatherStep(snap, need = 1) {
     run: buyGoblinMailFood
   };
 }
+function goblinReachable(npc) {
+  const tile = npc.tile();
+  if (!Reachability.probeable(tile)) {
+    return true;
+  }
+  return Reachability.canReach(tile, { adjacentOk: true, maxSteps: 512 });
+}
+function pickGoblin() {
+  return Npcs.query().name("Goblin").action("Attack").within(15).where((n) => (!n.inCombat || n.targetsMe()) && !n.targetsAnotherPlayer() && n.tile().distanceTo(GOBLIN_FARM) <= 18 && goblinReachable(n)).nearest();
+}
 async function farmGoblinMail(log) {
-  const owner = Game.myName();
-  if (goblinMailOwner !== owner || !inGoblinMailField(Game.tile())) {
-    resetGoblinMailCombat();
-    goblinMailOwner = owner;
+  if (!inGoblinMailField(Game.tile())) {
+    if (!await Traversal.walkResilient(GOBLIN_FARM, { radius: 4, attempts: 4, timeoutMs: 180000, log })) {
+      return false;
+    }
+    await Execution.delayTicks(1);
   }
   const drop = GroundItems.query().name("Goblin mail").within(15).nearest();
   if (drop) {
-    resetGoblinMailCombat();
     const before = Inventory.count("Goblin mail");
     if (!await drop.interact("Take")) {
       return false;
     }
     return Execution.delayUntil(() => Inventory.count("Goblin mail") > before, 6000);
   }
-  const rejectGoblin = (goblin2) => {
-    goblinMailRejectedTargetIndex = goblin2.index;
-    goblinMailRejectedUntil = performance.now() + GOBLIN_REJECT_MS;
-    releaseGoblinMailTarget();
-  };
-  const trackedGoblin = () => goblinMailTargetIndex === null ? null : Npcs.all().find((npc) => npc.index === goblinMailTargetIndex && npc.name === "Goblin" && npc.actions().some((action) => /^attack$/i.test(action)) && npc.distance() <= 15 && npc.tile().distanceTo(GOBLIN_FARM) <= 18) ?? null;
-  const hadEngagedTarget = goblinMailTargetIndex !== null && goblinMailTargetEngaged;
-  let goblin = trackedGoblin();
-  if (!goblin && hadEngagedTarget) {
-    await Sustain.run();
-    await Execution.delayTicks(2);
-    releaseGoblinMailTarget();
-    return false;
-  }
-  const attacker = Npcs.query().name("Goblin").action("Attack").within(15).where((npc) => npc.targetsMe() && npc.tile().distanceTo(GOBLIN_FARM) <= 18).nearest();
-  if (attacker && (attacker.index !== goblinMailTargetIndex || goblin === null)) {
-    goblinMailTargetIndex = attacker.index;
-    goblinMailTargetEngaged = false;
-    goblinMailLastAttackAt = 0;
-    goblinMailDisengagedAt = 0;
-    goblin = attacker;
-    log(`Goblin ${attacker.index} attacked first — switching the lock to it`);
-  }
-  if (goblin && (!goblin.valid() || goblin.health === 0 && goblin.snap.totalHealth > 0)) {
-    await Sustain.run();
-    await Execution.delayTicks(2);
-    releaseGoblinMailTarget();
-    return false;
-  }
-  if (goblin && (goblin.targetsAnotherPlayer() || goblin.inCombat && !goblinMailTargetEngaged && !goblin.targetsMe() && !Game.inCombat())) {
-    log(`Goblin ${goblin.index} belongs to another player — releasing it`);
-    rejectGoblin(goblin);
-    goblin = null;
-  }
-  if (goblin && goblinMailTargetEngaged && !Game.inCombat() && !goblin.targetsMe()) {
-    if (goblinMailDisengagedAt === 0) {
-      goblinMailDisengagedAt = performance.now();
-    }
-    if (performance.now() - goblinMailDisengagedAt < GOBLIN_DISENGAGE_GRACE_MS) {
-      await Sustain.run();
-      await Execution.delayTicks(1);
-      return false;
-    }
-    log(`combat with live Goblin ${goblin.index} made no progress for ${GOBLIN_DISENGAGE_GRACE_MS / 1000}s — choosing another target`);
-    rejectGoblin(goblin);
-    goblin = null;
-  }
+  const goblin = pickGoblin();
   if (!goblin) {
-    const rejectedIndex = performance.now() < goblinMailRejectedUntil ? goblinMailRejectedTargetIndex : null;
-    goblin = Npcs.query().name("Goblin").action("Attack").within(15).where((n) => !n.inCombat && !n.targetsAnotherPlayer() && n.index !== rejectedIndex).nearest();
-    if (goblin) {
-      goblinMailTargetIndex = goblin.index;
-      goblinMailTargetEngaged = false;
-      goblinMailLastAttackAt = 0;
-      goblinMailDisengagedAt = 0;
-      log(`holding Goblin ${goblin.index} until it dies`);
-    }
-  }
-  if (goblin) {
-    if (Game.inCombat() || goblin.targetsMe()) {
-      goblinMailTargetEngaged = true;
-      goblinMailDisengagedAt = 0;
-      await Sustain.run();
-      await Execution.delayTicks(1);
-      return false;
-    }
-    if (performance.now() - goblinMailLastAttackAt < GOBLIN_REATTACK_MS) {
-      await Sustain.run();
+    log("no reachable goblin in the courtyard");
+    const door = Locs.query().name("Door").action("Open").within(3).nearest();
+    if (door) {
+      await door.interact("Open");
       await Execution.delayTicks(2);
-      return false;
     }
-    if (!await goblin.interact("Attack")) {
-      log(`Attack on Goblin ${goblin.index} was rejected — choosing another target`);
-      rejectGoblin(goblin);
-      await Execution.delayTicks(2);
-      return false;
-    }
-    goblinMailLastAttackAt = performance.now();
-    const attackDeadline = performance.now() + 8000;
-    let attackObserved = false;
-    while (performance.now() < attackDeadline) {
-      await Sustain.run();
-      const live2 = trackedGoblin();
-      if (live2 === null || Game.inCombat() || live2.targetsMe() || live2.targetsAnotherPlayer()) {
-        attackObserved = true;
-        break;
-      }
-      await Execution.delayTicks(1);
-    }
-    if (!attackObserved) {
-      log(`Attack on Goblin ${goblin.index} produced no combat within 8s — choosing another target`);
-      rejectGoblin(goblin);
-      return false;
-    }
-    const live = trackedGoblin();
-    if (live?.targetsAnotherPlayer()) {
-      log(`Goblin ${live.index} engaged another player after our attack — releasing it`);
-      rejectGoblin(live);
-      return false;
-    }
-    if (live === null) {
-      releaseGoblinMailTarget();
-      return false;
-    }
-    goblinMailTargetEngaged ||= Game.inCombat() || live.targetsMe();
-    if (goblinMailTargetEngaged) {
-      goblinMailDisengagedAt = 0;
-    }
+    await Traversal.walkResilient(GOBLIN_FARM, { radius: 4, attempts: 2, timeoutMs: 30000, log });
     return false;
   }
-  releaseGoblinMailTarget();
-  await Traversal.walkResilient(GOBLIN_FARM, { radius: 4, attempts: 2, timeoutMs: 90000, log });
+  const index = goblin.index;
+  log(`holding Goblin ${index} until it dies`);
+  if (goblin.distance() > 1) {
+    await DirectNavigator.walkTo(goblin.tile(), 1, 1e4);
+  }
+  const mark = GameMessages.mark();
+  if (!await goblin.interact("Attack")) {
+    log(`Attack on Goblin ${index} was rejected`);
+    return false;
+  }
+  const deadline = performance.now() + 90000;
+  while (performance.now() < deadline) {
+    if (EventSignal.pending()) {
+      return false;
+    }
+    await Sustain.run();
+    if (GameMessages.sawSince(mark, CANT_REACH)) {
+      log(`cannot reach Goblin ${index}`);
+      return false;
+    }
+    if (!Npcs.all().some((n) => n.index === index)) {
+      await Execution.delayTicks(2);
+      return false;
+    }
+    await Execution.delayTicks(1);
+  }
+  log(`Goblin ${index} did not die in time`);
   return false;
 }
 async function makeBlueDye(log) {
@@ -50778,8 +50690,6 @@ async function makeOrangeDye(log) {
 }
 function decide15(snap) {
   if (snap.journal === "complete") {
-    resetGoblinMailCombat();
-    goblinMailOwner = null;
     return { kind: "done" };
   }
   if (snap.journal === "unknown") {
@@ -54248,15 +54158,30 @@ var druidspirit = {
 var SIR_AMIK = { npc: "Sir Amik Varze", anchor: new Tile(2962, 3338, 2), leash: 6, prefer: ["I seek a quest!", "I laugh in the face of danger!"] };
 var IRON_CHAINBODY = "Iron chainbody";
 var BRONZE_MED_HELM = "Bronze med helm";
-var GRILL = new Tile(3025, 3507, 0);
-var HOLE = new Tile(3031, 3507, 1);
-var CABBAGE_FIELD = new Tile(3053, 3306, 0);
+var BKF_TILE = {
+  SECRET_WALL_OUT: new Tile(3016, 3516, 0),
+  SECRET_WALL_IN: new Tile(3016, 3517, 0),
+  GRILL: new Tile(3025, 3508, 0),
+  HOLE: new Tile(3031, 3508, 1),
+  CABBAGE_FIELD: new Tile(3053, 3306, 0)
+};
+var SECRET_WALL_ID = 2341;
+var ALREADY_LISTENED = /i can't hear much right now/i;
+var FORTRESS_TALK = ["I don't care. I'm going in anyway.", "Yes, but I work here!"];
 var has5 = (snap, name) => (snap.inv.get(name.toLowerCase()) ?? 0) > 0;
 var worn3 = (snap, name) => snap.worn.has(name.toLowerCase());
-var nearTile = (t, r) => {
-  const me = Game.tile();
-  return me !== null && me.level === t.level && Math.max(Math.abs(me.x - t.x), Math.abs(me.z - t.z)) <= r;
-};
+function isBlackKnightFortressInterior(t) {
+  if (t === null) {
+    return false;
+  }
+  if (t.x < 3014 || t.x > 3033 || t.z < 3505 || t.z > 3521) {
+    return false;
+  }
+  if (t.level === 0 && t.x === 3016 && t.z <= 3516) {
+    return false;
+  }
+  return true;
+}
 var listened = false;
 function decide22(snap) {
   if (snap.journal === "complete") {
@@ -54280,45 +54205,178 @@ function decide22(snap) {
   }
   return { kind: "talk", stop: SIR_AMIK };
 }
+async function handleFortressTalk(log) {
+  if (ChatDialog.isOpen() || ChatDialog.canContinue()) {
+    await driveDialog(FORTRESS_TALK, log);
+  }
+}
+function locNamed(name, op, within3) {
+  return Locs.query().name(name).action(op).within(within3).nearest();
+}
+async function enterFortress(log) {
+  if (isBlackKnightFortressInterior(Game.tile()) || locNamed("Grill", "Listen-at", 12) !== null) {
+    return true;
+  }
+  log("walking to the fortress east wall");
+  if (!await Traversal.walkResilient(BKF_TILE.SECRET_WALL_OUT, {
+    radius: 1,
+    attempts: 6,
+    timeoutMs: 240000,
+    log
+  })) {
+    return false;
+  }
+  await settleScene();
+  if (isBlackKnightFortressInterior(Game.tile())) {
+    return true;
+  }
+  const wall = Locs.query().action("Push").within(4).where((l) => l.id === SECRET_WALL_ID || (l.name ?? "").toLowerCase() === "wall").nearest();
+  if (wall) {
+    log("pushing the east wall into the fortress");
+    if (await wall.interact("Push")) {
+      if (await Execution.delayUntil(() => isBlackKnightFortressInterior(Game.tile()), 8000)) {
+        await settleScene();
+        return true;
+      }
+    }
+  }
+  const door = locNamed("Sturdy door", "Open", 8);
+  if (door) {
+    log("opening the fortress guard door");
+    await door.interact("Open");
+    await handleFortressTalk(log);
+    await Execution.delayUntil(() => isBlackKnightFortressInterior(Game.tile()), 8000);
+    await settleScene();
+  }
+  return isBlackKnightFortressInterior(Game.tile()) || locNamed("Grill", "Listen-at", 12) !== null;
+}
+function targetLocInScene(dest) {
+  if (dest.x === BKF_TILE.GRILL.x && dest.z === BKF_TILE.GRILL.z) {
+    return locNamed("Grill", "Listen-at", 12) !== null;
+  }
+  return Locs.query().name("Hole").within(8).nearest() !== null;
+}
+async function climbToward(dest, log) {
+  const here2 = Game.tile();
+  if (here2 === null) {
+    return false;
+  }
+  if (targetLocInScene(dest)) {
+    return true;
+  }
+  let op = null;
+  if (here2.level < dest.level) {
+    op = "Climb-up";
+  } else if (here2.level > dest.level) {
+    op = "Climb-down";
+  } else if (dest.x === BKF_TILE.GRILL.x) {
+    op = "Climb-up";
+  }
+  if (op === null) {
+    return true;
+  }
+  const ladder = locNamed("Ladder", op, 8);
+  if (!ladder) {
+    return false;
+  }
+  log(`${op} the fortress ladder`);
+  if (!await ladder.interact(op)) {
+    return false;
+  }
+  await Execution.delayUntil(() => {
+    const t = Game.tile();
+    return t !== null && t.level !== here2.level;
+  }, 8000);
+  await settleScene();
+  return true;
+}
+async function openNearbyBarrier(log) {
+  const wall = Locs.query().action("Push").within(3).where((l) => l.id === SECRET_WALL_ID || (l.name ?? "").toLowerCase() === "wall").nearest();
+  if (wall && !isBlackKnightFortressInterior(Game.tile())) {
+    log("pushing a fortress wall");
+    await wall.interact("Push");
+    await Execution.delayTicks(3);
+    return true;
+  }
+  const door = Locs.query().action("Open").within(3).where((l) => /^(sturdy door|door)$/i.test(l.name ?? "")).nearest();
+  if (!door) {
+    return false;
+  }
+  log(`opening ${door.name ?? "door"}`);
+  await door.interact("Open");
+  await handleFortressTalk(log);
+  await Execution.delayTicks(2);
+  return true;
+}
+async function approachInside(dest, log) {
+  await handleFortressTalk(log);
+  if (await openNearbyBarrier(log)) {
+    return;
+  }
+  if (await climbToward(dest, log)) {
+    const here2 = Game.tile();
+    if (here2 !== null && here2.level !== dest.level) {
+      return;
+    }
+  }
+  await DirectNavigator.walkTo(dest, 1, 8000);
+}
+async function listenAtGrill(log) {
+  const mark = GameMessages.mark();
+  const grill = locNamed("Grill", "Listen-at", 12);
+  if (!grill) {
+    await approachInside(BKF_TILE.GRILL, log);
+    return false;
+  }
+  log("listening at the grill");
+  if (!await grill.interact("Listen-at")) {
+    return false;
+  }
+  await Execution.delayUntil(() => ChatDialog.isOpen() || ChatDialog.canContinue() || GameMessages.sawSince(mark, ALREADY_LISTENED), 4000);
+  if (GameMessages.sawSince(mark, ALREADY_LISTENED)) {
+    listened = true;
+    return false;
+  }
+  for (let i2 = 0;i2 < 50 && (ChatDialog.isOpen() || ChatDialog.canContinue()); i2++) {
+    if (EventSignal.pending()) {
+      return false;
+    }
+    if (ChatDialog.canContinue()) {
+      await ChatDialog.continue();
+    }
+    await Execution.delayTicks(1);
+  }
+  if (ChatDialog.isOpen() || ChatDialog.canContinue()) {
+    return false;
+  }
+  listened = true;
+  return false;
+}
+async function dropCabbage(log) {
+  const hole = Locs.query().name("Hole").within(8).nearest();
+  const cabbage = Inventory.first("Cabbage");
+  if (hole && cabbage) {
+    log("dropping the cabbage down the hole");
+    const before = Inventory.count("Cabbage");
+    await cabbage.useOn(hole);
+    await Execution.delayUntil(() => Inventory.count("Cabbage") < before, 8000);
+    return Inventory.count("Cabbage") < before;
+  }
+  await approachInside(BKF_TILE.HOLE, log);
+  return false;
+}
 async function infiltrate(log) {
   if (!Inventory.contains("Cabbage")) {
     return true;
   }
-  if (!listened) {
-    log("infiltrating the fortress to eavesdrop at the grill");
-    const grill = await Reach.locOp({
-      name: "Grill",
-      op: "Listen-at",
-      near: GRILL,
-      expect: () => ChatDialog.isOpen() || ChatDialog.canContinue() || nearTile(GRILL, 1),
-      log
-    });
-    if (grill === "unreachable") {
-      log("bkf: Grill unreachable — re-planning");
-      return false;
-    }
-    if (grill !== "done") {
-      return false;
-    }
-    await Execution.delayUntil(() => ChatDialog.isOpen(), 2500);
-    for (let i2 = 0;i2 < 40 && ChatDialog.isOpen(); i2++) {
-      if (ChatDialog.canContinue()) {
-        await ChatDialog.continue();
-      }
-      await Execution.delayTicks(1);
-    }
-    listened = true;
+  if (!await enterFortress(log)) {
     return false;
   }
-  await Traversal.walkResilient(HOLE, { radius: 1, attempts: 6, timeoutMs: 120000, log });
-  const hole = Locs.query().name("Hole").within(8).nearest();
-  const cabbage = Inventory.first("Cabbage");
-  if (hole && cabbage) {
-    const before = Inventory.count("Cabbage");
-    await cabbage.useOn(hole);
-    await Execution.delayUntil(() => Inventory.count("Cabbage") < before, 6000);
+  if (!listened) {
+    log("infiltrating the fortress to eavesdrop at the grill");
+    return listenAtGrill(log);
   }
-  return false;
+  return dropCabbage(log);
 }
 async function pickCabbage(log) {
   if (Inventory.contains("Cabbage")) {
@@ -54326,7 +54384,7 @@ async function pickCabbage(log) {
   }
   const plant = Locs.query().name("Cabbage").action("Pick").within(10).nearest();
   if (!plant) {
-    await Traversal.walkResilient(CABBAGE_FIELD, { radius: 4, attempts: 4, timeoutMs: 120000, log });
+    await Traversal.walkResilient(BKF_TILE.CABBAGE_FIELD, { radius: 4, attempts: 4, timeoutMs: 120000, log });
     return false;
   }
   const before = Inventory.count("Cabbage");
@@ -109095,6 +109153,128 @@ function applyLegendsSettings(raw2) {
   LegendsConfig.reward = LEGENDS_REWARD_OPTIONS.find((s) => s === raw2.reward) ?? "Prayer";
 }
 
+// src/bot/api/ai/quests/data/index.ts
+function loadQuestRecords() {
+  return QUESTS;
+}
+
+// src/bot/scripts/AIOQuester/questPicker.ts
+var F2P_QUEST_IDS = [
+  "blackknight",
+  "cook",
+  "demon",
+  "doric",
+  "dragon",
+  "gobdip",
+  "haunted",
+  "hetty",
+  "hunt",
+  "imp",
+  "priest",
+  "prince",
+  "romeojuliet",
+  "runemysteries",
+  "sheep",
+  "blackarmgang",
+  "squire",
+  "vampire"
+];
+function readLivePlayerState(records) {
+  const skillNames = new Set;
+  for (const record of records) {
+    for (const skill of record.requirements.skills ?? []) {
+      skillNames.add(skill.skill);
+    }
+  }
+  const skillLevels = new Map;
+  for (const name of skillNames) {
+    skillLevels.set(name, Skills.level(name));
+  }
+  const completedQuests = new Set;
+  for (const record of records) {
+    if (Quests.status(record.name) === "complete") {
+      completedQuests.add(record.id);
+    }
+  }
+  return { questPoints: Quests.points(), skillLevels, completedQuests };
+}
+function questsPlayerCanDo(records, player, statusOf) {
+  return records.filter((record) => {
+    const status = statusOf(record.name);
+    if (status === "complete") {
+      return false;
+    }
+    const journal = status === "unknown" ? "notStarted" : status;
+    const elig = evaluate(record, player, { counts: new Map, bankKnown: false }, journal);
+    return elig.status === "READY";
+  });
+}
+function ownedItemCounts(names) {
+  const owned8 = new Map;
+  for (const name of names) {
+    const key3 = name.toLowerCase();
+    owned8.set(key3, Inventory.count(name) + BankMemory.count(name));
+  }
+  return owned8;
+}
+function formatFetchSummary(records, owned8) {
+  const needed = new Map;
+  for (const record of records) {
+    for (const item2 of record.items) {
+      const key3 = item2.name;
+      needed.set(key3, (needed.get(key3) ?? 0) + item2.qty);
+    }
+  }
+  let coins2 = 0;
+  const fetch2 = [];
+  for (const [name, qty2] of [...needed.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+    const have2 = owned8.get(name.toLowerCase()) ?? 0;
+    const short = Math.max(0, qty2 - have2);
+    if (short <= 0) {
+      continue;
+    }
+    if (name.toLowerCase() === "coins") {
+      coins2 = short;
+      continue;
+    }
+    fetch2.push(short === 1 ? name : `${name} x${short}`);
+  }
+  const n = records.length;
+  const questBit = `${n} quest${n === 1 ? "" : "s"}`;
+  const coinBit = coins2 > 0 ? `${coins2.toLocaleString("en-GB")} coins` : "no listed coin cost";
+  const itemBit = fetch2.length > 0 ? `fetch ${fetch2.join(", ")}` : "no extra items to fetch";
+  return `${questBit}. ${coinBit}. ${itemBit}.`;
+}
+function pickQuestsICanDo(implementedIds) {
+  try {
+    if (!Game.ingame() || Game.tile() === null) {
+      return { summary: "Log in first, then click again." };
+    }
+    if (Quests.all().length === 0) {
+      return { summary: "Quest list is not loaded yet. Open the quest tab, then click again." };
+    }
+    const allowed2 = new Set(implementedIds);
+    const records = loadQuestRecords().filter((record) => allowed2.has(record.id));
+    const player = readLivePlayerState(loadQuestRecords());
+    const ready = questsPlayerCanDo(records, player, (name) => Quests.status(name));
+    if (ready.length === 0) {
+      return { summary: "No implemented quests are doable on this character yet (stats, quest points, or prerequisites)." };
+    }
+    const names = new Set;
+    for (const record of ready) {
+      for (const item2 of record.items) {
+        names.add(item2.name);
+      }
+    }
+    return {
+      selected: ready.map((record) => record.id),
+      summary: formatFetchSummary(ready, ownedItemCounts(names))
+    };
+  } catch {
+    return { summary: "Could not read this character. Log in first." };
+  }
+}
+
 // src/bot/scripts/AIOQuester/AIOQuesterPaint.ts
 var QUEUE_ICON = {
   DONE: "✓",
@@ -109166,7 +109346,15 @@ var AIO_SETTINGS = {
     options: QUEST_OPTION_IDS,
     optionLabels: QUEST_OPTION_LABELS,
     label: "Quest queue (empty = all)",
-    help: "which implemented quests to complete; leave empty to run every implemented quest. Tick order does not matter, the queue runs the built-in order that puts prerequisites first"
+    help: "which implemented quests to complete; leave empty to run every implemented quest. Tick order does not matter, the queue runs the built-in order that puts prerequisites first",
+    selectGroups: [{
+      label: "F2P Quests",
+      options: F2P_QUEST_IDS.filter((id) => QUEST_OPTION_IDS.includes(id))
+    }],
+    livePicker: {
+      label: "Quests I can do",
+      pick: () => pickQuestsICanDo(QUEST_OPTION_IDS)
+    }
   },
   loadout: LOADOUT_SETTING,
   food: {

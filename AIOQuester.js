@@ -54850,7 +54850,7 @@ function canWalkToGrillLadder(t) {
   return t.z <= 3512 && t.x >= 3020 && t.x <= 3024;
 }
 function doorHelpsToward(here2, door, dest) {
-  return chebyshev2(door, dest) <= chebyshev2(here2, dest) || chebyshev2(here2, door) <= 4;
+  return chebyshev2(door, dest) <= chebyshev2(here2, dest);
 }
 function grillReady() {
   const here2 = Game.tile();
@@ -54995,6 +54995,17 @@ async function walkStayOnFloor(stand, log) {
       return true;
     }
     await handleFortressTalk(log);
+    const destReachable = here2 !== null && (() => {
+      try {
+        return Reachability.probeable(floorStand) && Reachability.canReach(floorStand, { adjacentOk: true, maxSteps: 64 });
+      } catch {
+        return false;
+      }
+    })();
+    if (destReachable) {
+      await DirectNavigator.walkTo(floorStand, 1, 8000);
+      continue;
+    }
     const door = Locs.query().action("Open").within(12).where((l) => {
       const t = l.tile();
       if (here2 === null || t.level !== here2.level) {
@@ -55016,20 +55027,15 @@ async function walkStayOnFloor(stand, log) {
       await Execution.delayTicks(2);
       continue;
     }
-    const destReachable = Reachability.probeable(floorStand) && Reachability.canReach(floorStand, { adjacentOk: true, maxSteps: 64 });
-    if (!destReachable) {
-      log("ladder still behind a shut door on this floor");
-      if (here2 !== null) {
-        const dx = Math.sign(floorStand.x - here2.x);
-        const dz = Math.sign(floorStand.z - here2.z);
-        if (dx !== 0 || dz !== 0) {
-          await DirectNavigator.walkTo({ x: here2.x + dx, z: here2.z + dz, level: here2.level }, 0, 4000);
-        }
+    log("ladder still behind a shut door on this floor");
+    if (here2 !== null) {
+      const dx = Math.sign(floorStand.x - here2.x);
+      const dz = Math.sign(floorStand.z - here2.z);
+      if (dx !== 0 || dz !== 0) {
+        await DirectNavigator.walkTo({ x: here2.x + dx, z: here2.z + dz, level: here2.level }, 0, 4000);
       }
-      await Execution.delayTicks(1);
-      continue;
     }
-    await DirectNavigator.walkTo(floorStand, 1, 8000);
+    await Execution.delayTicks(1);
   }
   const now = Game.tile();
   return now !== null && now.level === floorStand.level && chebyshev2(now, floorStand) <= 1;
@@ -55039,19 +55045,23 @@ async function climbAt2(stand, op, log) {
   if (here2 === null) {
     return false;
   }
-  if (chebyshev2(here2, stand) > 1 || here2.level !== stand.level) {
-    if (isBlackKnightFortressInterior(here2) || here2.level === stand.level) {
-      if (!await walkStayOnFloor(stand, log)) {
-        return false;
-      }
-    } else {
-      log(`walking to the fortress ladder at (${stand.x},${stand.z})`);
-      if (!await Traversal.walkResilient(stand, { radius: 1, attempts: 4, timeoutMs: 60000, log })) {
-        return false;
+  const findLadder = () => Locs.query().name("Ladder").action(op).within(8).where((l) => chebyshev2(l.tile(), stand) <= 1).nearest();
+  let ladder = findLadder();
+  if (!(ladder && canUseLoc(ladder))) {
+    if (chebyshev2(here2, stand) > 1 || here2.level !== stand.level) {
+      if (isBlackKnightFortressInterior(here2) || here2.level === stand.level) {
+        if (!await walkStayOnFloor(stand, log)) {
+          return false;
+        }
+      } else {
+        log(`walking to the fortress ladder at (${stand.x},${stand.z})`);
+        if (!await Traversal.walkResilient(stand, { radius: 1, attempts: 4, timeoutMs: 60000, log })) {
+          return false;
+        }
       }
     }
+    ladder = findLadder();
   }
-  const ladder = Locs.query().name("Ladder").action(op).within(6).where((l) => chebyshev2(l.tile(), stand) <= 1).nearest();
   if (!ladder) {
     log(`no '${op}' ladder at (${stand.x},${stand.z},L${stand.level})`);
     return false;
@@ -55116,9 +55126,6 @@ async function approachInside(dest, log) {
       return;
     }
     log("this first-floor hall does not reach the grill, taking the cannon roof");
-    if (await openNearbyBarrier(log)) {
-      return;
-    }
     await climbAt2(BKF_TILE.CANNON_UP, "Climb-up", log);
     return;
   }

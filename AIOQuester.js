@@ -50318,6 +50318,7 @@ var GENERAL = {
   prefer: ["Do you want me to pick an armour colour for you?"],
   gapMs: 5000
 };
+var WARTFACE_SCENE = 24;
 var AGGIE_ANCHOR = new Tile(3086, 3259, 0);
 var AGGIE_RED = { npc: "Aggie", anchor: AGGIE_ANCHOR, leash: 6, prefer: ["Can you make dyes for me please?", "What do you need to make red dye?", "Okay, make me some red dye please."] };
 var AGGIE_YELLOW = { npc: "Aggie", anchor: AGGIE_ANCHOR, leash: 6, prefer: ["Can you make dyes for me please?", "What do you need to make yellow dye?", "Okay, make me some yellow dye please."] };
@@ -50397,6 +50398,9 @@ function woadLeavesHeld() {
 }
 function findWyson() {
   return Npcs.query().where((npc) => /wyson/i.test(npc.name ?? "")).nearest();
+}
+function farFromWartface(tile) {
+  return tile === null || tile === undefined || (tile.level ?? 0) !== GENERAL.anchor.level || Math.max(Math.abs(tile.x - GENERAL.anchor.x), Math.abs(tile.z - GENERAL.anchor.z)) > WARTFACE_SCENE;
 }
 function combatFoodNames() {
   const configured = QuestFood.name?.trim();
@@ -50869,6 +50873,12 @@ async function stepOutOfGoblinCombat(log) {
   return true;
 }
 async function stayWithWartface(log) {
+  if (farFromWartface(Game.tile())) {
+    log("walking to General Wartface in Goblin Village");
+    if (!await Traversal.walkResilient(GENERAL.anchor, { radius: 2, attempts: 4, timeoutMs: 180000, log })) {
+      return false;
+    }
+  }
   const find = () => Npcs.query().name(GENERAL.npc).within(8).nearest();
   let npc = find();
   if (!npc || npc.distance() > 1) {
@@ -50955,6 +50965,7 @@ function decide15(snap) {
 var goblindiplomacy = {
   record: QUESTS.find((r) => r.id === "gobdip"),
   bank: DRAYNOR_BANK2,
+  coinFloat: GOBLIN_DIPLOMACY_COIN_TARGET,
   sustain: { foods: [FALLBACK_FOOD], eatBelowHp: 0.6 },
   get tools() {
     return ["goblin mail", "dye", "woad", "redberries", "onion", "coins", ...combatFoodNames().map((name) => name.toLowerCase())];

@@ -23,6 +23,10 @@ Most scripts dismiss the welcome screen on start.
 
 ## Scripts: COPY THE LINK INTO THE BOT URL SPOT WHERE YOU CHOOSE A SCRIPT AND CLICK LOAD TO LOAD THE SCRIPT
 
+**AIOQuester** (`AIOQuester.js`). Completes Lost City 2004 quests and gathers the required items.
+
+https://benzymee.github.io/RS2B2TScripts/AIOQuester.js
+
 **Alchgility** (`Alchgility.js`). WARNING: High Alchs the whole inventory while running the Gnome Stronghold agility course. Needs Magic 55.
 
 https://benzymee.github.io/RS2B2TScripts/Alchgility.js
@@ -50,6 +54,10 @@ https://benzymee.github.io/RS2B2TScripts/BowTradeAcceptor.js
 **BowTrader** (`BowTrader.js`). Banks at the nearest bank, withdraws every bow and unstrung bow as notes, then trades those notes to a named player. Set Partner name.
 
 https://benzymee.github.io/RS2B2TScripts/BowTrader.js
+
+**CamelotUnicornHunter** (`CamelotUnicornHunter.js`). Hunts Unicorns around Camelot and Seers Village. Takes Unicorn horns. Banks at the nearer of Seers or Catherby. Optional dragon dagger Puncture swap.
+
+https://benzymee.github.io/RS2B2TScripts/CamelotUnicornHunter.js
 
 **CatherbyLobsters** (`CatherbyLobsters.js`). Cage-fishes lobsters at Catherby. Optional cook or sell raw lobster to Harry.
 
@@ -83,6 +91,10 @@ https://benzymee.github.io/RS2B2TScripts/FaladorTreeFletcher.js
 
 https://benzymee.github.io/RS2B2TScripts/InventoryAlcher.js
 
+**KnowledgeGatherer** (`KnowledgeGatherer.js`). Woodcutting, mining, fishing, and crafting from BotKnowledge. Picks the best camp your level unlocks, gathers, and banks. Buys tools. Optional Nurmof pickaxe upgrades.
+
+https://benzymee.github.io/RS2B2TScripts/KnowledgeGatherer.js
+
 **MapleTreeFletcher** (`MapleTreeFletcher.js`). Chops maple trees near Seers Village. Optional fletching into maple shortbows at 50 or longbows at 55.
 
 https://benzymee.github.io/RS2B2TScripts/MapleTreeFletcher.js
@@ -106,3 +118,7 @@ https://benzymee.github.io/RS2B2TScripts/ProgressiveChopper.js
 **WillowTreeFletcher** (`WillowTreeFletcher.js`). Chops willow trees at Draynor. Optional fletching into willow shortbows at 35 or longbows at 40.
 
 https://benzymee.github.io/RS2B2TScripts/WillowTreeFletcher.js
+
+**ZanarisOtherworldlyBeingKiller** (`ZanarisOtherworldlyBeingKiller.js`). Kills Otherworldly beings south of the Zanaris fairy bank. Right-clicks Bank on the fairy bankers. Needs Lost City. Optional dragon dagger Puncture swap.
+
+https://benzymee.github.io/RS2B2TScripts/ZanarisOtherworldlyBeingKiller.js

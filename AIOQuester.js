@@ -51428,7 +51428,9 @@ var WH_TILE = {
   FOUNTAIN: new Tile(2911, 3470, 0),
   SHED_DOOR: new Tile(2933, 3463, 0),
   BALL: new Tile(2935, 3461, 0),
-  THROWN_OUT: new Tile(2929, 3456, 0)
+  THROWN_OUT: new Tile(2929, 3456, 0),
+  SAFE_NE: new Tile(2936, 3466, 0),
+  SAFE_SOUTH: new Tile(2935, 3459, 0)
 };
 var BOY = {
   npc: "Boy",
@@ -51438,6 +51440,7 @@ var BOY = {
 };
 var WYDIN3 = { npc: "Wydin", anchor: new Tile(3014, 3204, 0) };
 var THESSALIA = { npc: "Thessalia", anchor: new Tile(3204, 3417, 0) };
+var BETTY = { npc: "Betty", anchor: new Tile(3012, 3259, 0) };
 var SHOP_GP2 = 200;
 var FALADOR_WEST_BANK = new Tile(2946, 3369, 0);
 function within2(t, x0, x1, z0, z1, level) {
@@ -51627,10 +51630,225 @@ async function readDiary(log) {
   return true;
 }
 
+// src/bot/data/spelldb.ts
+var SPELL_DB = {
+  "Wind Strike": { ssb: 0, level: 1, runes: [{ rune: "Mind rune", count: 1 }, { rune: "Air rune", count: 1 }] },
+  "Water Strike": { ssb: 1, level: 5, runes: [{ rune: "Mind rune", count: 1 }, { rune: "Water rune", count: 1 }, { rune: "Air rune", count: 1 }] },
+  "Earth Strike": { ssb: 2, level: 9, runes: [{ rune: "Mind rune", count: 1 }, { rune: "Earth rune", count: 2 }, { rune: "Air rune", count: 1 }] },
+  "Fire Strike": { ssb: 3, level: 13, runes: [{ rune: "Mind rune", count: 1 }, { rune: "Fire rune", count: 3 }, { rune: "Air rune", count: 2 }] },
+  "Wind Bolt": { ssb: 4, level: 17, runes: [{ rune: "Chaos rune", count: 1 }, { rune: "Air rune", count: 2 }] },
+  "Water Bolt": { ssb: 5, level: 23, runes: [{ rune: "Chaos rune", count: 1 }, { rune: "Water rune", count: 2 }, { rune: "Air rune", count: 2 }] },
+  "Earth Bolt": { ssb: 6, level: 29, runes: [{ rune: "Chaos rune", count: 1 }, { rune: "Earth rune", count: 3 }, { rune: "Air rune", count: 2 }] },
+  "Fire Bolt": { ssb: 7, level: 35, runes: [{ rune: "Chaos rune", count: 1 }, { rune: "Fire rune", count: 4 }, { rune: "Air rune", count: 3 }] },
+  "Wind Blast": { ssb: 8, level: 41, runes: [{ rune: "Death rune", count: 1 }, { rune: "Air rune", count: 3 }] },
+  "Water Blast": { ssb: 9, level: 47, runes: [{ rune: "Death rune", count: 1 }, { rune: "Water rune", count: 3 }, { rune: "Air rune", count: 3 }] },
+  "Earth Blast": { ssb: 10, level: 53, runes: [{ rune: "Death rune", count: 1 }, { rune: "Earth rune", count: 4 }, { rune: "Air rune", count: 3 }] },
+  "Fire Blast": { ssb: 11, level: 59, runes: [{ rune: "Death rune", count: 1 }, { rune: "Fire rune", count: 5 }, { rune: "Air rune", count: 4 }] },
+  "Wind Wave": { ssb: 12, level: 62, runes: [{ rune: "Blood rune", count: 1 }, { rune: "Air rune", count: 5 }] },
+  "Water Wave": { ssb: 13, level: 65, runes: [{ rune: "Blood rune", count: 1 }, { rune: "Water rune", count: 7 }, { rune: "Air rune", count: 5 }] },
+  "Earth Wave": { ssb: 14, level: 70, runes: [{ rune: "Blood rune", count: 1 }, { rune: "Earth rune", count: 7 }, { rune: "Air rune", count: 5 }] },
+  "Fire Wave": { ssb: 15, level: 75, runes: [{ rune: "Blood rune", count: 1 }, { rune: "Fire rune", count: 7 }, { rune: "Air rune", count: 5 }] }
+};
+var STAFF_RUNES = {
+  "Air battlestaff": ["Air rune"],
+  "Earth battlestaff": ["Earth rune"],
+  "Fire battlestaff": ["Fire rune"],
+  "Lava battlestaff": ["Earth rune", "Fire rune"],
+  "Mystic air staff": ["Air rune"],
+  "Mystic earth staff": ["Earth rune"],
+  "Mystic fire staff": ["Fire rune"],
+  "Mystic lava staff": ["Earth rune", "Fire rune"],
+  "Mystic water staff": ["Water rune"],
+  "Staff of air": ["Air rune"],
+  "Staff of earth": ["Earth rune"],
+  "Staff of fire": ["Fire rune"],
+  "Staff of water": ["Water rune"],
+  "Water battlestaff": ["Water rune"]
+};
+
+// src/bot/api/ai/quests/defs/witchshouse/magic.ts
+var EXPERIMENT_CASTS = 500;
+var DEATH_RUNE_CASTS = 100;
+var COINS_ID3 = 995;
+var BETTY_RUNES = new Set([
+  "Air rune",
+  "Water rune",
+  "Earth rune",
+  "Fire rune",
+  "Mind rune",
+  "Chaos rune",
+  "Death rune"
+]);
+var LIST_GP = {
+  "Air rune": 4,
+  "Water rune": 4,
+  "Earth rune": 4,
+  "Fire rune": 4,
+  "Mind rune": 3,
+  "Chaos rune": 90,
+  "Death rune": 180
+};
+var BUY_GP = {
+  "Air rune": 24,
+  "Water rune": 24,
+  "Earth rune": 24,
+  "Fire rune": 24,
+  "Mind rune": 24,
+  "Chaos rune": 200,
+  "Death rune": 400
+};
+var RUNE_ID = {
+  "Fire rune": 554,
+  "Water rune": 555,
+  "Air rune": 556,
+  "Earth rune": 557,
+  "Mind rune": 558,
+  "Death rune": 560,
+  "Chaos rune": 562
+};
+function staffNames(snap) {
+  return snap.worn;
+}
+function staffProvidedRunes(worn3) {
+  const provided = new Set;
+  const wornNames = [...worn3].map((name) => name.toLowerCase());
+  for (const [staff, runes] of Object.entries(STAFF_RUNES)) {
+    if (wornNames.includes(staff.toLowerCase())) {
+      for (const rune of runes) {
+        provided.add(rune);
+      }
+    }
+  }
+  return provided;
+}
+function bestBettyCombatSpell(magic) {
+  let best = {
+    name: "Wind Strike",
+    level: SPELL_DB["Wind Strike"].level,
+    runes: SPELL_DB["Wind Strike"].runes
+  };
+  for (const [name, row] of Object.entries(SPELL_DB)) {
+    if (row.level > magic || row.level < best.level) {
+      continue;
+    }
+    if (!row.runes.every((rune) => BETTY_RUNES.has(rune.rune))) {
+      continue;
+    }
+    best = { name, level: row.level, runes: row.runes };
+  }
+  return best;
+}
+function experimentCasts(spell) {
+  return spell.runes.some((rune) => rune.rune === "Death rune") ? DEATH_RUNE_CASTS : EXPERIMENT_CASTS;
+}
+function experimentRuneNeeds(magic, worn3 = []) {
+  const spell = bestBettyCombatSpell(magic);
+  const casts = experimentCasts(spell);
+  const staff = staffProvidedRunes(worn3);
+  const needs = [];
+  for (const rune of spell.runes) {
+    if (staff.has(rune.rune)) {
+      continue;
+    }
+    const id = RUNE_ID[rune.rune];
+    if (id === undefined) {
+      continue;
+    }
+    needs.push({
+      name: rune.rune,
+      id,
+      qty: rune.count * casts,
+      unitGp: BUY_GP[rune.rune] ?? 24,
+      listGp: LIST_GP[rune.rune] ?? 4
+    });
+  }
+  return needs;
+}
+function experimentRuneItems(magic) {
+  const needs = experimentRuneNeeds(magic);
+  const items = needs.map((need) => ({ name: need.name, qty: need.qty, kind: "acquirable" }));
+  const coins = needs.reduce((sum, need) => sum + need.qty * need.listGp, 0);
+  if (coins > 0) {
+    items.push({ name: "Coins", qty: coins, kind: "acquirable" });
+  }
+  return items;
+}
+function coinsHeld2(snap) {
+  return heldId4(snap, COINS_ID3) || (snap.inv.get("coins") ?? 0);
+}
+function coinsBanked(snap) {
+  if (!snap.bankKnown) {
+    return 0;
+  }
+  return bankedId3(snap, COINS_ID3) || (snap.bank?.get("coins") ?? 0);
+}
+function scanBank4() {
+  return { kind: "scanBank", bank: FALADOR_WEST_BANK };
+}
+function withdraw3(items) {
+  return { kind: "withdraw", items, bank: FALADOR_WEST_BANK };
+}
+function sourceExperimentRunes(snap) {
+  if (inGarden(snap.tile) || inShed(snap.tile)) {
+    return null;
+  }
+  const needs = experimentRuneNeeds(snap.magic ?? 1, staffNames(snap));
+  if (needs.every((need) => heldId4(snap, need.id) >= need.qty)) {
+    return null;
+  }
+  if (!snap.bankKnown) {
+    return scanBank4();
+  }
+  const fromBank2 = [];
+  for (const need of needs) {
+    const missing2 = need.qty - heldId4(snap, need.id);
+    if (missing2 <= 0) {
+      continue;
+    }
+    const stored = bankedId3(snap, need.id);
+    if (stored > 0) {
+      fromBank2.push({ name: need.name, id: need.id, qty: Math.min(missing2, stored) });
+    }
+  }
+  if (fromBank2.length > 0) {
+    return withdraw3(fromBank2);
+  }
+  const missing = needs.map((need) => ({ ...need, short: Math.max(0, need.qty - heldId4(snap, need.id)) })).filter((need) => need.short > 0);
+  if (missing.length === 0) {
+    return null;
+  }
+  const budget = missing.reduce((sum, need) => sum + need.short * need.unitGp, 0);
+  const purse = coinsHeld2(snap);
+  if (purse < budget) {
+    const stored = coinsBanked(snap);
+    if (stored > 0) {
+      return withdraw3([{ name: "Coins", id: COINS_ID3, qty: Math.min(budget - purse, stored) }]);
+    }
+    return { kind: "wait", reason: `need ${budget} gp at Betty's for ${bestBettyCombatSpell(snap.magic ?? 1).name}` };
+  }
+  const first = missing[0];
+  return {
+    kind: "buy",
+    item: first.name,
+    qty: first.short,
+    shop: BETTY,
+    estGp: first.short * first.unitGp,
+    bank: FALADOR_WEST_BANK
+  };
+}
+function experimentSafespot(formId) {
+  return formId >= EXPERIMENT_IDS[2] ? WH_TILE.SAFE_SOUTH : WH_TILE.SAFE_NE;
+}
+function experimentMeleeReach(formId) {
+  return formId >= EXPERIMENT_IDS[2] ? 2 : 1;
+}
+
 // src/bot/api/ai/quests/defs/witchshouse/garden.ts
 var WALK_MS4 = 180000;
 var FIGHT_MS = 300000;
 var SPAWN_TICKS = 25;
+var MAGIC_TAB2 = 6;
+var CAST_TICKS = 5;
 var KILLED = /kill the shapeshifter once and for all/i;
 var NOTHING_IN_FOUNTAIN = /nothing in the fountain/i;
 function experiment() {
@@ -51694,56 +51912,111 @@ async function summonExperiment(log) {
   }
   return came;
 }
+function onSafespot(formId) {
+  const here2 = Game.tile();
+  const dest = experimentSafespot(formId);
+  return here2 !== null && here2.level === dest.level && here2.x === dest.x && here2.z === dest.z;
+}
+async function takeSafespot(formId) {
+  if (onSafespot(formId)) {
+    return true;
+  }
+  return DirectNavigator.walkTo(experimentSafespot(formId), 0, 8000);
+}
+function tooClose(target) {
+  const here2 = Game.tile();
+  if (!here2) {
+    return false;
+  }
+  return Tile.from(here2).distanceTo(target.tile()) <= experimentMeleeReach(target.id);
+}
+function canCast(spell) {
+  const staff = staffProvidedRunes(Equipment.items().map((item) => item.name ?? ""));
+  return spell.runes.every((rune) => staff.has(rune.rune) || Inventory.count(rune.rune) >= rune.count);
+}
 async function fightExperiment(log) {
   const mark = GameMessages.mark();
   const won = () => GameMessages.sawSince(mark, KILLED);
-  Game.setAutoRetaliate(true);
+  const spell = bestBettyCombatSpell(Skills.level("magic"));
   const deadline = performance.now() + FIGHT_MS;
   let attacking = -1;
   let idle = 0;
   let swings = 0;
+  let casts = 0;
   let forms = 0;
   let shape = -1;
   let reported = -1;
-  while (performance.now() < deadline) {
-    if (won()) {
-      log(`the shapeshifter is dead after ${forms} transformations and ${swings} attacks`);
-      return true;
-    }
-    if (EventSignal.pending()) {
-      log("yielding the fight to a random event");
-      return false;
-    }
-    await Sustain.run();
-    const target = experiment();
-    if (!target) {
-      if (++idle > SPAWN_TICKS) {
-        log(`no shapeshifter for ${SPAWN_TICKS} ticks and no kill message, so the chain broke`);
+  let lastCast = -CAST_TICKS;
+  let magic = canCast(spell);
+  if (magic) {
+    log(`safespotting the shapeshifter with ${spell.name}`);
+    await Game.openSideTab(MAGIC_TAB2);
+    Game.setAutoRetaliate(false);
+  } else {
+    log(`no runes for ${spell.name}, meleeing the shapeshifter`);
+    Game.setAutoRetaliate(true);
+  }
+  try {
+    while (performance.now() < deadline) {
+      if (won()) {
+        log(`the shapeshifter is dead after ${forms} transformations, ${casts} casts and ${swings} attacks`);
+        return true;
+      }
+      if (EventSignal.pending()) {
+        log("yielding the fight to a random event");
         return false;
       }
-      await Execution.delayTicks(1);
-      continue;
-    }
-    if (shape !== -1 && target.id !== shape) {
-      forms++;
-    }
-    shape = target.id;
-    idle = 0;
-    const tick = Game.tick();
-    if (tick - reported >= 40) {
-      reported = tick;
-      log(`shapeshifter ${target.id}: hp=${Skills.effective("hitpoints")}/${Skills.level("hitpoints")} attacks=${swings}`);
-    }
-    if (target.index !== attacking || !Game.inCombat()) {
-      if (await target.interact("Attack")) {
-        attacking = target.index;
-        swings++;
+      await Sustain.run();
+      const target = experiment();
+      if (!target) {
+        if (++idle > SPAWN_TICKS) {
+          log(`no shapeshifter for ${SPAWN_TICKS} ticks and no kill message, so the chain broke`);
+          return false;
+        }
+        await Execution.delayTicks(1);
+        continue;
       }
+      if (shape !== -1 && target.id !== shape) {
+        forms++;
+      }
+      shape = target.id;
+      idle = 0;
+      magic = canCast(spell);
+      const tick = Game.tick();
+      if (tick - reported >= 40) {
+        reported = tick;
+        log(`shapeshifter ${target.id}: hp=${Skills.effective("hitpoints")}/${Skills.level("hitpoints")} casts=${casts} attacks=${swings}`);
+      }
+      if (magic) {
+        Game.setAutoRetaliate(false);
+        await takeSafespot(target.id);
+        if (tooClose(target)) {
+          await takeSafespot(target.id);
+          await Execution.delayTicks(1);
+          continue;
+        }
+        await Game.openSideTab(MAGIC_TAB2);
+        if (tick - lastCast >= CAST_TICKS && await Game.castOnNpc(spell.name, target)) {
+          lastCast = tick;
+          casts++;
+        }
+        await Execution.delayTicks(1);
+        continue;
+      }
+      Game.setAutoRetaliate(true);
+      if (target.index !== attacking || !Game.inCombat()) {
+        if (await target.interact("Attack")) {
+          attacking = target.index;
+          swings++;
+        }
+      }
+      await Execution.delayTicks(1);
     }
-    await Execution.delayTicks(1);
+    log(`the shapeshifter outlived ${FIGHT_MS / 1000}s of combat`);
+    return false;
+  } finally {
+    Game.setAutoRetaliate(true);
   }
-  log(`the shapeshifter outlived ${FIGHT_MS / 1000}s of combat`);
-  return false;
 }
 async function killExperiment(log) {
   if (!await enterShed(log)) {
@@ -51880,12 +52153,12 @@ function decide17(snap) {
     return custom("lure the mouse and fit the magnet", unlockBackDoor);
   }
   if (heldId4(snap, WH_OBJ.SHED_KEY) > 0) {
-    return custom("unlock the shed and kill the experiment", killExperiment);
+    return sourceExperimentRunes(snap) ?? custom("unlock the shed and kill the experiment", killExperiment);
   }
   if (diaryWanted()) {
     return heldId4(snap, WH_OBJ.DIARY) > 0 ? custom("read the witch's diary so a catch cannot relock the back door", readDiary) : custom("take the witch's diary from the bedroom", fetchDiary);
   }
-  return custom("check the garden fountain for the shed key", fountainKey);
+  return sourceExperimentRunes(snap) ?? custom("check the garden fountain for the shed key", fountainKey);
 }
 function wearingGloves(snap) {
   return snap.wornIds?.has(WH_OBJ.GLOVES) ?? snap.worn.has(WH_NAME.GLOVES.toLowerCase());
@@ -51903,7 +52176,22 @@ var witchshouse = {
   pray: { protect: "melee", potions: 2 },
   food: WH_FOOD,
   grind: [...EXPERIMENT_NAMES],
-  tools: ["door key", "key", "magnet", "cheese", "ball", "diary", "leather gloves"],
+  tools: [
+    "door key",
+    "key",
+    "magnet",
+    "cheese",
+    "ball",
+    "diary",
+    "leather gloves",
+    "air rune",
+    "water rune",
+    "earth rune",
+    "fire rune",
+    "mind rune",
+    "chaos rune",
+    "death rune"
+  ],
   readProgress: readWitchsHouseProgress,
   sustain: { foods: ["Lobster", "Swordfish", "Trout"], eatBelowHp: 0.6 },
   gather: {
@@ -54232,8 +54520,8 @@ var NS_TOOLS = [
 ];
 var heldId9 = (snap, id) => snap.invIds?.get(id) ?? 0;
 var bankedId5 = (snap, id) => snap.bankIds?.get(id) ?? 0;
-var scanBank4 = { kind: "scanBank" };
-var withdraw3 = (name, id, qty2 = 1) => ({ kind: "withdraw", items: [{ name, qty: qty2, id }] });
+var scanBank5 = { kind: "scanBank" };
+var withdraw4 = (name, id, qty2 = 1) => ({ kind: "withdraw", items: [{ name, qty: qty2, id }] });
 function amulet(snap) {
   if (snap.wornIds?.has(NS_ID.GHOSTSPEAK)) {
     return null;
@@ -54242,10 +54530,10 @@ function amulet(snap) {
     return { kind: "equip", item: NS_NAME.GHOSTSPEAK };
   }
   if (!snap.bankKnown) {
-    return scanBank4;
+    return scanBank5;
   }
   if (bankedId5(snap, NS_ID.GHOSTSPEAK) > 0) {
-    return withdraw3(NS_NAME.GHOSTSPEAK, NS_ID.GHOSTSPEAK);
+    return withdraw4(NS_NAME.GHOSTSPEAK, NS_ID.GHOSTSPEAK);
   }
   return { kind: "talk", stop: URHNEY2 };
 }
@@ -54297,17 +54585,17 @@ function sickleStep(snap, miningLevel) {
     return null;
   }
   if (!snap.bankKnown) {
-    return scanBank4;
+    return scanBank5;
   }
   if (bankedId5(snap, NS_ID.SICKLE_BLESSED) > 0) {
-    return withdraw3(NS_NAME.SICKLE_BLESSED, NS_ID.SICKLE_BLESSED);
+    return withdraw4(NS_NAME.SICKLE_BLESSED, NS_ID.SICKLE_BLESSED);
   }
   if (bankedId5(snap, NS_ID.SICKLE) > 0) {
-    return withdraw3(NS_NAME.SICKLE, NS_ID.SICKLE);
+    return withdraw4(NS_NAME.SICKLE, NS_ID.SICKLE);
   }
   if (heldId9(snap, NS_ID.MOULD) === 0) {
     if (bankedId5(snap, NS_ID.MOULD) > 0) {
-      return withdraw3(NS_NAME.MOULD, NS_ID.MOULD);
+      return withdraw4(NS_NAME.MOULD, NS_ID.MOULD);
     }
     return { kind: "buy", item: NS_NAME.MOULD, qty: 1, shop: DOMMIK, estGp: 200 };
   }
@@ -54315,13 +54603,13 @@ function sickleStep(snap, miningLevel) {
     return { kind: "custom", name: "cast the silver sickle", run: castSickle };
   }
   if (bankedId5(snap, NS_ID.SILVER_BAR) > 0) {
-    return withdraw3(NS_NAME.SILVER_BAR, NS_ID.SILVER_BAR);
+    return withdraw4(NS_NAME.SILVER_BAR, NS_ID.SILVER_BAR);
   }
   if (heldId9(snap, NS_ID.SILVER_ORE) > 0) {
     return { kind: "custom", name: "smelt a silver bar", run: smeltSilver };
   }
   if (bankedId5(snap, NS_ID.SILVER_ORE) > 0) {
-    return withdraw3(NS_NAME.SILVER_ORE, NS_ID.SILVER_ORE);
+    return withdraw4(NS_NAME.SILVER_ORE, NS_ID.SILVER_ORE);
   }
   return pickaxe(snap, miningLevel ?? Skills.level("mining")) ?? { kind: "mineRock", rock: "Silver", item: NS_NAME.SILVER_ORE, qty: 1, anchor: NS_TILE.SILVER_ROCKS };
 }
@@ -55154,17 +55442,17 @@ function stageTwo2(snap) {
     if (!snap.bankKnown) {
       return { kind: "scanBank", bank: FALADOR_WEST_BANK3 };
     }
-    const withdraw4 = [];
+    const withdraw5 = [];
     for (const meat2 of missingHeld) {
       if (banked4(snap, meat2.enchanted) > 0) {
-        withdraw4.push({ name: meat2.enchanted, qty: 1 });
+        withdraw5.push({ name: meat2.enchanted, qty: 1 });
       } else if (banked4(snap, meat2.raw) > 0) {
-        withdraw4.push({ name: meat2.raw, qty: 1 });
+        withdraw5.push({ name: meat2.raw, qty: 1 });
       }
     }
-    if (withdraw4.length > 0) {
-      const space2 = acquisitionSpace(snap, withdraw4.length);
-      return space2 ?? { kind: "withdraw", items: withdraw4, bank: FALADOR_WEST_BANK3 };
+    if (withdraw5.length > 0) {
+      const space2 = acquisitionSpace(snap, withdraw5.length);
+      return space2 ?? { kind: "withdraw", items: withdraw5, bank: FALADOR_WEST_BANK3 };
     }
     const space = acquisitionSpace(snap, 1);
     const meat = missingHeld[0];
@@ -55327,10 +55615,10 @@ function selectedFood() {
   const food = QuestFood.name?.trim();
   return food ? food : null;
 }
-function withdraw4(items) {
+function withdraw5(items) {
   return { kind: "withdraw", items, bank: DRAYNOR_BANK3 };
 }
-function scanBank5() {
+function scanBank6() {
   return { kind: "scanBank", bank: DRAYNOR_BANK3 };
 }
 function mainlandKeep() {
@@ -55354,10 +55642,10 @@ function sourceKnife(snap) {
     return space;
   }
   if (!snap.bankKnown) {
-    return scanBank5();
+    return scanBank6();
   }
   if (banked5(snap, KNIFE) > 0) {
-    return withdraw4([{ name: KNIFE, qty: 1 }]);
+    return withdraw5([{ name: KNIFE, qty: 1 }]);
   }
   return { kind: "grabGround", item: KNIFE, anchor: KNIFE_SPAWN, waitIfMissing: true };
 }
@@ -55370,15 +55658,15 @@ function sourceMainlandAxe(snap) {
     return space;
   }
   if (!snap.bankKnown) {
-    return scanBank5();
+    return scanBank6();
   }
   const axe = bankAxe(snap);
   if (axe) {
-    return withdraw4([{ name: axe, qty: 1 }]);
+    return withdraw5([{ name: axe, qty: 1 }]);
   }
   if ((snap.inv.get("coins") ?? 0) < 100) {
     if (banked5(snap, "Coins") > 0) {
-      return withdraw4([{ name: "Coins", qty: Math.min(1000, banked5(snap, "Coins")) }]);
+      return withdraw5([{ name: "Coins", qty: Math.min(1000, banked5(snap, "Coins")) }]);
     }
     return { kind: "wait", reason: "need coins for an axe from Bob" };
   }
@@ -55410,7 +55698,7 @@ function sourceCombatFood(snap) {
     return null;
   }
   if (!snap.bankKnown) {
-    return scanBank5();
+    return scanBank6();
   }
   const inBank = banked5(snap, food);
   if (inBank < missing) {
@@ -55423,7 +55711,7 @@ function sourceCombatFood(snap) {
   if (space) {
     return space;
   }
-  return withdraw4([{ name: food, qty: missing }]);
+  return withdraw5([{ name: food, qty: missing }]);
 }
 async function restoreWithSelectedFood(target) {
   for (let i2 = 0;i2 < LOST_CITY_FOOD_TARGET && Skills.hpFraction() < target; i2++) {
@@ -55762,7 +56050,7 @@ function finishFiveStaves(snap, stage, area) {
     return { kind: "custom", name: "enter Zanaris through the swamp shed", run: enterZanaris };
   }
   if (!snap.bankKnown) {
-    return scanBank5();
+    return scanBank6();
   }
   if (knownStaffMaterials(snap) < LOST_CITY_STAFF_TARGET) {
     return travelToDungeon(snap);
@@ -55783,7 +56071,7 @@ function finishFiveStaves(snap, stage, area) {
     if (space) {
       return space;
     }
-    return withdraw4(materials2);
+    return withdraw5(materials2);
   }
   if (localStaffCount(snap) < LOST_CITY_STAFF_TARGET) {
     return { kind: "wait", reason: `recovering ${LOST_CITY_STAFF_TARGET} Dramen staves` };
@@ -56630,7 +56918,7 @@ function outfitCopies(snap, outfit) {
 function bankStep(items) {
   return { kind: "withdraw", items };
 }
-function scanBank6() {
+function scanBank7() {
   return { kind: "scanBank" };
 }
 function preparationKeep() {
@@ -56752,7 +57040,7 @@ function configuredFoodWithdrawal(snap, minimum, target, space) {
   if (carried >= minimum)
     return null;
   if (!snap.bankKnown)
-    return scanBank6();
+    return scanBank7();
   const bankedFood = bankedConfiguredFoodCount(snap);
   if (carried + bankedFood < target) {
     return {
@@ -56775,7 +57063,7 @@ function configuredFoodWithdrawal(snap, minimum, target, space) {
 }
 function preparationAcquisitionStep(snap) {
   if (!snap.bankKnown)
-    return scanBank6();
+    return scanBank7();
   if (hasPreparationSpillover(snap)) {
     return { kind: "deposit", keep: preparationKeep(), exactKeep: true };
   }
@@ -57448,7 +57736,7 @@ function recoverCritical(snap, name, reacquire) {
       return north;
   }
   if (!snap.bankKnown)
-    return scanBank6();
+    return scanBank7();
   if (banked6(snap, name) > 0) {
     const space2 = makePreparationSpace(snap, 1);
     return space2 ?? bankStep([{ name, qty: 1 }]);
@@ -57465,7 +57753,7 @@ function sourceConsumable(snap, name, target) {
   if (north)
     return north;
   if (!snap.bankKnown)
-    return scanBank6();
+    return scanBank7();
   const missing = target - heldCount5(snap, name);
   const stackable = name === ITEM2.FEATHER;
   const needsSlot = !stackable || heldCount5(snap, name) === 0;
@@ -57821,7 +58109,7 @@ function sourceWaterDoses(snap, minimum, target, makeSpace2) {
   if (north)
     return north;
   if (!snap.bankKnown)
-    return scanBank6();
+    return scanBank7();
   const partialNames = WATERSKINS.slice(1).map(lower);
   if ([...snap.inv.keys()].some((name) => partialNames.includes(name))) {
     const keep = rescueKeep().filter((name) => !partialNames.includes(name));
@@ -57869,7 +58157,7 @@ function sourceCoins2(snap, target, purpose) {
   if (north)
     return north;
   if (!snap.bankKnown)
-    return scanBank6();
+    return scanBank7();
   const missing = target - heldCount5(snap, ITEM2.COINS);
   const available = banked6(snap, ITEM2.COINS);
   if (available > 0) {
@@ -57909,7 +58197,7 @@ function routeSouth(snap) {
     return skins;
   if (!held11(snap, ITEM2.PASS)) {
     if (!snap.bankKnown)
-      return scanBank6();
+      return scanBank7();
     if (banked6(snap, ITEM2.PASS) > 0)
       return bankStep([{ name: ITEM2.PASS, qty: 1 }]);
     const coins = sourceCoins2(snap, 6, "replace a Shantay pass");
@@ -57930,7 +58218,7 @@ function sourceDesertOutfitCopies(snap, target) {
   if (north)
     return north;
   if (!snap.bankKnown)
-    return scanBank6();
+    return scanBank7();
   for (const name of DESERT_OUTFIT) {
     const missing = target - ownedNow(snap, name);
     if (missing <= 0)
@@ -57971,7 +58259,7 @@ function sourcePickaxe2(snap) {
   if (north)
     return north;
   if (!snap.bankKnown)
-    return scanBank6();
+    return scanBank7();
   if (snap.freeSlots === 0) {
     const space2 = makeCriticalItemSpace(snap);
     if (space2)
@@ -58012,7 +58300,7 @@ function sourceKebabs(snap, target = 8) {
   if (north)
     return north;
   if (!snap.bankKnown)
-    return scanBank6();
+    return scanBank7();
   const bankFood = withdrawBankedShortage(snap, ITEM2.KEBAB, target);
   if (bankFood)
     return bankFood;
@@ -58040,7 +58328,7 @@ function ensureCampSurface(snap) {
         return north;
     }
     if (!snap.bankKnown)
-      return scanBank6();
+      return scanBank7();
     if (banked6(snap, ITEM2.METAL_KEY) > 0) {
       const space = makeCriticalItemSpace(snap);
       return space ?? bankStep([{ name: ITEM2.METAL_KEY, qty: 1 }]);
@@ -58113,7 +58401,7 @@ function plansRecoveryStep(snap) {
     if (north)
       return north;
     if (!snap.bankKnown)
-      return scanBank6();
+      return scanBank7();
     const space = makePreparationSpace(snap, 1);
     return space ?? bankStep([{ name: ITEM2.PLANS, qty: 1 }]);
   }
@@ -58152,7 +58440,7 @@ function remakePrototypeStep(snap, needDart) {
       if (route2)
         return route2;
       const north = routeNorth(snap);
-      return north ?? scanBank6();
+      return north ?? scanBank7();
     }
     const bankedProduct = needDart && banked6(snap, ITEM2.DART) > 0 ? ITEM2.DART : banked6(snap, ITEM2.DART_TIP) > 0 ? ITEM2.DART_TIP : null;
     if (bankedProduct) {
@@ -58292,7 +58580,7 @@ function decide25(snap) {
           return north;
       }
       if (!snap.bankKnown)
-        return scanBank6();
+        return scanBank7();
       if (banked6(snap, ITEM2.METAL_KEY) > 0) {
         const space = makeCriticalItemSpace(snap);
         return space ?? bankStep([{ name: ITEM2.METAL_KEY, qty: 1 }]);
@@ -58657,10 +58945,10 @@ function exactKeep() {
     ...foodNames().map((name) => name.toLowerCase())
   ];
 }
-function scanBank7() {
+function scanBank8() {
   return { kind: "scanBank", bank: DRAYNOR_BANK5 };
 }
-function withdraw5(items) {
+function withdraw6(items) {
   return { kind: "withdraw", items, bank: DRAYNOR_BANK5 };
 }
 function makeSpace2(snap, slots) {
@@ -58684,13 +58972,13 @@ function sourceCoins3(snap) {
   if (inBank <= 0)
     return { kind: "wait", reason: "need coins for Vampire Slayer supplies" };
   const space = inPack === 0 ? makeSpace2(snap, 1) : null;
-  return space ?? withdraw5([{ name: "Coins", qty: Math.min(COIN_FLOAT4 - inPack, inBank) }]);
+  return space ?? withdraw6([{ name: "Coins", qty: Math.min(COIN_FLOAT4 - inPack, inBank) }]);
 }
 function sourceBankedOr(snap, name, fallback) {
   if (held12(snap, name))
     return null;
   if (banked7(snap, name) > 0) {
-    return makeSpace2(snap, 1) ?? withdraw5([{ name, qty: 1 }]);
+    return makeSpace2(snap, 1) ?? withdraw6([{ name, qty: 1 }]);
   }
   return fallback();
 }
@@ -58759,7 +59047,7 @@ function sourceFood2(snap) {
     if (available <= 0)
       continue;
     const qty2 = Math.min(FOOD_TARGET5 - have2, available);
-    return makeSpace2(snap, qty2) ?? withdraw5([{ name, qty: qty2 }]);
+    return makeSpace2(snap, qty2) ?? withdraw6([{ name, qty: qty2 }]);
   }
   const coins = sourceCoins3(snap);
   if (coins)
@@ -58881,18 +59169,18 @@ function stageTwo3(snap, area) {
   if (area === "unknown")
     return { kind: "wait", reason: "return to the mainland to resume Vampire Slayer" };
   if (!snap.bankKnown)
-    return scanBank7();
+    return scanBank8();
   const normalize9 = normalizePack(snap);
   if (normalize9)
     return normalize9;
   if (!held12(snap, ITEM3.STAKE)) {
     if (banked7(snap, ITEM3.STAKE) > 0) {
-      return makeSpace2(snap, 1) ?? withdraw5([{ name: ITEM3.STAKE, qty: 1 }]);
+      return makeSpace2(snap, 1) ?? withdraw6([{ name: ITEM3.STAKE, qty: 1 }]);
     }
     if (held12(snap, ITEM3.BEER))
       return { kind: "talk", stop: HARLOW_STAKE };
     if (banked7(snap, ITEM3.BEER) > 0) {
-      return makeSpace2(snap, 1) ?? withdraw5([{ name: ITEM3.BEER, qty: 1 }]);
+      return makeSpace2(snap, 1) ?? withdraw6([{ name: ITEM3.BEER, qty: 1 }]);
     }
     const coins = sourceCoins3(snap);
     return coins ?? { kind: "custom", name: "buy Dr Harlow a Beer", run: buyBeer };
@@ -58916,7 +59204,7 @@ function stageTwo3(snap, area) {
       return { kind: "equip", item: weapon };
     const inBank = bankWeapon(snap);
     if (inBank)
-      return makeSpace2(snap, 1) ?? withdraw5([{ name: inBank, qty: 1 }]);
+      return makeSpace2(snap, 1) ?? withdraw6([{ name: inBank, qty: 1 }]);
     const coins = sourceCoins3(snap);
     if (coins)
       return coins;
@@ -58948,7 +59236,7 @@ function decide26(snap) {
   if (area === "unknown")
     return { kind: "wait", reason: "return to the mainland to resume Vampire Slayer" };
   if (!snap.bankKnown)
-    return scanBank7();
+    return scanBank8();
   const normalize9 = normalizePack(snap);
   if (normalize9)
     return normalize9;
@@ -60259,7 +60547,7 @@ var KIT_COINS = 2000;
 function withdrawFrom2(items) {
   return { kind: "withdraw", items, bank: WT_TILE.YANILLE_BANK };
 }
-function scanBank8() {
+function scanBank9() {
   return { kind: "scanBank", bank: WT_TILE.YANILLE_BANK };
 }
 function source(snap, item2, qty2, shop, unitGp) {
@@ -60267,7 +60555,7 @@ function source(snap, item2, qty2, shop, unitGp) {
     return null;
   }
   if (!snap.bankKnown) {
-    return scanBank8();
+    return scanBank9();
   }
   const missing = qty2 - held13(snap, item2.id);
   const inBank = banked8(snap, item2.id);
@@ -60281,7 +60569,7 @@ function bankOnly(snap, item2, qty2 = 1) {
     return null;
   }
   if (!snap.bankKnown) {
-    return scanBank8();
+    return scanBank9();
   }
   const inBank = banked8(snap, item2.id);
   if (inBank > 0) {
@@ -60294,7 +60582,7 @@ function sourceCoins4(snap, want) {
     return null;
   }
   if (!snap.bankKnown) {
-    return scanBank8();
+    return scanBank9();
   }
   const available = banked8(snap, WT_ITEM.COINS.id);
   if (available <= 0) {
@@ -60346,7 +60634,7 @@ function sourceFood3(snap, want) {
     return null;
   }
   if (!snap.bankKnown) {
-    return scanBank8();
+    return scanBank9();
   }
   for (const food of questFoods()) {
     const inBank = snap.bank?.get(food.toLowerCase()) ?? 0;
@@ -60471,7 +60759,7 @@ function stageRelicGate(snap, area) {
     return escapePocket(area, "yanille") ?? { kind: "custom", name: "show the relic to the north-west ogre guard", run: showRelicToGuard };
   }
   if (!snap.bankKnown) {
-    return at(area, "yanille", scanBank8());
+    return at(area, "yanille", scanBank9());
   }
   if (banked8(snap, WT_ITEM.OGRE_RELIC.id) > 0) {
     return at(area, "yanille", withdrawFrom2([{ name: WT_ITEM.OGRE_RELIC.name, id: WT_ITEM.OGRE_RELIC.id, qty: 1 }]));
@@ -60631,7 +60919,7 @@ function recoverCrystals(snap) {
     return withdrawFrom2(inBank.map((crystal) => ({ name: crystal.name, id: crystal.id, qty: 1 })));
   }
   if (!snap.bankKnown) {
-    return scanBank8();
+    return scanBank9();
   }
   const recovery = CRYSTAL_RECOVERY[lost.id];
   return { kind: "custom", name: recovery.name, run: recovery.run };
@@ -61752,7 +62040,7 @@ function owned4(snap, id) {
 function worn7(snap, id) {
   return snap.wornIds?.has(id) ?? false;
 }
-function scanBank9() {
+function scanBank10() {
   return { kind: "scanBank", bank: SV_TILE.ARDOUGNE_BANK };
 }
 function withdrawFrom3(items) {
@@ -61793,7 +62081,7 @@ function sourceCoins5(snap, want) {
     return null;
   }
   if (!snap.bankKnown) {
-    return scanBank9();
+    return scanBank10();
   }
   const available = banked9(snap, SV_ITEM.COINS.id);
   if (available <= 0) {
@@ -61822,7 +62110,7 @@ function sourceFood4(snap, want) {
     return null;
   }
   if (!snap.bankKnown) {
-    return scanBank9();
+    return scanBank10();
   }
   const stocked = foodNames2().find((name) => bankedByName(snap, name) > 0);
   if (!stocked) {
@@ -61894,7 +62182,7 @@ function sourceBones(snap, want) {
     return null;
   }
   if (!snap.bankKnown) {
-    return scanBank9();
+    return scanBank10();
   }
   const inBank = banked9(snap, SV_ITEM.BONES.id);
   if (inBank > 0) {
@@ -62516,10 +62804,10 @@ function bestBankPickaxe(snap) {
 function bestBankWeapon(snap) {
   return bestBanked(snap);
 }
-function scanBank10() {
+function scanBank11() {
   return { kind: "scanBank", bank: SEERS_BANK };
 }
-function withdraw6(items) {
+function withdraw7(items) {
   return { kind: "withdraw", items, bank: SEERS_BANK };
 }
 function fromBank2(snap, item2, qty2 = 1) {
@@ -62528,10 +62816,10 @@ function fromBank2(snap, item2, qty2 = 1) {
     return null;
   }
   if (!snap.bankKnown) {
-    return scanBank10();
+    return scanBank11();
   }
   const inBank = banked10(snap, item2.id);
-  return inBank > 0 ? withdraw6([{ name: item2.name, id: item2.id, qty: Math.min(short, inBank) }]) : null;
+  return inBank > 0 ? withdraw7([{ name: item2.name, id: item2.id, qty: Math.min(short, inBank) }]) : null;
 }
 function keepNamesForEntry() {
   return [
@@ -62566,7 +62854,7 @@ function bankCountByName(snap, name) {
 }
 function surfaceLoadout(snap, needBellowsFix, needSmelt) {
   if (!snap.bankKnown) {
-    return scanBank10();
+    return scanBank11();
   }
   const keep = keepNamesForEntry();
   const hasJunk = [...snap.inv.keys()].some((n) => !keep.includes(n.toLowerCase()));
@@ -62659,7 +62947,7 @@ function surfaceLoadout(snap, needBellowsFix, needSmelt) {
         exactKeep: true
       };
     }
-    return withdraw6(needed);
+    return withdraw7(needed);
   }
   if (needSmelt && !hasPickaxe(snap) && !bestBankPickaxe(snap)) {
     return { kind: "wait", reason: "need a pickaxe in the bank for Elemental ore" };
@@ -64183,10 +64471,10 @@ var KEEP = [
   DEATH_ITEM.IRON_BAR.name.toLowerCase(),
   "stone ball"
 ];
-function scanBank11() {
+function scanBank12() {
   return { kind: "scanBank", bank: FALADOR_WEST_BANK4 };
 }
-function withdraw7(items) {
+function withdraw8(items) {
   return { kind: "withdraw", items, bank: FALADOR_WEST_BANK4 };
 }
 function depositKeep(keep = KEEP) {
@@ -64207,13 +64495,13 @@ function sourceCoins6(snap, need) {
     return null;
   }
   if (!snap.bankKnown) {
-    return scanBank11();
+    return scanBank12();
   }
   const inBank = bankedName(snap, "Coins");
   if (inBank <= 0) {
     return { kind: "wait", reason: "need coins for Death Plateau" };
   }
-  return makeSpace3(snap, heldName2(snap, "Coins") === 0 ? 1 : 0) ?? withdraw7([{ name: "Coins", qty: Math.min(COIN_FLOAT5, inBank) }]);
+  return makeSpace3(snap, heldName2(snap, "Coins") === 0 ? 1 : 0) ?? withdraw8([{ name: "Coins", qty: Math.min(COIN_FLOAT5, inBank) }]);
 }
 function sourceNamed(snap, name, id, qty2) {
   const have2 = Math.max(heldName2(snap, name), heldId15(snap, id));
@@ -64221,14 +64509,14 @@ function sourceNamed(snap, name, id, qty2) {
     return null;
   }
   if (!snap.bankKnown) {
-    return scanBank11();
+    return scanBank12();
   }
   const short = qty2 - have2;
   const inBank = Math.max(bankedName(snap, name), bankedId6(snap, id));
   if (inBank <= 0) {
     return { kind: "wait", reason: `need ${qty2}× ${name} in bank for Death Plateau` };
   }
-  return makeSpace3(snap, short) ?? withdraw7([{ name, qty: Math.min(short, inBank), id }]);
+  return makeSpace3(snap, short) ?? withdraw8([{ name, qty: Math.min(short, inBank), id }]);
 }
 function normalizePack2(snap) {
   return [...snap.inv.keys()].some((n) => !KEEP.includes(n)) ? depositKeep() : null;
@@ -65310,7 +65598,7 @@ function keepSet(snap) {
     ...plannedGear(snap)
   ].map((n) => n.toLowerCase());
 }
-function scanBank12() {
+function scanBank13() {
   return { kind: "scanBank", bank: FALADOR_WEST_BANK5 };
 }
 function wearAll(names) {
@@ -65339,7 +65627,7 @@ function wearBoots() {
   }
   return wearOrShed(ITEM4.CLIMBING_BOOTS);
 }
-function withdraw8(items) {
+function withdraw9(items) {
   return { kind: "withdraw", items, bank: FALADOR_WEST_BANK5 };
 }
 function prepare(snap, zone = "mainland") {
@@ -65355,7 +65643,7 @@ function prepare(snap, zone = "mainland") {
     return null;
   }
   if (!snap.bankKnown) {
-    return scanBank12();
+    return scanBank13();
   }
   const keep = keepSet(snap);
   if ([...snap.inv.keys()].some((name) => !keep.includes(name))) {
@@ -65406,7 +65694,7 @@ function prepare(snap, zone = "mainland") {
     }
   }
   if (fromBank3.length > 0) {
-    return withdraw8(fromBank3);
+    return withdraw9(fromBank3);
   }
   const toWear = plannedGear(snap).filter((name) => held17(snap, name));
   if (toWear.length > 0) {
@@ -67987,12 +68275,12 @@ function withdrawFrom4(items) {
 function withdrawAnywhere(items) {
   return { kind: "withdraw", items };
 }
-function scanBank13() {
+function scanBank14() {
   return { kind: "scanBank", bank: PC_TILE.BANK };
 }
 function fromBank3(snap, item2, qty2) {
   if (!snap.bankKnown) {
-    return scanBank13();
+    return scanBank14();
   }
   const stock = banked12(snap, item2);
   if (stock <= 0) {
@@ -68009,7 +68297,7 @@ function sourcePurse(snap, floor, blocking) {
     return null;
   }
   if (!snap.bankKnown) {
-    return scanBank13();
+    return scanBank14();
   }
   const available = banked12(snap, PC_ITEM.COINS);
   if (available <= 0) {
@@ -68093,7 +68381,7 @@ function sourceGasMask(snap) {
     return null;
   }
   if (!snap.bankKnown) {
-    return scanBank13();
+    return scanBank14();
   }
   if (owned5(snap, PC_ITEM.GAS_MASK) > 0) {
     return withdrawFrom4([{ name: PC_ITEM.GAS_MASK.name, id: PC_ITEM.GAS_MASK.id, qty: 1 }]);
@@ -68829,16 +69117,16 @@ function demonInReach() {
   const t = target.tile();
   return t.level === me.level && Math.max(Math.abs(t.x - me.x), Math.abs(t.z - me.z)) <= 2;
 }
-function onSafespot() {
+function onSafespot2() {
   const here3 = Game.tile();
   return here3 !== null && here3.level === 0 && here3.x === SAFESPOT.x && here3.z === SAFESPOT.z;
 }
-async function takeSafespot(log) {
-  if (onSafespot()) {
+async function takeSafespot2(log) {
+  if (onSafespot2()) {
     return true;
   }
   const ok = await Traversal.walkResilient(SAFESPOT, { radius: 0, attempts: 3, timeoutMs: 90000, log });
-  if (ok && onSafespot()) {
+  if (ok && onSafespot2()) {
     log(`on the safespot at (${SAFESPOT.x},${SAFESPOT.z}) — no 3x3 placement reaches here, and the spiders do not roam this far south`);
     return true;
   }
@@ -68871,7 +69159,7 @@ async function fightChronozon(log) {
 }
 async function runFight(log) {
   Game.setAutoRetaliate(false);
-  let safespot = await takeSafespot(log);
+  let safespot = await takeSafespot2(log);
   if (!safespot && !await walkToChronozon(log)) {
     log("could not reach Chronozon");
     return false;
@@ -68879,8 +69167,8 @@ async function runFight(log) {
   const poisonMark = GameMessages.mark();
   const cast = async (spell) => {
     await Sustain.run();
-    if (safespot && !onSafespot()) {
-      safespot = await takeSafespot(log);
+    if (safespot && !onSafespot2()) {
+      safespot = await takeSafespot2(log);
     }
     const target = chronozon();
     if (!target) {
@@ -68910,11 +69198,11 @@ async function runFight(log) {
       if (safespot && attempt + 1 >= SAFESPOT_PROBE_CASTS && !landed) {
         log("safespot casts are not landing — fighting in the open instead");
         safespot = false;
-      } else if (safespot && onSafespot() && demonInReach()) {
+      } else if (safespot && onSafespot2() && demonInReach()) {
         log("the demon reaches the safespot after all — fighting in the open instead");
         safespot = false;
       }
-      if (!safespot && !onSafespot() && !landed) {
+      if (!safespot && !onSafespot2() && !landed) {
         await walkToChronozon(log);
       }
     }
@@ -68959,8 +69247,8 @@ async function runFight(log) {
       }
       continue;
     }
-    if (safespot && !onSafespot()) {
-      safespot = await takeSafespot(log);
+    if (safespot && !onSafespot2()) {
+      safespot = await takeSafespot2(log);
     }
     if (!await Game.castOnNpc("Fire blast", target) && !safespot) {
       if (!target.targetsMe() && !Game.inCombat()) {
@@ -69500,7 +69788,7 @@ function wieldWeapon2(snap, bank) {
     return { kind: "equip", item: inPack.name };
   }
   if (!snap.bankKnown) {
-    return scanBank14(bank);
+    return scanBank15(bank);
   }
   const fromTheBank = bestBankWeapon2(snap);
   return fromTheBank ? fromBank4(snap, fromTheBank, 1, bank) : null;
@@ -69526,7 +69814,7 @@ function teleportKitPlan(snap, bank) {
     return null;
   }
   if (!snap.bankKnown) {
-    return scanBank14(bank);
+    return scanBank15(bank);
   }
   if (runesShort && banked13(snap, TELEPORT_KIT[0].item.id) > 0) {
     for (const want of TELEPORT_KIT) {
@@ -69542,7 +69830,7 @@ function teleportKitPlan(snap, bank) {
   if (ringShort) {
     const ring = DUEL_RING_IDS.find((id) => banked13(snap, id) > 0);
     if (ring !== undefined) {
-      return withdraw9([{ name: "Ring of dueling", id: ring, qty: 1 }], bank);
+      return withdraw10([{ name: "Ring of dueling", id: ring, qty: 1 }], bank);
     }
   }
   return null;
@@ -69553,10 +69841,10 @@ function bestBankFood(snap) {
 function heldFood(snap) {
   return FC_FOODS.reduce((sum, f) => sum + heldName3(snap, f), 0);
 }
-function scanBank14(bank) {
+function scanBank15(bank) {
   return { kind: "scanBank", bank };
 }
-function withdraw9(items, bank) {
+function withdraw10(items, bank) {
   return { kind: "withdraw", items, bank };
 }
 function fromBank4(snap, item2, qty2 = 1, bank) {
@@ -69565,10 +69853,10 @@ function fromBank4(snap, item2, qty2 = 1, bank) {
     return null;
   }
   if (!snap.bankKnown) {
-    return scanBank14(bank);
+    return scanBank15(bank);
   }
   const inBank = banked13(snap, item2.id);
-  return inBank > 0 ? withdraw9([{ name: item2.name, id: item2.id, qty: Math.min(short, inBank) }], bank) : null;
+  return inBank > 0 ? withdraw10([{ name: item2.name, id: item2.id, qty: Math.min(short, inBank) }], bank) : null;
 }
 var CREST_KEEP_IDS = [
   FC_ID.CREST_FROM_CALEB,
@@ -69586,27 +69874,27 @@ function coinTopUp(snap, want = COIN_CARRY, bank) {
     return null;
   }
   if (!snap.bankKnown) {
-    return scanBank14(bank);
+    return scanBank15(bank);
   }
   const inBank = bankedName2(snap, FC_ITEM.COINS);
   if (inBank <= 0) {
     return null;
   }
-  return withdraw9([{ name: FC_ITEM.COINS, id: FC_ID.COINS, qty: Math.min(want - have2, inBank) }], bank);
+  return withdraw10([{ name: FC_ITEM.COINS, id: FC_ID.COINS, qty: Math.min(want - have2, inBank) }], bank);
 }
 function foodTopUp(snap, want = FOOD_WITHDRAW2, bank) {
   if (heldFood(snap) >= Math.ceil(want / 2)) {
     return null;
   }
   if (!snap.bankKnown) {
-    return scanBank14(bank);
+    return scanBank15(bank);
   }
   const food = bestBankFood(snap);
   if (!food) {
     return null;
   }
   const take = Math.min(want - heldFood(snap), bankedName2(snap, food));
-  return take > 0 ? withdraw9([{ name: food, qty: take }], bank) : null;
+  return take > 0 ? withdraw10([{ name: food, qty: take }], bank) : null;
 }
 var LEG_BANK = {
   start: FC_BANK.VARROCK_EAST,
@@ -70782,18 +71070,18 @@ function heldId16(snap, id) {
 function bankedId7(snap, id) {
   return snap.bankIds?.get(id) ?? 0;
 }
-var withdraw10 = (items) => ({ kind: "withdraw", items });
-var scanBank15 = { kind: "scanBank" };
+var withdraw11 = (items) => ({ kind: "withdraw", items });
+var scanBank16 = { kind: "scanBank" };
 var buy3 = (item2, qty2, shop, estGp = SHOP_GP3) => ({ kind: "buy", item: item2, qty: qty2, shop, estGp });
 function fromBank5(snap, id, name, qty2) {
   if (!snap.bankKnown) {
-    return scanBank15;
+    return scanBank16;
   }
   const banked14 = bankedId7(snap, id);
   if (banked14 <= 0) {
     return null;
   }
-  return withdraw10([{ name, qty: Math.min(qty2, banked14), id }]);
+  return withdraw11([{ name, qty: Math.min(qty2, banked14), id }]);
 }
 function source3(snap, id, name, qty2, shop, estGp = SHOP_GP3) {
   return fromBank5(snap, id, name, qty2) ?? buy3(name, qty2, shop, estGp);
@@ -70822,7 +71110,7 @@ function kit4(snap, food) {
   if (items.length === 0) {
     return null;
   }
-  return snap.bankKnown ? withdraw10(items) : scanBank15;
+  return snap.bankKnown ? withdraw11(items) : scanBank16;
 }
 function hammer(snap) {
   return source3(snap, HD_ID.HAMMER, HD_ITEM.HAMMER, 1, GENERAL_SHOP, 100);
@@ -70850,7 +71138,7 @@ function nails(snap) {
     }
     const pick = bankedPickaxe(snap.bankIds, snap.attack ?? 0);
     if (pick && !PICKAXES3.some((p) => heldId16(snap, p.id) > 0 || (snap.wornIds?.has(p.id) ?? false))) {
-      return withdraw10([{ name: pick.name, qty: 1, id: pick.id }]);
+      return withdraw11([{ name: pick.name, qty: 1, id: pick.id }]);
     }
   }
   return { kind: "custom", name: `smith ${need} nails`, run: (log) => smithNails(need, log) };
@@ -70911,11 +71199,11 @@ function swampTar(snap) {
 function runeKit(snap, teleports = Traversal.teleportsEnabled()) {
   if (teleports && heldId16(snap, HD_ID.LAW_RUNE) < LAW_LOW) {
     if (!snap.bankKnown) {
-      return scanBank15;
+      return scanBank16;
     }
     const banked14 = bankedId7(snap, HD_ID.LAW_RUNE);
     if (banked14 > 0) {
-      return withdraw10([{
+      return withdraw11([{
         name: HD_ITEM.LAW_RUNE,
         qty: Math.min(LAW_RUNES, banked14),
         id: HD_ID.LAW_RUNE
@@ -70997,13 +71285,13 @@ function meleeWeapon(snap) {
     return { kind: "custom", name: `wield the ${name}`, run: (log) => wieldMelee(name, log) };
   }
   if (!snap.bankKnown) {
-    return scanBank15;
+    return scanBank16;
   }
   if ((snap.bank?.get(key) ?? 0) <= 0) {
     meleeGaveUp = true;
     return null;
   }
-  return withdraw10([{ name, qty: 1 }]);
+  return withdraw11([{ name, qty: 1 }]);
 }
 var HD_PROVEN_SKILLS = { smithing: 34, crafting: 1, magic: 59, prayer: 43 };
 var MAGIC_FLOOR = 13;
@@ -71065,7 +71353,7 @@ function sealedArea(tile) {
 }
 
 // src/bot/api/ai/quests/defs/horror/fight.ts
-var MAGIC_TAB2 = 6;
+var MAGIC_TAB3 = 6;
 var DAGANNOTH_JR = 1347;
 var FORM_ELEMENT = {
   1348: "Wind",
@@ -71142,7 +71430,7 @@ class Protection2 {
     await Prayer.set(this.prayer, false);
   }
 }
-var CAST_TICKS = 5;
+var CAST_TICKS2 = 5;
 var EAT_AT_MISSING2 = 12;
 function hungry2() {
   const max2 = Skills.level("hitpoints");
@@ -71154,12 +71442,12 @@ async function fightLoop(plan, log) {
     log(`prayer below ${PROTECT2[plan.protect].level} — the ${plan.what} will land hits this fight`);
   }
   await prayers.hold();
-  await Game.openSideTab(MAGIC_TAB2);
+  await Game.openSideTab(MAGIC_TAB3);
   Game.setAutoRetaliate(false);
   let casts = 0;
   let refused = 0;
   let lastTick2 = -1;
-  let lastCast = -CAST_TICKS;
+  let lastCast = -CAST_TICKS2;
   let reported = -1;
   let handedOver = false;
   let swings = 0;
@@ -71217,7 +71505,7 @@ async function fightLoop(plan, log) {
       }
       meleeing = -1;
       const element = plan.element(target);
-      if (element && now - lastCast >= CAST_TICKS) {
+      if (element && now - lastCast >= CAST_TICKS2) {
         if (await Game.castOnNpc(element, target)) {
           lastCast = now;
           casts++;
@@ -72278,10 +72566,10 @@ function selectedFood2() {
   const food = QuestFood.name?.trim();
   return food ? food : null;
 }
-function scanBank16() {
+function scanBank17() {
   return { kind: "scanBank", bank: CB_TILE.YANILLE_BANK };
 }
-function withdraw11(items) {
+function withdraw12(items) {
   return { kind: "withdraw", items, bank: CB_TILE.YANILLE_BANK };
 }
 function keepList() {
@@ -72344,7 +72632,7 @@ function makeSpace4(snap, slots) {
 }
 function loadoutStep(snap, wantAxe = true) {
   if (!snap.bankKnown) {
-    return scanBank16();
+    return scanBank17();
   }
   const space = makeSpace4(snap, 4);
   if (space) {
@@ -72377,7 +72665,7 @@ function loadoutStep(snap, wantAxe = true) {
     }
   }
   if (wants.length > 0) {
-    return withdraw11(wants);
+    return withdraw12(wants);
   }
   if (wantAxe && heldAxe2(snap) === null) {
     return { kind: "buy", item: "Bronze axe", qty: 1, shop: BOB_AXES3, estGp: 100 };
@@ -72393,13 +72681,13 @@ function toolStep(snap) {
     return null;
   }
   if (!snap.bankKnown) {
-    return scanBank16();
+    return scanBank17();
   }
   const stored = missing.filter((tool) => bankedId8(snap, tool.id) > 0);
   if (stored.length < missing.length) {
     return null;
   }
-  return withdraw11(stored.map((tool) => ({ name: tool.name, qty: 1, id: tool.id })));
+  return withdraw12(stored.map((tool) => ({ name: tool.name, qty: 1, id: tool.id })));
 }
 function toolsHeld(snap) {
   return heldId17(snap, CB_ID.KNIFE) > 0 && heldId17(snap, CB_ID.CHISEL) > 0;
@@ -72410,7 +72698,7 @@ function feathersStep(snap, want) {
     return null;
   }
   if (!snap.bankKnown) {
-    return scanBank16();
+    return scanBank17();
   }
   const space = makeSpace4(snap, 1);
   if (space) {
@@ -72419,7 +72707,7 @@ function feathersStep(snap, want) {
   const short = want - have2;
   const fromBank6 = Math.min(short, bankedId8(snap, CB_ID.FEATHER));
   if (fromBank6 > 0) {
-    return withdraw11([{ name: CB_NAME.FEATHER, qty: fromBank6, id: CB_ID.FEATHER }]);
+    return withdraw12([{ name: CB_NAME.FEATHER, qty: fromBank6, id: CB_ID.FEATHER }]);
   }
   return { kind: "buy", item: CB_NAME.FEATHER, qty: short, shop: GERRANT, estGp: short * 4 };
 }
@@ -73091,9 +73379,9 @@ function kitStep2(snap) {
     return custom15(`wear ${carried.join(", ")}`, (log) => wearKit(carried, log));
   }
   if (!snap.bankKnown) {
-    return scanBank16();
+    return scanBank17();
   }
-  return withdraw11(wanted.map((name) => ({ name, qty: 1 })));
+  return withdraw12(wanted.map((name) => ({ name, qty: 1 })));
 }
 function bellowsStep(snap) {
   if (hasBellows(snap)) {
@@ -73103,11 +73391,11 @@ function bellowsStep(snap) {
     return custom15("take the ogre bellows from the chest", openChest2);
   }
   if (!snap.bankKnown) {
-    return scanBank16();
+    return scanBank17();
   }
   const banked15 = bankHasBellows(snap);
   if (banked15 !== null) {
-    return withdraw11([{ name: "Ogre bellows", qty: 1, id: banked15 }]);
+    return withdraw12([{ name: "Ogre bellows", qty: 1, id: banked15 }]);
   }
   return { kind: "wait", reason: "no ogre bellows in the chest or the bank" };
 }
@@ -76491,7 +76779,7 @@ var DRUID_MS = 600000;
 var FISH_MS = 300000;
 var RANGE_MS = 30000;
 var JAILER_TICKS = 300;
-function withdraw12(name, qty2, id) {
+function withdraw13(name, qty2, id) {
   return { kind: "withdraw", items: [{ name, qty: qty2, id }] };
 }
 async function identifyHarralander(log) {
@@ -76679,10 +76967,10 @@ function keyStep(snap) {
     return null;
   }
   if (bankedId9(snap, HERO_ID.DUSTY_KEY) > 0) {
-    return withdraw12(HERO_NAMED.DUSTY_KEY, 1, HERO_ID.DUSTY_KEY);
+    return withdraw13(HERO_NAMED.DUSTY_KEY, 1, HERO_ID.DUSTY_KEY);
   }
   if (heldId19(snap, HERO_ID.JAIL_KEY) === 0) {
-    return bankedId9(snap, HERO_ID.JAIL_KEY) > 0 ? withdraw12(HERO_NAMED.JAIL_KEY, 1, HERO_ID.JAIL_KEY) : { kind: "custom", name: "kill the Jailer for the jail key", run: killJailer };
+    return bankedId9(snap, HERO_ID.JAIL_KEY) > 0 ? withdraw13(HERO_NAMED.JAIL_KEY, 1, HERO_ID.JAIL_KEY) : { kind: "custom", name: "kill the Jailer for the jail key", run: killJailer };
   }
   return { kind: "custom", name: "free Velrak for the deep dungeon's key", run: freeVelrak };
 }
@@ -76694,16 +76982,16 @@ function eelStep(snap) {
     return { kind: "custom", name: "cook the lava eel at Catherby", run: cookLavaEel };
   }
   if (bankedId9(snap, HERO_ID.RAW_LAVA_EEL) > 0) {
-    return withdraw12(HERO_NAMED.RAW_LAVA_EEL, 1, HERO_ID.RAW_LAVA_EEL);
+    return withdraw13(HERO_NAMED.RAW_LAVA_EEL, 1, HERO_ID.RAW_LAVA_EEL);
   }
   if (heldId19(snap, HERO_ID.OILY_ROD) > 0) {
     if (heldId19(snap, HERO_ID.FISHING_BAIT) === 0) {
-      return bankedId9(snap, HERO_ID.FISHING_BAIT) > 0 ? withdraw12(HERO_NAMED.FISHING_BAIT, BAIT_TARGET, HERO_ID.FISHING_BAIT) : { kind: "buy", item: HERO_NAMED.FISHING_BAIT, qty: BAIT_TARGET, shop: HERO_SHOP.GERRANT, estGp: 2000 };
+      return bankedId9(snap, HERO_ID.FISHING_BAIT) > 0 ? withdraw13(HERO_NAMED.FISHING_BAIT, BAIT_TARGET, HERO_ID.FISHING_BAIT) : { kind: "buy", item: HERO_NAMED.FISHING_BAIT, qty: BAIT_TARGET, shop: HERO_SHOP.GERRANT, estGp: 2000 };
     }
     return keyStep(snap) ?? { kind: "custom", name: "fish a lava eel in the Taverley dungeon", run: fishLavaEel };
   }
   if (bankedId9(snap, HERO_ID.OILY_ROD) > 0) {
-    return withdraw12(HERO_NAMED.OILY_ROD, 1, HERO_ID.OILY_ROD);
+    return withdraw13(HERO_NAMED.OILY_ROD, 1, HERO_ID.OILY_ROD);
   }
   if (heldId19(snap, HERO_ID.BLAMISH_OIL) > 0) {
     if (heldId19(snap, HERO_ID.FISHING_ROD) > 0) {
@@ -76713,10 +77001,10 @@ function eelStep(snap) {
         run: (log) => combineById(HERO_ID.BLAMISH_OIL, HERO_ID.FISHING_ROD, HERO_ID.OILY_ROD, log)
       };
     }
-    return bankedId9(snap, HERO_ID.FISHING_ROD) > 0 ? withdraw12(HERO_NAMED.FISHING_ROD, 1, HERO_ID.FISHING_ROD) : { kind: "buy", item: HERO_NAMED.FISHING_ROD, qty: 1, shop: HERO_SHOP.GERRANT, estGp: 200 };
+    return bankedId9(snap, HERO_ID.FISHING_ROD) > 0 ? withdraw13(HERO_NAMED.FISHING_ROD, 1, HERO_ID.FISHING_ROD) : { kind: "buy", item: HERO_NAMED.FISHING_ROD, qty: 1, shop: HERO_SHOP.GERRANT, estGp: 200 };
   }
   if (bankedId9(snap, HERO_ID.BLAMISH_OIL) > 0) {
-    return withdraw12(HERO_NAMED.BLAMISH_OIL, 1, HERO_ID.BLAMISH_OIL);
+    return withdraw13(HERO_NAMED.BLAMISH_OIL, 1, HERO_ID.BLAMISH_OIL);
   }
   if (heldId19(snap, HERO_ID.HARRALANDER_VIAL) > 0) {
     if (heldId19(snap, HERO_ID.SLIME) > 0) {
@@ -76726,10 +77014,10 @@ function eelStep(snap) {
         run: (log) => combineById(HERO_ID.SLIME, HERO_ID.HARRALANDER_VIAL, HERO_ID.BLAMISH_OIL, log)
       };
     }
-    return bankedId9(snap, HERO_ID.SLIME) > 0 ? withdraw12(HERO_NAMED.SLIME, 1, HERO_ID.SLIME) : { kind: "custom", name: "ask Gerrant for a jar of blamish slime", run: askGerrantForSlime };
+    return bankedId9(snap, HERO_ID.SLIME) > 0 ? withdraw13(HERO_NAMED.SLIME, 1, HERO_ID.SLIME) : { kind: "custom", name: "ask Gerrant for a jar of blamish slime", run: askGerrantForSlime };
   }
   if (bankedId9(snap, HERO_ID.HARRALANDER_VIAL) > 0) {
-    return withdraw12(HERO_NAMED.HARRALANDER_VIAL, 1, HERO_ID.HARRALANDER_VIAL);
+    return withdraw13(HERO_NAMED.HARRALANDER_VIAL, 1, HERO_ID.HARRALANDER_VIAL);
   }
   if (heldId19(snap, HERO_ID.HARRALANDER) > 0) {
     if (heldId19(snap, HERO_ID.VIAL_WATER) > 0) {
@@ -76739,16 +77027,16 @@ function eelStep(snap) {
         run: (log) => combineById(HERO_ID.HARRALANDER, HERO_ID.VIAL_WATER, HERO_ID.HARRALANDER_VIAL, log)
       };
     }
-    return bankedId9(snap, HERO_ID.VIAL_WATER) > 0 ? withdraw12(HERO_NAMED.VIAL_WATER, 1, HERO_ID.VIAL_WATER) : { kind: "buy", item: HERO_NAMED.VIAL_WATER, qty: 1, shop: HERO_SHOP.AEMAD, estGp: 200 };
+    return bankedId9(snap, HERO_ID.VIAL_WATER) > 0 ? withdraw13(HERO_NAMED.VIAL_WATER, 1, HERO_ID.VIAL_WATER) : { kind: "buy", item: HERO_NAMED.VIAL_WATER, qty: 1, shop: HERO_SHOP.AEMAD, estGp: 200 };
   }
   if (bankedId9(snap, HERO_ID.HARRALANDER) > 0) {
-    return withdraw12(HERO_NAMED.HARRALANDER, 1, HERO_ID.HARRALANDER);
+    return withdraw13(HERO_NAMED.HARRALANDER, 1, HERO_ID.HARRALANDER);
   }
   if (heldId19(snap, HERO_ID.UNID_HARRALANDER) > 0) {
     return { kind: "custom", name: "identify the harralander", run: identifyHarralander };
   }
   if (bankedId9(snap, HERO_ID.UNID_HARRALANDER) > 0) {
-    return withdraw12(HERO_NAMED.UNID_HERB, 1, HERO_ID.UNID_HARRALANDER);
+    return withdraw13(HERO_NAMED.UNID_HERB, 1, HERO_ID.UNID_HARRALANDER);
   }
   if (heldFood2(snap) < DRUID_FOOD) {
     return { kind: "withdraw", items: [{ name: foodName(), qty: DRUID_FOOD * 2 }] };
@@ -77791,7 +78079,7 @@ function bowChoice(snap) {
 function arrowChoice(snap) {
   return TB_ARROWS.find((name) => worn12(snap, name) || held28(snap, name) > 0) ?? TB_ARROWS.find((name) => banked16(snap, name) > 0) ?? null;
 }
-var scanBank17 = { kind: "scanBank", bank: TB_TILE.ARDOUGNE_BANK };
+var scanBank18 = { kind: "scanBank", bank: TB_TILE.ARDOUGNE_BANK };
 function keepNames(snap) {
   const kit5 = [bowChoice(snap), arrowChoice(snap)].filter((n) => Boolean(n));
   return [...kit5, ...TB_ARMOUR, ...foodNames4()].map((n) => n.toLowerCase());
@@ -77838,7 +78126,7 @@ function prepare2(snap) {
     return wearAll2(carried);
   }
   if (!snap.bankKnown) {
-    return scanBank17;
+    return scanBank18;
   }
   if (onKaramja4(snap.tile) && !coinsLow && !starving && gearMissing.length === 0) {
     const shopped2 = missing.find((s) => s.fromJiminua && bankedId10(snap, s.id) === 0);
@@ -78833,10 +79121,10 @@ var KEEP_IDS2 = [
   ...Object.values(BIO_ITEM).map((item2) => item2.id),
   FOOD2.id
 ];
-function scanBank18() {
+function scanBank19() {
   return { kind: "scanBank" };
 }
-function withdraw13(items) {
+function withdraw14(items) {
   return { kind: "withdraw", items };
 }
 function reclaim3(snap, item2, qty2 = 1) {
@@ -78844,13 +79132,13 @@ function reclaim3(snap, item2, qty2 = 1) {
     return null;
   }
   if (!snap.bankKnown) {
-    return scanBank18();
+    return scanBank19();
   }
   const stock = banked17(snap, item2);
   if (stock <= 0) {
     return null;
   }
-  return withdraw13([{ name: item2.name, id: item2.id, qty: Math.min(qty2 - held29(snap, item2), stock) }]);
+  return withdraw14([{ name: item2.name, id: item2.id, qty: Math.min(qty2 - held29(snap, item2), stock) }]);
 }
 var PURSE2 = 1000;
 function sourceCoins7(snap, floor, blocking = true) {
@@ -78858,19 +79146,19 @@ function sourceCoins7(snap, floor, blocking = true) {
     return null;
   }
   if (!snap.bankKnown) {
-    return scanBank18();
+    return scanBank19();
   }
   const available = banked17(snap, BIO_ITEM.COINS);
   if (available <= 0) {
     return blocking ? { kind: "wait", reason: "no coins banked for the priest gown" } : null;
   }
-  return withdraw13([{ name: BIO_ITEM.COINS.name, id: BIO_ITEM.COINS.id, qty: Math.min(PURSE2, available) }]);
+  return withdraw14([{ name: BIO_ITEM.COINS.name, id: BIO_ITEM.COINS.id, qty: Math.min(PURSE2, available) }]);
 }
 function sourceFood5(snap) {
   if (held29(snap, FOOD2) > 0 || !snap.bankKnown || banked17(snap, FOOD2) <= 0) {
     return null;
   }
-  return withdraw13([{ name: FOOD2.name, id: FOOD2.id, qty: Math.min(FOOD_CARRY, banked17(snap, FOOD2)) }]);
+  return withdraw14([{ name: FOOD2.name, id: FOOD2.id, qty: Math.min(FOOD_CARRY, banked17(snap, FOOD2)) }]);
 }
 function tidy2(snap, floor) {
   if ((snap.freeSlots ?? 28) >= floor) {
@@ -79331,7 +79619,7 @@ function decide48(snap) {
   }
   if (!snap.bankKnown) {
     if (area3 === "mainland") {
-      return scanBank18();
+      return scanBank19();
     }
     if (stage >= BIO_STAGE.POISONED_STEW) {
       return TO_MAINLAND;
@@ -80706,13 +80994,13 @@ var FOOD_TARGET11 = FOOD_FLOAT;
 function hasAxe2(snap) {
   return AXES4.some((axe) => (snap.invIds?.get(axe.id) ?? 0) > 0 || (snap.wornIds?.has(axe.id) ?? false));
 }
-var scanBank19 = () => ({ kind: "scanBank", bank: TG_TILE.BANK });
+var scanBank20 = () => ({ kind: "scanBank", bank: TG_TILE.BANK });
 function sourceAxe(snap) {
   if (hasAxe2(snap)) {
     return null;
   }
   if (snap.bankKnown !== true) {
-    return scanBank19();
+    return scanBank20();
   }
   const inBank = AXES4.find((axe) => (snap.bankIds?.get(axe.id) ?? 0) > 0);
   if (inBank) {
@@ -80736,7 +81024,7 @@ function topUpFood(snap) {
     return null;
   }
   if (snap.bankKnown !== true) {
-    return scanBank19();
+    return scanBank20();
   }
   const stock = snap.bank?.get(key) ?? 0;
   if (stock === 0) {
@@ -80817,7 +81105,7 @@ async function wearAll3(names, log) {
 }
 function armForTheWarlord(snap) {
   if (snap.bankKnown !== true) {
-    return scanBank19();
+    return scanBank20();
   }
   const wanted = plannedGear2(snap);
   if (wanted.length === 0) {
@@ -80867,7 +81155,7 @@ function reclaim4(snap, item2, earn) {
     return { kind: "wait", reason: "King Bolren is running the ceremony" };
   }
   if (snap.bankKnown !== true) {
-    return scanBank19();
+    return scanBank20();
   }
   return (snap.bankIds?.get(item2.id) ?? 0) > 0 ? { kind: "withdraw", items: [{ name: item2.name, qty: 1, id: item2.id }], bank: TG_TILE.BANK } : earn;
 }
@@ -81212,7 +81500,7 @@ function firstHeld(table) {
 }
 var serumVialId = () => firstHeld(SERUM_BY_DOSE);
 var permSerumVialId = () => firstHeld(PERM_SERUM_BY_DOSE);
-var scanBank20 = { kind: "scanBank" };
+var scanBank21 = { kind: "scanBank" };
 function dosesNeeded(stage) {
   let doses2 = 1;
   if (stage < SM_STAGE.KILL_SHADES) {
@@ -81248,7 +81536,7 @@ function kit5(snap, stage) {
     return null;
   }
   if (!snap.bankKnown) {
-    return scanBank20;
+    return scanBank21;
   }
   const items = [];
   const bankedCoins = snap.bank?.get("coins") ?? 0;
@@ -84320,12 +84608,12 @@ function foodNames5() {
 function foodHeld6(snap) {
   return foodNames5().reduce((total, name) => total + (snap.inv.get(name.toLowerCase()) ?? 0), 0);
 }
-var scanBank21 = (snap) => ({ kind: "scanBank", bank: questBank(snap) });
-var withdraw14 = (snap, items) => ({ kind: "withdraw", items, bank: questBank(snap) });
-var take = (snap, item2, qty2 = 1) => withdraw14(snap, [{ name: item2.name, id: item2.id, qty: qty2 }]);
+var scanBank22 = (snap) => ({ kind: "scanBank", bank: questBank(snap) });
+var withdraw15 = (snap, items) => ({ kind: "withdraw", items, bank: questBank(snap) });
+var take = (snap, item2, qty2 = 1) => withdraw15(snap, [{ name: item2.name, id: item2.id, qty: qty2 }]);
 function fromBank7(snap, item2, qty2) {
   if (!snap.bankKnown) {
-    return scanBank21(snap);
+    return scanBank22(snap);
   }
   const stock = banked19(snap, item2);
   return stock > 0 ? take(snap, item2, Math.min(qty2 - held34(snap, item2), stock)) : null;
@@ -84348,7 +84636,7 @@ function sourceLiquor(snap) {
     return null;
   }
   if (!snap.bankKnown) {
-    return scanBank21(snap);
+    return scanBank22(snap);
   }
   const stocked = LIQUORS.find((liquor) => banked19(snap, liquor) > 0);
   return stocked ? take(snap, stocked) : buy4(ER_ITEM.VODKA, 1, HECKEL, PRICE.LIQUOR);
@@ -84392,7 +84680,7 @@ function prepare3(snap, zone, foodWant3 = FOOD_TARGET13) {
     return carried.length > 0 ? wearAll(carried) : null;
   }
   if (!snap.bankKnown) {
-    return scanBank21(snap);
+    return scanBank22(snap);
   }
   const keep = keepNames2(snap);
   if ([...snap.inv.keys()].some((name) => !keep.includes(name))) {
@@ -84563,16 +84851,16 @@ function sourcePineappleChunks(snap) {
     return null;
   }
   if (!snap.bankKnown) {
-    return scanBank21(snap);
+    return scanBank22(snap);
   }
   if (banked19(snap, ER_ITEM.PINEAPPLE_CHUNKS) > 0) {
-    return withdraw14(snap, [{ name: ER_ITEM.PINEAPPLE_CHUNKS.name, id: ER_ITEM.PINEAPPLE_CHUNKS.id, qty: 1 }]);
+    return withdraw15(snap, [{ name: ER_ITEM.PINEAPPLE_CHUNKS.name, id: ER_ITEM.PINEAPPLE_CHUNKS.id, qty: 1 }]);
   }
   if (held34(snap, ER_ITEM.PINEAPPLE) > 0) {
     return sourceKnife3(snap) ?? { kind: "custom", name: "dice the pineapple", run: dicePineapple };
   }
   if (banked19(snap, ER_ITEM.PINEAPPLE) > 0) {
-    return withdraw14(snap, [{ name: ER_ITEM.PINEAPPLE.name, id: ER_ITEM.PINEAPPLE.id, qty: 1 }]);
+    return withdraw15(snap, [{ name: ER_ITEM.PINEAPPLE.name, id: ER_ITEM.PINEAPPLE.id, qty: 1 }]);
   }
   return sourceKnife3(snap) ?? { kind: "buy", item: ER_ITEM.PINEAPPLE.name, qty: 1, shop: HECKEL, estGp: PINEAPPLE_PRICE };
 }
@@ -84612,10 +84900,10 @@ function sourceParrot(snap) {
     return null;
   }
   if (!snap.bankKnown) {
-    return scanBank21(snap);
+    return scanBank22(snap);
   }
   if (banked19(snap, ER_ITEM.DRUNK_PARROT) > 0) {
-    return withdraw14(snap, [{ name: ER_ITEM.DRUNK_PARROT.name, id: ER_ITEM.DRUNK_PARROT.id, qty: 1 }]);
+    return withdraw15(snap, [{ name: ER_ITEM.DRUNK_PARROT.name, id: ER_ITEM.DRUNK_PARROT.id, qty: 1 }]);
   }
   return sourcePineappleChunks(snap) ?? sourceLiquor(snap) ?? { kind: "custom", name: `catch a parrot with ${(heldLiquor(snap) ?? ER_ITEM.VODKA).name.toLowerCase()} chunks`, run: catchParrot };
 }
@@ -84716,13 +85004,13 @@ var FIRE_LOC = 2732;
 var VIAL_PRICE2 = 10;
 var THISTLE_STAND = THISTLE_SPOTS[2];
 var invById2 = (id) => Inventory.items().find((item2) => item2.id === id);
-var withdrawById = (snap, id, name, qty2 = 1) => withdraw14(snap, [{ name, id, qty: qty2 }]);
+var withdrawById = (snap, id, name, qty2 = 1) => withdraw15(snap, [{ name, id, qty: qty2 }]);
 function sourceVial2(snap) {
   if (held34(snap, ER_ITEM.VIAL_WATER) > 0) {
     return null;
   }
   if (!snap.bankKnown) {
-    return scanBank21(snap);
+    return scanBank22(snap);
   }
   if (banked19(snap, ER_ITEM.VIAL_WATER) > 0) {
     return withdrawById(snap, ER_ITEM.VIAL_WATER.id, ER_ITEM.VIAL_WATER.name);
@@ -84749,7 +85037,7 @@ function sourceRanarrVial(snap) {
     return null;
   }
   if (!snap.bankKnown) {
-    return scanBank21(snap);
+    return scanBank22(snap);
   }
   if (banked19(snap, ER_ITEM.RANARR_VIAL) > 0) {
     return withdrawById(snap, ER_ITEM.RANARR_VIAL.id, ER_ITEM.RANARR_VIAL.name);
@@ -84904,10 +85192,10 @@ function sourceRobe(snap) {
     return null;
   }
   if (!snap.bankKnown) {
-    return scanBank21(snap);
+    return scanBank22(snap);
   }
   if (banked19(snap, ER_ITEM.DIRTY_ROBE) > 0) {
-    return withdraw14(snap, [{ name: ER_ITEM.DIRTY_ROBE.name, id: ER_ITEM.DIRTY_ROBE.id, qty: 1 }]);
+    return withdraw15(snap, [{ name: ER_ITEM.DIRTY_ROBE.name, id: ER_ITEM.DIRTY_ROBE.id, qty: 1 }]);
   }
   return { kind: "talk", stop: TEGID_ROBE };
 }
@@ -84916,10 +85204,10 @@ function parrotInHand(snap) {
     return null;
   }
   if (!snap.bankKnown) {
-    return scanBank21(snap);
+    return scanBank22(snap);
   }
   if (banked19(snap, ER_ITEM.DRUNK_PARROT) > 0) {
-    return withdraw14(snap, [{ name: ER_ITEM.DRUNK_PARROT.name, id: ER_ITEM.DRUNK_PARROT.id, qty: 1 }]);
+    return withdraw15(snap, [{ name: ER_ITEM.DRUNK_PARROT.name, id: ER_ITEM.DRUNK_PARROT.id, qty: 1 }]);
   }
   return { kind: "talk", stop: EADGAR_TALK };
 }
@@ -84928,10 +85216,10 @@ function fakeManInHand(snap) {
     return null;
   }
   if (!snap.bankKnown) {
-    return scanBank21(snap);
+    return scanBank22(snap);
   }
   if (banked19(snap, ER_ITEM.FAKE_MAN) > 0) {
-    return withdraw14(snap, [{ name: ER_ITEM.FAKE_MAN.name, id: ER_ITEM.FAKE_MAN.id, qty: 1 }]);
+    return withdraw15(snap, [{ name: ER_ITEM.FAKE_MAN.name, id: ER_ITEM.FAKE_MAN.id, qty: 1 }]);
   }
   return { kind: "talk", stop: EADGAR_TALK };
 }
@@ -84940,7 +85228,7 @@ function sourceStoreroomKey(snap) {
     return null;
   }
   if (snap.bankKnown && banked19(snap, ER_ITEM.STOREROOM_KEY) > 0) {
-    return withdraw14(snap, [{ name: ER_ITEM.STOREROOM_KEY.name, id: ER_ITEM.STOREROOM_KEY.id, qty: 1 }]);
+    return withdraw15(snap, [{ name: ER_ITEM.STOREROOM_KEY.name, id: ER_ITEM.STOREROOM_KEY.id, qty: 1 }]);
   }
   return guarded("search the kitchen drawers for the storeroom key", takeStoreroomKey);
 }
@@ -84995,7 +85283,7 @@ function decide55(snap) {
         return { kind: "talk", stop: SANFEW_FINISH };
       }
       if (snap.bankKnown && banked19(snap, ER_ITEM.GOUTWEED) > 0) {
-        return withdraw14(snap, [{ name: ER_ITEM.GOUTWEED.name, id: ER_ITEM.GOUTWEED.id, qty: 1 }]);
+        return withdraw15(snap, [{ name: ER_ITEM.GOUTWEED.name, id: ER_ITEM.GOUTWEED.id, qty: 1 }]);
       }
       return prep() ?? guarded("take goutweed from the storeroom crate", takeGoutweed);
     default:
@@ -88105,17 +88393,17 @@ function heldId26(snap, id) {
 function bankedId12(snap, id) {
   return snap.bankIds?.get(id) ?? 0;
 }
-var withdraw15 = (items) => ({ kind: "withdraw", items });
-var scanBank22 = { kind: "scanBank" };
+var withdraw16 = (items) => ({ kind: "withdraw", items });
+var scanBank23 = { kind: "scanBank" };
 function fromBank8(snap, id, name, qty2) {
   if (!snap.bankKnown) {
-    return scanBank22;
+    return scanBank23;
   }
   const banked20 = bankedId12(snap, id);
   if (banked20 <= 0) {
     return null;
   }
-  return withdraw15([{ name, qty: Math.min(qty2, banked20), id }]);
+  return withdraw16([{ name, qty: Math.min(qty2, banked20), id }]);
 }
 function nearestPlankSpawn() {
   const here7 = Game.tile();
@@ -89190,9 +89478,9 @@ var DigsiteState = {
   teaWanted: false
 };
 function kit6(snap) {
-  const coinsHeld2 = heldId27(snap, DIG_ID.COINS);
-  const coinsBanked = snap.bankKnown ? snap.bankIds?.get(DIG_ID.COINS) ?? 0 : 0;
-  const needCoins = coinsHeld2 < COIN_LOW5 && coinsBanked > 0;
+  const coinsHeld3 = heldId27(snap, DIG_ID.COINS);
+  const coinsBanked2 = snap.bankKnown ? snap.bankIds?.get(DIG_ID.COINS) ?? 0 : 0;
+  const needCoins = coinsHeld3 < COIN_LOW5 && coinsBanked2 > 0;
   const foodName3 = QuestFood.name?.trim();
   const foodHeld7 = foodName3 ? snap.inv.get(foodName3.toLowerCase()) ?? 0 : 0;
   const foodBanked = foodName3 ? snap.bank?.get(foodName3.toLowerCase()) ?? 0 : 0;
@@ -89202,7 +89490,7 @@ function kit6(snap) {
   }
   const items = [];
   if (needCoins) {
-    items.push({ name: DIG_ITEM.COINS, qty: Math.min(COIN_FLOAT9, coinsBanked), id: DIG_ID.COINS });
+    items.push({ name: DIG_ITEM.COINS, qty: Math.min(COIN_FLOAT9, coinsBanked2), id: DIG_ID.COINS });
   }
   if (needFood && foodName3) {
     items.push({ name: foodName3, qty: Math.min(FOOD_TARGET14 - foodHeld7, foodBanked) });
@@ -89455,11 +89743,11 @@ async function digUntil(zone, want, log) {
 
 // src/bot/api/ai/quests/defs/digsite/index.ts
 var ROPE_TARGET = 2;
-function withdraw16(name, qty2, id) {
+function withdraw17(name, qty2, id) {
   return { kind: "withdraw", items: [{ name, qty: qty2, id }], bank: DIG_TILE.VARROCK_BANK };
 }
 function fromBank9(snap, id, name, qty2 = 1) {
-  return bankedId13(snap, id) > 0 ? withdraw16(name, qty2, id) : null;
+  return bankedId13(snap, id) > 0 ? withdraw17(name, qty2, id) : null;
 }
 function custom24(name, run2) {
   return { kind: "custom", name, run: run2 };
@@ -90114,10 +90402,10 @@ var LOWE = { npc: "Lowe", anchor: UP_TILE.LOWE };
 var ROPE_GP = 40;
 var BOW_GP = 100;
 var BOW_TO_BUY = UP_ITEM.SHORTBOW;
-function scanBank23() {
+function scanBank24() {
   return { kind: "scanBank", bank: UP_TILE.ARDOUGNE_BANK };
 }
-function withdraw17(items) {
+function withdraw18(items) {
   return { kind: "withdraw", items, bank: UP_TILE.ARDOUGNE_BANK };
 }
 function fromBank10(snap, item2, qty2) {
@@ -90126,13 +90414,13 @@ function fromBank10(snap, item2, qty2) {
     return null;
   }
   if (!snap.bankKnown) {
-    return scanBank23();
+    return scanBank24();
   }
   const stock = banked20(snap, item2);
   if (stock <= 0) {
     return null;
   }
-  return withdraw17([{ name: item2.name, id: item2.id, qty: Math.min(qty2 - have2, stock) }]);
+  return withdraw18([{ name: item2.name, id: item2.id, qty: Math.min(qty2 - have2, stock) }]);
 }
 var KIT = [
   { item: UP_ITEM.ROPE, qty: 3, reason: "the rock swing east, which eats one per attempt", shop: AEMAD3, unitGp: ROPE_GP },
@@ -90162,11 +90450,11 @@ function sourceBow(snap) {
     return null;
   }
   if (!snap.bankKnown) {
-    return scanBank23();
+    return scanBank24();
   }
   const stocked2 = firstBow(snap.bankIds);
   if (stocked2 !== null) {
-    return withdraw17([{ name: NAME_BY_ID.get(stocked2) ?? BOW_TO_BUY.name, id: stocked2, qty: 1 }]);
+    return withdraw18([{ name: NAME_BY_ID.get(stocked2) ?? BOW_TO_BUY.name, id: stocked2, qty: 1 }]);
   }
   return buyAt(snap, BOW_TO_BUY, 1, LOWE, BOW_GP);
 }
@@ -90253,7 +90541,7 @@ function wearGear(snap) {
     return null;
   }
   if (!snap.bankKnown) {
-    return scanBank23();
+    return scanBank24();
   }
   const toDraw = names.filter((name) => heldNamed(snap, name) === 0 && bankedNamed(snap, name) > 0);
   if (toDraw.length > 0) {
@@ -93119,11 +93407,11 @@ function foodInBank(snap) {
   return foodNames6().find((name) => banked21(snap, name) > 0) ?? null;
 }
 var FOOD_TARGET16 = 8;
-var scanBank24 = () => ({ kind: "scanBank", bank: FT_TILE.SEERS_BANK });
+var scanBank25 = () => ({ kind: "scanBank", bank: FT_TILE.SEERS_BANK });
 var withdrawStep = (items) => ({ kind: "withdraw", items, bank: FT_TILE.SEERS_BANK });
 function fromBank11(snap, wants) {
   if (!snap.bankKnown) {
-    return scanBank24();
+    return scanBank25();
   }
   const missing = wants.filter((w) => (w.id === undefined ? heldCount8(snap, w.name) : heldId28(snap, w.id)) < w.qty).filter((w) => (w.id === undefined ? banked21(snap, w.name) : bankedId14(snap, w.id)) > 0).map((w) => ({ name: w.name, qty: w.qty, id: w.id }));
   return missing.length > 0 ? withdrawStep(missing) : null;
@@ -93162,7 +93450,7 @@ function gatherCoins(snap, need) {
     return null;
   }
   if (!snap.bankKnown) {
-    return scanBank24();
+    return scanBank25();
   }
   const available = banked21(snap, "Coins");
   if (available + heldCount8(snap, "Coins") < need) {
@@ -93219,7 +93507,7 @@ function wearAll5(names) {
 }
 function combatKit(snap) {
   if (!snap.bankKnown) {
-    return scanBank24();
+    return scanBank25();
   }
   const food = foodInBank(snap);
   if (foodHeld7(snap) < FOOD_TARGET16 && food !== null) {
@@ -95792,10 +96080,10 @@ var ROPE_TARGET2 = 3;
 var ARROW_TARGET4 = 50;
 var STILL_FOOD = 4;
 var COAL_TARGET = 12;
-function scanBank25() {
+function scanBank26() {
   return { kind: "scanBank", bank: RG_TILE.ARDOUGNE_BANK };
 }
-function withdraw18(items) {
+function withdraw19(items) {
   return { kind: "withdraw", items, bank: RG_TILE.ARDOUGNE_BANK };
 }
 function fromBank12(snap, item2, qty2) {
@@ -95804,10 +96092,10 @@ function fromBank12(snap, item2, qty2) {
     return null;
   }
   if (!snap.bankKnown) {
-    return scanBank25();
+    return scanBank26();
   }
   const stock = banked22(snap, item2);
-  return stock <= 0 ? null : withdraw18([{ name: item2.name, id: item2.id, qty: Math.min(qty2 - have2, stock) }]);
+  return stock <= 0 ? null : withdraw19([{ name: item2.name, id: item2.id, qty: Math.min(qty2 - have2, stock) }]);
 }
 function buyOrWait3(snap, step2) {
   if (gpShort2(snap, step2.estGp) > 0) {
@@ -96802,10 +97090,10 @@ function heldName4(snap, name) {
 function bankedName3(snap, name) {
   return snap.bank?.get(name.toLowerCase()) ?? 0;
 }
-function scanBank26(bank) {
+function scanBank27(bank) {
   return { kind: "scanBank", bank };
 }
-function withdraw19(items, bank) {
+function withdraw20(items, bank) {
   return { kind: "withdraw", items, bank };
 }
 var KEEP_IDS6 = [
@@ -96895,10 +97183,10 @@ function fromBank13(snap, item2, qty2 = 1) {
     return null;
   }
   if (!snap.bankKnown) {
-    return scanBank26();
+    return scanBank27();
   }
   const inBank = banked23(snap, item2.id);
-  return inBank > 0 ? withdraw19([{ name: item2.name, id: item2.id, qty: Math.min(short, inBank) }]) : null;
+  return inBank > 0 ? withdraw20([{ name: item2.name, id: item2.id, qty: Math.min(short, inBank) }]) : null;
 }
 function source5(snap, item2, qty2, shop, estGp, bank, stock = qty2) {
   const have2 = owned7(snap, item2.id);
@@ -96919,10 +97207,10 @@ function coinTopUp2(snap, want = COIN_CARRY2, bank) {
     return null;
   }
   if (!snap.bankKnown) {
-    return scanBank26(bank);
+    return scanBank27(bank);
   }
   const inBank = bankedName3(snap, LQ_ITEM.COINS);
-  return inBank > 0 ? withdraw19([{ name: LQ_ITEM.COINS, id: LQ_ID.COINS, qty: Math.min(want - have2, inBank) }], bank) : null;
+  return inBank > 0 ? withdraw20([{ name: LQ_ITEM.COINS, id: LQ_ID.COINS, qty: Math.min(want - have2, inBank) }], bank) : null;
 }
 function heldFood3(snap) {
   return LQ_FOODS.reduce((sum, f) => sum + heldName4(snap, f), 0);
@@ -96932,7 +97220,7 @@ function foodTopUp2(snap, want = FOOD_CARRY2, bank) {
     return null;
   }
   if (!snap.bankKnown) {
-    return scanBank26(bank);
+    return scanBank27(bank);
   }
   const food = LQ_FOODS.find((f) => bankedName3(snap, f) > 0);
   if (!food) {
@@ -96940,7 +97228,7 @@ function foodTopUp2(snap, want = FOOD_CARRY2, bank) {
   }
   const room = Math.max(0, snap.freeSlots ?? 28);
   const take3 = Math.min(want - heldFood3(snap), bankedName3(snap, food), room);
-  return take3 > 0 ? withdraw19([{ name: food, qty: take3 }], bank) : null;
+  return take3 > 0 ? withdraw20([{ name: food, qty: take3 }], bank) : null;
 }
 function potsHeld(snap) {
   return PRAYER_POTIONS2.reduce((sum, pot) => sum + held41(snap, pot.id), 0);
@@ -96957,13 +97245,13 @@ function potionTopUp(snap, want, bank) {
     return null;
   }
   if (!snap.bankKnown) {
-    return scanBank26(bank);
+    return scanBank27(bank);
   }
   const pot = PRAYER_POTIONS2.find((p) => banked23(snap, p.id) > 0);
   if (!pot) {
     return null;
   }
-  return withdraw19([{ name: pot.name, id: pot.id, qty: Math.min(want - have2, banked23(snap, pot.id)) }], bank);
+  return withdraw20([{ name: pot.name, id: pot.id, qty: Math.min(want - have2, banked23(snap, pot.id)) }], bank);
 }
 function dressForCombat(snap, bank) {
   if (!wieldedWeapon(snap)) {
@@ -96972,11 +97260,11 @@ function dressForCombat(snap, bank) {
       return { kind: "equip", item: inPack.name };
     }
     if (!snap.bankKnown) {
-      return scanBank26(bank);
+      return scanBank27(bank);
     }
     const fromTheBank = bestBanked(snap);
     if (fromTheBank) {
-      return withdraw19([{ name: fromTheBank.name, id: fromTheBank.id, qty: 1 }], bank);
+      return withdraw20([{ name: fromTheBank.name, id: fromTheBank.id, qty: 1 }], bank);
     }
   }
   for (const piece of ARMOUR) {
@@ -96987,10 +97275,10 @@ function dressForCombat(snap, bank) {
       return { kind: "equip", item: piece.name };
     }
     if (!snap.bankKnown) {
-      return scanBank26(bank);
+      return scanBank27(bank);
     }
     if (banked23(snap, piece.id) > 0) {
-      return withdraw19([{ name: piece.name, id: piece.id, qty: 1 }], bank);
+      return withdraw20([{ name: piece.name, id: piece.id, qty: 1 }], bank);
     }
   }
   return null;
@@ -97003,11 +97291,11 @@ function sourcePickaxe4(snap, bank) {
     return null;
   }
   if (!snap.bankKnown) {
-    return scanBank26(bank);
+    return scanBank27(bank);
   }
   const inBank = PICKAXES5.find((p) => banked23(snap, p.id) > 0);
   if (inBank) {
-    return withdraw19([{ name: inBank.name, id: inBank.id, qty: 1 }], bank);
+    return withdraw20([{ name: inBank.name, id: inBank.id, qty: 1 }], bank);
   }
   return { kind: "buy", item: "Bronze pickaxe", qty: 1, shop: LQ_SHOP.JIMINUA, estGp: SHOP_GP5.JIMINUA, bank };
 }
@@ -97062,11 +97350,11 @@ function sourceGems(snap, bank) {
     return null;
   }
   if (!snap.bankKnown) {
-    return scanBank26(bank);
+    return scanBank27(bank);
   }
   const fromTheBank = missing.find((gem) => banked23(snap, gem.id) > 0);
   if (fromTheBank) {
-    return withdraw19([{ name: fromTheBank.name, id: fromTheBank.id, qty: 1 }], bank);
+    return withdraw20([{ name: fromTheBank.name, id: fromTheBank.id, qty: 1 }], bank);
   }
   const cut = GEM_CUTS.find((gem) => owned7(snap, gem.cut) === 0 && (held41(snap, gem.uncut) > 0 || banked23(snap, gem.uncut) > 0));
   if (cut) {
@@ -97120,7 +97408,7 @@ function provision2(snap) {
     const short = counter.kit.find((want) => owned7(snap, want.item.id) + banked23(snap, want.item.id) < want.qty);
     if (short) {
       if (!snap.bankKnown) {
-        return scanBank26(counter.bank);
+        return scanBank27(counter.bank);
       }
       const have2 = owned7(snap, short.item.id) + banked23(snap, short.item.id);
       const target4 = Math.max(short.stock ?? short.qty, short.qty);
@@ -100514,6 +100802,7 @@ class QuestEngine {
       prayer: Skills.effective("prayer"),
       attack: Skills.level("attack"),
       ranged: Skills.level("ranged"),
+      magic: Skills.level("magic"),
       freeSlots: Inventory.free()
     };
   }
@@ -109722,6 +110011,9 @@ function readLivePlayerState(records) {
   for (const name of skillNames) {
     skillLevels.set(name, Skills.level(name));
   }
+  if (!skillLevels.has("magic")) {
+    skillLevels.set("magic", Skills.level("magic"));
+  }
   const completedQuests = new Set;
   for (const record of records) {
     if (Quests.status(record.name) === "complete") {
@@ -109749,10 +110041,16 @@ function ownedItemCounts(names) {
   }
   return owned8;
 }
-function formatFetchSummary(records, owned8) {
+function listedItems(record, magic) {
+  if (record.id !== "ball") {
+    return record.items;
+  }
+  return [...record.items, ...experimentRuneItems(magic)];
+}
+function formatFetchSummary(records, owned8, magic = 1) {
   const needed = new Map;
   for (const record of records) {
-    for (const item2 of record.items) {
+    for (const item2 of listedItems(record, magic)) {
       const key3 = item2.name;
       needed.set(key3, (needed.get(key3) ?? 0) + item2.qty);
     }
@@ -109792,15 +110090,16 @@ function pickQuestsICanDo(implementedIds) {
     if (ready.length === 0) {
       return { summary: "No implemented quests are doable on this character yet (stats, quest points, or prerequisites)." };
     }
+    const magic = player.skillLevels.get("magic") ?? Skills.level("magic");
     const names = new Set;
     for (const record of ready) {
-      for (const item2 of record.items) {
+      for (const item2 of listedItems(record, magic)) {
         names.add(item2.name);
       }
     }
     return {
       selected: ready.map((record) => record.id),
-      summary: formatFetchSummary(ready, ownedItemCounts(names))
+      summary: formatFetchSummary(ready, ownedItemCounts(names), magic)
     };
   } catch {
     return { summary: "Could not read this character. Log in first." };

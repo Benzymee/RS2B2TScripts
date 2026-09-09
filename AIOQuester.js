@@ -40312,7 +40312,8 @@ var QUESTS = [
     name: "The Knight's Sword",
     questPoints: 1,
     requirements: { skills: [
-      { skill: "mining", level: 10 },
+      { skill: "mining", level: 15 },
+      { skill: "smithing", level: 15 },
       { skill: "cooking", level: 10 }
     ] },
     items: [
@@ -40588,7 +40589,13 @@ var QUESTS = [
     id: "dragon",
     name: "Dragon Slayer",
     questPoints: 2,
-    requirements: { minQuestPoints: 32 },
+    requirements: {
+      minQuestPoints: 32,
+      skills: [
+        { skill: "mining", level: 30 },
+        { skill: "smithing", level: 34 }
+      ]
+    },
     items: [
       { name: "Coins", qty: 1, kind: "mustHave" },
       { name: "Lobster pot", qty: 1, kind: "acquirable" },
@@ -40616,7 +40623,11 @@ var QUESTS = [
     name: "Nature Spirit",
     questPoints: 2,
     requirements: {
-      skills: [{ skill: "crafting", level: 18 }],
+      skills: [
+        { skill: "crafting", level: 18 },
+        { skill: "mining", level: 20 },
+        { skill: "smithing", level: 20 }
+      ],
       quests: ["priest", "priestperil"]
     },
     items: []
@@ -40728,7 +40739,10 @@ var QUESTS = [
     id: "horror",
     name: "Horror from the Deep",
     questPoints: 2,
-    requirements: { skills: [{ skill: "agility", level: 35 }] },
+    requirements: { skills: [
+      { skill: "agility", level: 35 },
+      { skill: "smithing", level: 34 }
+    ] },
     items: [
       { name: "Plank", qty: 2, kind: "acquirable" },
       { name: "Nails", qty: 8, kind: "acquirable" },
@@ -40741,7 +40755,13 @@ var QUESTS = [
     id: "ikov",
     name: "Temple of Ikov",
     questPoints: 1,
-    requirements: { skills: [{ skill: "thieving", level: 42 }, { skill: "ranged", level: 40 }] },
+    requirements: { skills: [
+      { skill: "thieving", level: 42 },
+      { skill: "ranged", level: 40 },
+      { skill: "woodcutting", level: 60 },
+      { skill: "fletching", level: 65 },
+      { skill: "crafting", level: 10 }
+    ] },
     items: []
   },
   {
@@ -40892,7 +40912,8 @@ var QUESTS = [
       skills: [
         { skill: "cooking", level: 30 },
         { skill: "agility", level: 15 },
-        { skill: "fishing", level: 5 }
+        { skill: "fishing", level: 5 },
+        { skill: "firemaking", level: 30 }
       ],
       quests: ["junglepotion"]
     },
@@ -40991,7 +41012,8 @@ var QUESTS = [
         { skill: "crafting", level: 20 },
         { skill: "agility", level: 32 },
         { skill: "smithing", level: 4 },
-        { skill: "mining", level: 4 }
+        { skill: "mining", level: 4 },
+        { skill: "prayer", level: 10 }
       ],
       quests: ["junglepotion"]
     },
@@ -42741,15 +42763,26 @@ async function smeltIron(log) {
     log("the Falador furnace did not answer");
     return false;
   }
-  if (!await Execution.delayUntil(() => ChatDialog.isMakeMenu(), 8000)) {
-    log("the smelting menu never opened");
+  const menuOrRefuse = await Execution.delayUntil(() => ChatDialog.isMakeMenu() || ChatDialog.canContinue(), 8000);
+  if (!menuOrRefuse || ChatDialog.canContinue()) {
+    if (ChatDialog.canContinue()) {
+      log(ChatDialog.texts().join(" ") || "the furnace refused with a continue box");
+      await ChatDialog.continue();
+    } else {
+      log("the smelting menu never opened");
+    }
     return false;
   }
   if (!await ChatDialog.makeX("Iron", ORE_PER_TRIP)) {
     log(`no 'Iron' in the smelt menu: [${ChatDialog.makeProducts().join(", ")}]`);
     return false;
   }
-  await Execution.delayUntil(() => Inventory.countById(KS_ID.IRON_ORE) === 0, 120000);
+  await Execution.delayUntil(() => Inventory.countById(KS_ID.IRON_ORE) === 0 || ChatDialog.canContinue(), 120000);
+  if (ChatDialog.canContinue()) {
+    log(ChatDialog.texts().join(" ") || "smelting was refused");
+    await ChatDialog.continue();
+    return false;
+  }
   return Inventory.countById(KS_ID.IRON_BAR) > before;
 }
 function ironBarsAt(snap, miningLevel) {
@@ -50524,7 +50557,19 @@ var PRYSIN = { npc: "Sir Prysin", anchor: new Tile(3205, 3473, 0), leash: 6, pre
   "I'm still looking."
 ] };
 var ROVIN = { npc: "Captain Rovin", anchor: new Tile(3204, 3496, 2), leash: 6, prefer: ["Yes I know, but this is important.", "There's a demon who wants to invade this city."] };
-var TRAIBORN = { npc: "Traiborn", anchor: new Tile(3112, 3162, 1), leash: 2, prefer: ["I need to get a key given to you by Sir Prysin.", "have you got any keys knocking around", "I'll get the bones for you"] };
+var TRAIBORN = {
+  npc: "Traiborn",
+  anchor: new Tile(3112, 3162, 1),
+  leash: 6,
+  prefer: [
+    "I need to get a key given to you by Sir Prysin",
+    "have you got any keys knocking around",
+    "I'll get the bones for you",
+    "He told me you were looking after it",
+    "Just tell me if you have the key",
+    "It's the key to get a sword called Silverlight"
+  ]
+};
 var WIZ_INSIDE_STAND = new Tile(3105, 3160, 0);
 var DRAIN_TILE = new Tile(3225, 3495, 0);
 var SINK_TILE = new Tile(3224, 3494, 0);
@@ -50540,6 +50585,19 @@ var BONES_NEEDED = 25;
 var BONES_ID = 526;
 var GOBLIN_ID = 100;
 var GOBLIN_RADIUS = 20;
+var traibornIntroDone = false;
+function traibornPhase(bones, invFull, introDone) {
+  if (!introDone) {
+    return "talk";
+  }
+  if (bones >= BONES_NEEDED) {
+    return "talk";
+  }
+  if (invFull && bones > 0) {
+    return "talk";
+  }
+  return "grind";
+}
 var has2 = (snap, name) => (snap.inv.get(name.toLowerCase()) ?? 0) > 0;
 var worn2 = (snap, name) => snap.worn.has(name.toLowerCase());
 var heldId6 = (id) => Inventory.items().some((i2) => i2.id === id);
@@ -50558,6 +50616,9 @@ function fillBucket2(snap) {
 async function grindGoblins(log) {
   if (Inventory.count("Bones") >= BONES_NEEDED) {
     return true;
+  }
+  if (Inventory.isFull()) {
+    return false;
   }
   if (Game.inCombat()) {
     await Execution.delayTicks(2);
@@ -50702,7 +50763,8 @@ async function keyHunt(log) {
   if (!hasTraiborn) {
     const level = Game.tile()?.level ?? 0;
     const bones = Inventory.count("Bones");
-    if (!(bones > 0 && Inventory.isFull())) {
+    const phase = traibornPhase(bones, Inventory.isFull(), traibornIntroDone);
+    if (phase === "grind") {
       if (level === 1) {
         await Reach.locOp({
           name: "Staircase",
@@ -50724,7 +50786,7 @@ async function keyHunt(log) {
         log
       });
       if (climbed === "unreachable") {
-        log("demon: tower staircase unreachable — re-entering to re-plan");
+        log("demon: tower staircase unreachable, re-entering to re-plan");
       }
       return false;
     }
@@ -50732,7 +50794,16 @@ async function keyHunt(log) {
       return false;
     }
     const beforeHand = Inventory.count("Bones");
-    await talkThrough("Traiborn", TRAIBORN.prefer, log);
+    const ok = await talkStrict("Traiborn", TRAIBORN.prefer, log);
+    if (!ok) {
+      log("Traiborn: no key or bones option, briefing Sir Prysin so the third choice appears");
+      await Modals.close();
+      if (await gotoNpc(PRYSIN, [], log)) {
+        await talkStrict("Sir Prysin", PRYSIN.prefer, log);
+      }
+      return false;
+    }
+    traibornIntroDone = true;
     await Execution.delayTicks(2);
     if (Inventory.count("Bones") < beforeHand || ChatDialog.isOpen()) {
       let lastBones = Inventory.count("Bones");
@@ -98865,6 +98936,9 @@ function nextQuest(order, picked, elig, parked) {
   const ready = order.filter((id) => picked.has(id) && elig.get(id)?.status === "READY");
   return ready.find((id) => !parked.has(id)) ?? ready[0] ?? null;
 }
+function abandonRunningId(runningId, elig) {
+  return runningId !== null && elig.get(runningId)?.status === "BLOCKED";
+}
 function queueRows(order, picked, elig, parked, runningId) {
   return order.filter((id) => picked.has(id)).map((id) => {
     const el = elig.get(id);
@@ -99032,6 +99106,11 @@ class QuestEngine {
     const skip = this.host.consumeSkip();
     if (skip && this.runningId !== null) {
       this.applyUserSkip(this.runningId, elig);
+    }
+    if (abandonRunningId(this.runningId, elig)) {
+      const current = elig.get(this.runningId);
+      this.host.log(`${current.name}: blocked, ${current.reasons.join("; ")}`);
+      this.dropRunning();
     }
     if (this.runningId === null) {
       const selectable = new Set([...picked].filter((id2) => !this.blocked.has(id2)));
@@ -99376,11 +99455,15 @@ class QuestEngine {
     this.potionsDrawn.delete(id);
     this.retreated.delete(id);
     this.retreatTries.delete(id);
+    this.dropRunning();
+  }
+  dropRunning() {
     this.waitKey = "";
     this.waitCount = 0;
     this.stepSubLog.clear();
     this.lastStepLogged = "";
     this.runningId = null;
+    this.resetWatchdog();
   }
   block(id, reasons) {
     this.blocked.set(id, reasons);

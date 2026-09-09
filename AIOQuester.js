@@ -44634,6 +44634,7 @@ var PA_TILE = {
   DOOR_STAND: new Tile(3123, 3244, 0),
   CELL: new Tile(3123, 3243, 0),
   PRINCE: new Tile(3123, 3242, 0),
+  JAIL_YARD: new Tile(3128, 3248, 0),
   BARTENDER: new Tile(3045, 3257, 0),
   LOGS_SPAWN: new Tile(3089, 3265, 0),
   ONION_PATCH: new Tile(3189, 3267, 0),
@@ -45049,7 +45050,10 @@ async function closeMainModal() {
 var BEERS_NEEDED = 3;
 var ROPES_BEFORE_TIE = 2;
 var ROPES_AFTER_TIE = 1;
-var KELI_BLOCK_RADIUS = 12;
+var KELI_BLOCK_RADIUS = 10;
+var JAIL_GUARD = "Jail guard";
+var GUARD_MELEE_FLOOR = 20;
+var KELI_BLOCKS_DOOR = /get rid of Lady Keli/i;
 function stageOf(snap) {
   return snap.stage ?? PRINCE_STAGE.PREP_FINISHED;
 }
@@ -45089,6 +45093,9 @@ function missingKit(snap) {
   }
   return absent.length > 0 ? { kind: "wait", reason: `the break-in needs ${absent.join(", ")}` } : null;
 }
+function jailbreakKitReady(snap) {
+  return missingKit(snap) === null;
+}
 function decideJailbreak(snap) {
   if (stageOf(snap) === PRINCE_STAGE.PREP_FINISHED) {
     return sourceBeers(snap) ?? { kind: "talk", stop: JOE_BEER };
@@ -45097,28 +45104,116 @@ function decideJailbreak(snap) {
 }
 function atPrince() {
   const here2 = Game.tile();
-  return here2 !== null && here2.z <= PA_TILE.PRINCE.z && Math.abs(here2.x - PA_TILE.PRINCE.x) <= 1;
+  return here2 !== null && isOnCellSide(here2.x, here2.z) && here2.z <= PA_TILE.PRINCE.z;
 }
 function inCell() {
   const here2 = Game.tile();
-  return here2 !== null && here2.z <= PA_TILE.CELL.z && Math.abs(here2.x - PA_TILE.CELL.x) <= 1;
+  return here2 !== null && isOnCellSide(here2.x, here2.z);
 }
 function northOfDoor() {
   const here2 = Game.tile();
-  return here2 !== null && here2.z > PA_TILE.CELL.z;
+  return here2 !== null && here2.z > PA_TILE.CELL.z && Math.abs(here2.x - PA_TILE.CELL.x) <= 2;
+}
+function isOnCellSide(x2, z) {
+  return Math.abs(x2 - PA_TILE.CELL.x) <= 1 && z <= PA_TILE.CELL.z;
+}
+function shouldSeekKeli(keliVisible, onCellSide) {
+  return !keliVisible && !onCellSide;
+}
+function findKeli() {
+  return Npcs.query().name(PA_NPC.KELI).withinOf(PA_TILE.DOOR_STAND, KELI_BLOCK_RADIUS).nearest() ?? Npcs.query().name(PA_NPC.KELI).withinOf(PA_TILE.KELI, KELI_BLOCK_RADIUS).nearest() ?? Npcs.query().name(PA_NPC.KELI).within(15).nearest();
+}
+function canFightJailGuards(melee, hp) {
+  return melee >= GUARD_MELEE_FLOOR && hp >= GUARD_MELEE_FLOOR;
+}
+function meleeFloor() {
+  return Math.min(Skills.level("attack"), Skills.level("strength"), Skills.level("defence"));
+}
+function hostileGuard() {
+  return Npcs.query().name(JAIL_GUARD).action("Attack").where((n) => n.targetsMe() || Game.inCombat() && n.inCombat && !n.targetsAnotherPlayer()).within(10).nearest();
+}
+async function dismissPrompts() {
+  for (let i2 = 0;i2 < 8 && ChatDialog.canContinue(); i2++) {
+    await ChatDialog.continue();
+    await Execution.delayTicks(1);
+  }
+  await Modals.closeIfOpen();
+}
+async function fightGuards(log) {
+  const retaliate = Game.autoRetaliateOn();
+  Game.setAutoRetaliate(true);
+  const deadline = performance.now() + 90000;
+  try {
+    while (performance.now() < deadline) {
+      if (EventSignal.pending()) {
+        return false;
+      }
+      await Sustain.run();
+      const guard = hostileGuard();
+      if (!guard && !Game.inCombat()) {
+        return true;
+      }
+      if (guard && !guard.targetsMe() && !Game.inCombat()) {
+        if (!await guard.interact("Attack")) {
+          log("jail guard Attack was not sent");
+          return false;
+        }
+      }
+      await Execution.delayTicks(1);
+    }
+    log("jail guards were still up after 90s");
+    return false;
+  } finally {
+    Game.setAutoRetaliate(retaliate);
+  }
+}
+async function fleeAndReenter(log) {
+  const retaliate = Game.autoRetaliateOn();
+  Game.setAutoRetaliate(false);
+  try {
+    if (!await Traversal.walkResilient(PA_TILE.JAIL_YARD, { radius: 2, attempts: 4, timeoutMs: 60000, log })) {
+      return false;
+    }
+    if (!await Execution.delayUntil(() => !Game.inCombat(), 20000)) {
+      log("still in combat after leaving the jail");
+      return false;
+    }
+    return Traversal.walkResilient(PA_TILE.DOOR_STAND, { radius: 1, attempts: 4, timeoutMs: 60000, log });
+  } finally {
+    Game.setAutoRetaliate(retaliate);
+  }
+}
+async function clearOrFleeGuards(log) {
+  if (!Game.inCombat() && hostileGuard() === null) {
+    return true;
+  }
+  if (canFightJailGuards(meleeFloor(), Skills.level("hitpoints"))) {
+    log("a Jail guard followed in, fighting");
+    return fightGuards(log);
+  }
+  log("a Jail guard followed in, leaving the house to drop them");
+  return fleeAndReenter(log);
 }
 async function stepIntoCell() {
-  await DirectNavigator.walk(PA_TILE.PRINCE);
-  return Execution.delayUntil(atPrince, 6000);
+  for (let i2 = 0;i2 < 10 && !atPrince(); i2++) {
+    DirectNavigator.walk(PA_TILE.PRINCE);
+    await Execution.delayTicks(1);
+  }
+  return atPrince();
 }
 async function tieKeli(log) {
-  let keli = Npcs.query().name(PA_NPC.KELI).within(KELI_BLOCK_RADIUS).nearest();
+  let keli = findKeli();
   if (!keli) {
+    const here2 = Game.tile();
+    const onCellSide = here2 !== null && isOnCellSide(here2.x, here2.z);
+    if (!shouldSeekKeli(false, onCellSide)) {
+      return true;
+    }
     if (!await Traversal.walkResilient(PA_TILE.KELI, { radius: 2, attempts: 3, timeoutMs: 60000, log })) {
       return false;
     }
     await settleScene();
-    keli = Npcs.query().name(PA_NPC.KELI).within(KELI_BLOCK_RADIUS).nearest();
+    keli = findKeli();
     if (!keli) {
       return true;
     }
@@ -45131,12 +45226,18 @@ async function tieKeli(log) {
   if (!await Traversal.walkResilient(keli.tile(), { radius: 2, attempts: 3, timeoutMs: 60000, log })) {
     return false;
   }
-  const target = Npcs.query().name(PA_NPC.KELI).within(6).nearest();
+  const target = findKeli();
   if (!target || !await rope.useOn(target)) {
+    log("tieKeli: Rope use on Lady Keli was not sent");
     return false;
   }
-  const gone = () => Npcs.query().name(PA_NPC.KELI).within(KELI_BLOCK_RADIUS).nearest() === null;
-  return driveUntil(gone, [], log, 12000);
+  const gone = () => findKeli() === null;
+  if (!await driveUntil(gone, [], log, 12000)) {
+    log("tieKeli: Lady Keli is still in the house");
+    return false;
+  }
+  await dismissPrompts();
+  return true;
 }
 async function unlockCell(log) {
   if (atPrince()) {
@@ -45145,20 +45246,46 @@ async function unlockCell(log) {
   if (inCell()) {
     return stepIntoCell();
   }
+  if (findKeli()) {
+    log("unlockCell: Lady Keli is still in the house");
+    return false;
+  }
   if (!await Traversal.walkResilient(PA_TILE.DOOR_STAND, { radius: 0, attempts: 4, timeoutMs: 90000, log })) {
     return false;
   }
   await settleScene();
+  if (findKeli()) {
+    log("unlockCell: Lady Keli is still in the house");
+    return false;
+  }
   const key = heldItem(PA_ITEM.PRINCE_KEY.id);
   const door = Locs.query().name(PA_LOC.PRISON_DOOR).within(4).nearest();
   if (!key || !door) {
     log("unlockCell: no key, or no Prison Door within four tiles of the north stand");
     return false;
   }
+  const mark = GameMessages.mark();
   if (!await key.useOn(door)) {
+    log("unlockCell: Bronze key use on Prison Door was not sent");
     return false;
   }
-  return stepIntoCell();
+  if (await Execution.delayUntil(() => inCell() || atPrince() || GameMessages.sawSince(mark, KELI_BLOCKS_DOOR), 4000)) {
+    if (GameMessages.sawSince(mark, KELI_BLOCKS_DOOR)) {
+      log("unlockCell: the door still wants Lady Keli gone");
+      return false;
+    }
+  } else {
+    log("unlockCell: key did not put us on the cell door");
+    return false;
+  }
+  if (atPrince()) {
+    return true;
+  }
+  if (!await stepIntoCell()) {
+    log("unlockCell: the door shut before we stepped south onto Prince Ali");
+    return false;
+  }
+  return true;
 }
 async function leaveCell(log) {
   if (northOfDoor()) {
@@ -45175,25 +45302,63 @@ async function leaveCell(log) {
   await DirectNavigator.walk(PA_TILE.DOOR_STAND);
   return Execution.delayUntil(northOfDoor, 6000);
 }
-async function breakOut(log) {
-  if (!await tieKeli(log)) {
-    return false;
-  }
-  if (!await unlockCell(log)) {
-    return false;
-  }
-  await settleScene();
+async function talkToPrince(log) {
   const handedOver = () => heldItem(PA_ITEM.BLOND_WIG.id) === null;
-  if (!await talkStrict(PA_NPC.PRINCE, [], log)) {
-    log("breakOut: could not open a dialogue with Prince Ali");
-  }
-  if (!await driveUntil(handedOver, [], log, 20000)) {
-    return false;
-  }
-  if (!inCell()) {
+  if (handedOver()) {
     return true;
   }
-  return leaveCell(log);
+  await dismissPrompts();
+  const ali = Npcs.query().name(PA_NPC.PRINCE).within(4).nearest();
+  if (!ali) {
+    log("breakOut: Prince Ali is not in the cell");
+    return false;
+  }
+  const talk3 = talkOp(ali.actions());
+  if (!talk3 || !await ali.interact(talk3)) {
+    log("breakOut: Talk-to Prince Ali was not sent");
+    return false;
+  }
+  if (!await driveUntil(handedOver, [], log, 20000)) {
+    log("breakOut: Prince Ali did not take the disguise");
+    return false;
+  }
+  return true;
+}
+async function breakOut(log) {
+  const deadline = performance.now() + 180000;
+  while (performance.now() < deadline) {
+    if (EventSignal.pending()) {
+      return false;
+    }
+    if (heldItem(PA_ITEM.BLOND_WIG.id) === null) {
+      return inCell() ? leaveCell(log) : true;
+    }
+    if (!await clearOrFleeGuards(log)) {
+      return false;
+    }
+    if (!await tieKeli(log)) {
+      return false;
+    }
+    if (findKeli()) {
+      continue;
+    }
+    if (!await unlockCell(log)) {
+      if (findKeli() || GameMessages.recent(4, 8000).some((m) => KELI_BLOCKS_DOOR.test(m.text))) {
+        continue;
+      }
+      return false;
+    }
+    await settleScene();
+    if (!await talkToPrince(log)) {
+      return false;
+    }
+    if (!inCell()) {
+      return true;
+    }
+    return leaveCell(log);
+  }
+  log("breakOut: the rescue did not finish in 180s");
+  return false;
 }
 
 // src/bot/api/ai/quests/defs/princeali/key.ts
@@ -45352,10 +45517,11 @@ function decide11(snap) {
   if (stage === undefined) {
     return { kind: "wait", reason: "Prince Ali Rescue journal stage unavailable" };
   }
-  if (!snap.bankKnown) {
+  const kitInHand = stage >= PRINCE_STAGE.GUARD_DRUNK && jailbreakKitReady(snap);
+  if (!snap.bankKnown && !kitInHand) {
     return scanBank2();
   }
-  if (stage < PRINCE_STAGE.SAVED) {
+  if (stage < PRINCE_STAGE.SAVED && !kitInHand) {
     const purse = sourceCoins(snap, PURSE_FLOOR, PURSE_TOP);
     if (purse) {
       return purse;
@@ -45379,6 +45545,9 @@ function decide11(snap) {
     case PRINCE_STAGE.PREP_FINISHED:
     case PRINCE_STAGE.GUARD_DRUNK:
     case PRINCE_STAGE.TIED_KELI:
+      if (kitInHand) {
+        return decideJailbreak(snap);
+      }
       return prepLeg(snap) ?? decideJailbreak(snap);
     case PRINCE_STAGE.SAVED:
       return { kind: "talk", stop: HASSAN_REWARD };

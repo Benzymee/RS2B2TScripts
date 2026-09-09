@@ -343,7 +343,7 @@ var NAV_SETTINGS = {
     default: false,
     label: "Nav teleports",
     group: "Routing",
-    help: "When on, world walks may inject spell/jewellery teleport edges (runes or charged jewellery " + "in inventory). Off by default so combat/escape law kits are not spent as routing hops. " + "Per-walk override: walkTo({ useTeleportCatalog: true }) or NAV_PURE_WALK to force off. " + "URL: ?Global.navTeleports=true."
+    help: "When on, world walks may inject spell/jewellery teleport edges. " + "AIOQuester withdraws banked teleport runes when the pack has room. " + "Off by default so combat/escape law kits are not spent as routing hops. " + "Per-walk override: walkTo({ useTeleportCatalog: true }) or NAV_PURE_WALK to force off. " + "URL: ?Global.navTeleports=true."
   },
   navPathStallTicks: {
     type: "number",
@@ -36877,6 +36877,67 @@ class NavigatorImpl {
 }
 var Navigator = new NavigatorImpl;
 
+// src/bot/api/bank/BankMemory.ts
+class BankMemoryImpl {
+  byName = new Map;
+  byId = new Map;
+  display = new Map;
+  seen = false;
+  reset() {
+    this.byName = new Map;
+    this.byId = new Map;
+    this.display = new Map;
+    this.seen = false;
+  }
+  known() {
+    return this.seen;
+  }
+  size() {
+    return this.byName.size;
+  }
+  capture(items) {
+    const byName = new Map;
+    const byId = new Map;
+    const display = new Map;
+    for (const item of items) {
+      if (item.name) {
+        const key = item.name.toLowerCase();
+        byName.set(key, (byName.get(key) ?? 0) + item.count);
+        display.set(key, item.name);
+      }
+      byId.set(item.id, (byId.get(item.id) ?? 0) + item.count);
+    }
+    this.byName = byName;
+    this.byId = byId;
+    this.display = display;
+    this.seen = true;
+  }
+  count(name) {
+    return this.seen ? this.byName.get(name.toLowerCase()) ?? 0 : 0;
+  }
+  countById(id) {
+    return this.seen ? this.byId.get(id) ?? 0 : 0;
+  }
+  names() {
+    return this.byName;
+  }
+  ids() {
+    return this.byId;
+  }
+  asWalkRecord() {
+    const out = {};
+    for (const [key, count] of this.byName) {
+      out[key] = count;
+      const shown = this.display.get(key);
+      if (shown) {
+        out[shown] = count;
+      }
+    }
+    return out;
+  }
+}
+var BankMemory = new BankMemoryImpl;
+
 // src/bot/event/webwalk/pathFollowPolicy.ts
 var DEFAULT_PATH_STALL_TICKS = 5;
 var DEFAULT_PATH_DEVIATION_CHEBYSHEV = 10;
@@ -38769,17 +38830,14 @@ ${formatHops(hops)}`);
     if (this.walkBankItemCounts && Object.keys(this.walkBankItemCounts).length > 0) {
       return this.walkBankItemCounts;
     }
-    if (!Bank.isOpen()) {
-      return null;
+    if (Bank.isOpen()) {
+      BankMemory.capture(Bank.items());
+      return BankMemory.asWalkRecord();
     }
-    const out = {};
-    for (const item of Bank.items()) {
-      if (!item.name) {
-        continue;
-      }
-      out[item.name] = (out[item.name] ?? 0) + item.count;
+    if (BankMemory.known()) {
+      return BankMemory.asWalkRecord();
     }
-    return out;
+    return null;
   }
   async requestPath(from, to, maxExpansions, stateOverride) {
     let result = null;
@@ -40028,7 +40086,7 @@ function bestOpIndex(ops) {
 
 // src/bot/api/ai/quests/engine/universalGather.ts
 var ANCHORS = {
-  PEKSA_HELMET_SHOP: { npc: "Peksa", anchor: new Tile(3075, 3440, 0) },
+  PEKSA_HELMET_SHOP: { npc: "Peksa", anchor: new Tile(3075, 3430, 0) },
   HORVIK_ARMOUR_SHOP: { npc: "Horvik", anchor: new Tile(3229, 3436, 0) },
   WAYNE_CHAINS: { npc: "Wayne", anchor: new Tile(2972, 3312, 0) },
   FALADOR_GEN_STORE: { npc: "Shop keeper", anchor: new Tile(2957, 3383, 0) },
@@ -47730,6 +47788,52 @@ function floatWithdraw(inv, bank, name, target) {
 function coinFloatWithdraw(inv, bank, float) {
   return floatWithdraw(inv, bank, "Coins", float);
 }
+function isAcquireStep(step) {
+  return step.kind === "buy" || step.kind === "grabGround" || step.kind === "pickLoc" || step.kind === "mineRock";
+}
+function isWalkStep(step) {
+  return isAcquireStep(step) || step.kind === "talk" || step.kind === "interactLoc" || step.kind === "useOn" || step.kind === "equip";
+}
+function shouldScanBankFirst(bankKnown, step, teleportsOn) {
+  if (bankKnown) {
+    return false;
+  }
+  if (isAcquireStep(step)) {
+    return true;
+  }
+  return teleportsOn && isWalkStep(step);
+}
+function acquireNeed(step, inv) {
+  const name = step.item;
+  if (!name) {
+    return null;
+  }
+  const have2 = inv.get(name.toLowerCase()) ?? 0;
+  if (step.kind === "buy") {
+    const qty = step.qty ?? 1;
+    return qty > have2 ? { name, qty: qty - have2 } : null;
+  }
+  if (step.kind === "grabGround" || step.kind === "pickLoc") {
+    return { name, qty: 1 };
+  }
+  if (step.kind === "mineRock") {
+    const qty = step.qty ?? 1;
+    return qty > have2 ? { name, qty: qty - have2 } : null;
+  }
+  return null;
+}
+function preferBankWithdraw(step, snap) {
+  if (!snap.bankKnown || !isAcquireStep(step)) {
+    return null;
+  }
+  const need = acquireNeed(step, snap.inv);
+  if (!need) {
+    return null;
+  }
+  const banked3 = snap.bank?.get(need.name.toLowerCase()) ?? 0;
+  const take = Math.min(need.qty, banked3);
+  return take > 0 ? { name: need.name, qty: take } : null;
+}
 
 // src/bot/api/ai/quests/exec/steps.ts
 var BANK_CANDIDATES = 6;
@@ -47939,8 +48043,15 @@ async function executeStep(step, hops, log) {
         return false;
       }
       if (!await Shop.open(step.shop.npc)) {
-        log(`buy: could not open ${step.shop.npc}'s shop near the anchor`);
-        return false;
+        const keeper = Npcs.query().name(step.shop.npc).action("Trade").nearest();
+        if (!keeper || !await Traversal.walkResilient(keeper.tile(), { radius: 1, attempts: 3, timeoutMs: 45000, log })) {
+          log(`buy: could not open ${step.shop.npc}'s shop near the anchor`);
+          return false;
+        }
+        if (!await Shop.open(step.shop.npc)) {
+          log(`buy: could not open ${step.shop.npc}'s shop near the anchor`);
+          return false;
+        }
       }
       await Shop.buy(step.item, step.qty);
       await Shop.close();
@@ -99100,6 +99211,65 @@ function defById(id) {
   return QUEST_DEFS.find((d) => d.record.id === id);
 }
 
+// src/bot/api/ai/quests/engine/navTeleportKit.ts
+var NAV_TELE_RUNES = [
+  { id: 563, name: "Law rune", qty: 15 },
+  { id: 556, name: "Air rune", qty: 50 },
+  { id: 554, name: "Fire rune", qty: 10 },
+  { id: 555, name: "Water rune", qty: 15 },
+  { id: 557, name: "Earth rune", qty: 10 }
+];
+var NAV_TELE_RUNE_NAMES = NAV_TELE_RUNES.map((r) => r.name.toLowerCase());
+var NAV_TELE_MAGIC_FLOOR = 25;
+var NAV_TELE_RESERVE_SLOTS = 6;
+function low(qty2) {
+  return Math.ceil(qty2 / 3);
+}
+function navTeleportWithdraw(snap, need) {
+  if (!need.teleportsOn || !snap.bankKnown || need.magic < NAV_TELE_MAGIC_FLOOR) {
+    return [];
+  }
+  const wanted = [];
+  for (const rune of NAV_TELE_RUNES) {
+    const have2 = heldId5(snap, rune.id);
+    if (have2 >= low(rune.qty)) {
+      continue;
+    }
+    const banked24 = bankedId4(snap, rune.id);
+    const take3 = Math.min(rune.qty - have2, banked24);
+    if (take3 <= 0) {
+      continue;
+    }
+    wanted.push({ name: rune.name, qty: take3, id: rune.id, held: have2 });
+  }
+  if (wanted.length === 0) {
+    return [];
+  }
+  const newTypes = wanted.filter((r) => r.held === 0).length;
+  const free = need.freeSlots;
+  if (free - newTypes < NAV_TELE_RESERVE_SLOTS) {
+    const topUp = wanted.filter((r) => r.held > 0);
+    return topUp.map(({ name, qty: qty2, id }) => ({ name, qty: qty2, id }));
+  }
+  return wanted.map(({ name, qty: qty2, id }) => ({ name, qty: qty2, id }));
+}
+function mergeWithdraw(step3, extras) {
+  if (step3.kind !== "withdraw" || extras.length === 0) {
+    return step3;
+  }
+  const items = step3.items.map((item2) => ({ ...item2 }));
+  for (const extra of extras) {
+    const i2 = items.findIndex((item2) => item2.id !== undefined && extra.id !== undefined && item2.id === extra.id || item2.name.toLowerCase() === extra.name.toLowerCase());
+    if (i2 >= 0) {
+      const cur = items[i2];
+      items[i2] = { ...cur, qty: Math.max(cur.qty, extra.qty), id: cur.id ?? extra.id };
+    } else {
+      items.push(extra);
+    }
+  }
+  return { ...step3, items };
+}
+
 // src/bot/api/ai/quests/engine/queue.ts
 function nextQuest(order, picked, elig, parked) {
   const ready = order.filter((id) => picked.has(id) && elig.get(id)?.status === "READY");
@@ -99240,6 +99410,7 @@ class QuestEngine {
   failStreak = 0;
   constructor(host2) {
     this.host = host2;
+    BankMemory.reset();
   }
   validate() {
     return !ChatDialog.canContinue() && Game.tile() !== null;
@@ -99348,7 +99519,8 @@ class QuestEngine {
       const keep = [
         ...module.record.items.map((i2) => i2.name.toLowerCase()),
         ...(module.tools ?? []).map((t) => t.toLowerCase()),
-        ...foodName3 ? [foodName3] : []
+        ...foodName3 ? [foodName3] : [],
+        ...Traversal.teleportsEnabled() ? NAV_TELE_RUNE_NAMES : []
       ];
       const spillover = depositPlan(snap.inv, keep);
       if (spillover.length === 0) {
@@ -99435,6 +99607,7 @@ class QuestEngine {
     } else {
       step3 = module.decide(snap);
     }
+    step3 = this.applySessionBank(step3, snap, module);
     const stepDesc = describeStep(step3);
     this.host.noteState(rows, id, stepDesc, this.noProgressCount, this.parked.size);
     const verbose = this.host.verbose();
@@ -99665,6 +99838,31 @@ class QuestEngine {
   nameOf(id, elig) {
     return elig.get(id)?.name ?? id;
   }
+  applySessionBank(step3, snap, module) {
+    const teleportsOn = Traversal.teleportsEnabled();
+    if (shouldScanBankFirst(this.bankKnown, step3, teleportsOn)) {
+      return { kind: "scanBank", bank: bankFor(module) };
+    }
+    const boxed = preferBankWithdraw(step3, snap);
+    if (boxed) {
+      return { kind: "withdraw", items: [boxed], bank: step3.kind === "buy" ? step3.bank : bankFor(module) };
+    }
+    const kit7 = navTeleportWithdraw(snap, {
+      magic: Skills.level("magic"),
+      teleportsOn,
+      freeSlots: snap.freeSlots ?? 0
+    });
+    if (kit7.length === 0) {
+      return step3;
+    }
+    if (step3.kind === "withdraw") {
+      return mergeWithdraw(step3, kit7);
+    }
+    if (step3.kind === "custom" || step3.kind === "wait" || step3.kind === "done" || step3.kind === "deposit") {
+      return step3;
+    }
+    return { kind: "withdraw", items: kit7, bank: bankFor(module) };
+  }
   async captureOpenBank() {
     if (!Bank.isOpen()) {
       return;
@@ -99766,18 +99964,24 @@ class QuestEngine {
     if (!Bank.isOpen() || !Bank.ready() && !acceptSettledEmpty) {
       return;
     }
+    const items = Bank.items();
     const next2 = new Map;
     const nextIds = new Map;
-    for (const item2 of Bank.items()) {
+    for (const item2 of items) {
       if (item2.name) {
         const key3 = item2.name.toLowerCase();
         next2.set(key3, (next2.get(key3) ?? 0) + item2.count);
       }
       nextIds.set(item2.id, (nextIds.get(item2.id) ?? 0) + item2.count);
     }
+    const firstLook = !this.bankKnown;
     this.lastBankCounts = next2;
     this.lastBankIdCounts = nextIds;
     this.bankKnown = true;
+    BankMemory.capture(items);
+    if (firstLook) {
+      this.host.log(`bank: remembered ${next2.size} item type(s) for this session`);
+    }
   }
 }
 
@@ -109183,8 +109387,8 @@ class AIOQuester extends TaskBot {
     if (this.qpAtStart === null && qp > 0) {
       this.qpAtStart = qp;
     }
-    const p = Paint.begin(ctx, { dock: "chatbox", accent: "#c8a2ff" });
-    p.title(`AIOQuester, ${this.status}`);
+    const p = Paint.begin(ctx, { dock: "chatbox", accent: "#ff8a8a" });
+    p.title(`Benny's Fixed AIO Quester, ${this.status}`);
     const tab = p.tabs("aio", ["Queue", "Current", "Blocked", "Session"]);
     if (tab === "Queue") {
       const sum = queueSummary(rows);

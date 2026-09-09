@@ -54831,6 +54831,24 @@ function isCannonRoom(t) {
   }
   return t.x >= 3022 && t.x <= 3024 && t.z >= 3513 && t.z <= 3516;
 }
+function isEastHall(t) {
+  if (t === null || t.level !== 1) {
+    return false;
+  }
+  return t.x >= 3025 && t.x <= 3027 && t.z >= 3512 && t.z <= 3516;
+}
+function canWalkToGrillLadder(t) {
+  if (t === null || t.level !== 1) {
+    return false;
+  }
+  if (chebyshev2(t, BKF_TILE.GRILL_LADDER_TOP) <= 1) {
+    return true;
+  }
+  if (isEastHall(t) || t.x >= 3025) {
+    return true;
+  }
+  return t.z <= 3512 && t.x >= 3020 && t.x <= 3024;
+}
 function doorHelpsToward(here2, door, dest) {
   return chebyshev2(door, dest) <= chebyshev2(here2, dest) || chebyshev2(here2, door) <= 4;
 }
@@ -54945,7 +54963,7 @@ async function openNearbyBarrier(log) {
     if (here2 !== null && t.level !== here2.level) {
       return false;
     }
-    return /^(sturdy door|door)$/i.test(l.name ?? "") && canUseLoc(l) && !isInteriorSideOfGuardDoor(here2, l);
+    return /door/i.test(l.name ?? "") && canUseLoc(l) && !isInteriorSideOfGuardDoor(here2, l);
   }).nearest();
   if (!door) {
     return false;
@@ -54985,11 +55003,11 @@ async function walkStayOnFloor(stand, log) {
       if (isInteriorSideOfGuardDoor(here2, l)) {
         return false;
       }
-      return /^(sturdy door|door)$/i.test(l.name ?? "") && doorHelpsToward(here2, t, floorStand);
+      return /door/i.test(l.name ?? "") && doorHelpsToward(here2, t, floorStand);
     }).nearest();
     if (door) {
       const t = door.tile();
-      if (chebyshev2(here2, t) > 1) {
+      if (here2 !== null && chebyshev2(here2, t) > 1) {
         await DirectNavigator.walkTo(t, 1, 8000);
       }
       log(`opening ${door.name ?? "door"} on this floor`);
@@ -55001,7 +55019,13 @@ async function walkStayOnFloor(stand, log) {
     const destReachable = Reachability.probeable(floorStand) && Reachability.canReach(floorStand, { adjacentOk: true, maxSteps: 64 });
     if (!destReachable) {
       log("ladder still behind a shut door on this floor");
-      await DirectNavigator.walkTo(floorStand, 1, 8000);
+      if (here2 !== null) {
+        const dx = Math.sign(floorStand.x - here2.x);
+        const dz = Math.sign(floorStand.z - here2.z);
+        if (dx !== 0 || dz !== 0) {
+          await DirectNavigator.walkTo({ x: here2.x + dx, z: here2.z + dz, level: here2.level }, 0, 4000);
+        }
+      }
       await Execution.delayTicks(1);
       continue;
     }
@@ -55084,17 +55108,18 @@ async function approachInside(dest, log) {
       await climbAt2(BKF_TILE.GRILL_LADDER_TOP, "Climb-down", log);
       return;
     }
-    if (here2.x <= 3018) {
+    if (canWalkToGrillLadder(here2)) {
       if (await openNearbyBarrier(log)) {
         return;
       }
-      await climbAt2(BKF_TILE.CANNON_UP, "Climb-up", log);
+      await walkStayOnFloor(BKF_TILE.GRILL_LADDER_TOP, log);
       return;
     }
+    log("this first-floor hall does not reach the grill, taking the cannon roof");
     if (await openNearbyBarrier(log)) {
       return;
     }
-    await walkStayOnFloor(BKF_TILE.GRILL_LADDER_TOP, log);
+    await climbAt2(BKF_TILE.CANNON_UP, "Climb-up", log);
     return;
   }
   if (toHole && here2.level === 0 && (locNamedReachable("Grill", "Listen-at", 12) !== null || chebyshev2(here2, BKF_TILE.GRILL_LADDER_BOTTOM) <= 6)) {

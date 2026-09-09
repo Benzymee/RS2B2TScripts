@@ -1,5 +1,5 @@
 <p align="center"><u><b>ANY PROBLEMS/QUESTIONS ADD .benzyme ON DISCORD</b></u></p>
-<p align="center"><u><b>COPY YOUR CLIENT LOG AND SEND IT TO ME AS WELL AS A SCREENSHOT OF WHERE YOU WERE IN THE GAME WHEN IT HAPPENED</b></u></p>
+<p align="center"><u style="text-decoration: underline;"><b>COPY YOUR CLIENT LOG AND SEND IT TO ME AS WELL AS A SCREENSHOT OF WHERE YOU WERE IN THE GAME WHEN IT HAPPENED</b></u></p>
 
 <p align="center">
   <a href="https://rs2b2t.com/discord" rel="noopener noreferrer" target="_blank">
@@ -19,11 +19,11 @@
 
 Most scripts dismiss the welcome screen on start.
 
-**Mule note:** a few scripts trade to a hardcoded player name (`MULE_NAME` near the top of the file). Change that name before you run mule mode, or the trade will sit there waiting for the wrong player.
+**Mule note:** a few scripts trade to a hardcoded player name (`MULE_NAME` near the top of the file). Change that name before you run mule mode, or the trade will sit there waiting for the wrong p[...]
 
 ## Scripts: COPY THE LINK INTO THE BOT URL SPOT WHERE YOU CHOOSE A SCRIPT AND CLICK LOAD TO LOAD THE SCRIPT
 
-**AIOQuester** (`AIOQuester.js`). MAY HAVE BUGS: A somewhat attempted fix of the original script meaning it should run better and gather more quest items/finish quests properly. Completes Lost City 20x, Reno, and part of MM1.
+**AIOQuester** (`AIOQuester.js`). MAY HAVE BUGS: A somewhat attempted fix of the original script meaning it should run better and gather more quest items/finish quests properly. Completes Lost Cit[...]
 
 https://benzymee.github.io/RS2B2TScripts/AIOQuester.js
 
@@ -43,7 +43,7 @@ https://benzymee.github.io/RS2B2TScripts/BackyardYews.js
 
 https://benzymee.github.io/RS2B2TScripts/BankCleaner.js
 
-**BenzymeGoblinKiller** (`BenzymeGoblinKiller.js`). Kills Lumbridge oak goblins. Banks at Al Kharid. Hops to giant rats if more than 5 players fight goblins. Optional bronze dagger, loadout, and Steel Scim.
+**BenzymeGoblinKiller** (`BenzymeGoblinKiller.js`). Kills Lumbridge oak goblins. Banks at Al Kharid. Hops to giant rats if more than 5 players fight goblins. Optional bronze dagger, loadout, and S[...]
 
 https://benzymee.github.io/RS2B2TScripts/BenzymeGoblinKiller.js
 
@@ -55,7 +55,7 @@ https://benzymee.github.io/RS2B2TScripts/BowTradeAcceptor.js
 
 https://benzymee.github.io/RS2B2TScripts/BowTrader.js
 
-**CamelotUnicornHunter** (`CamelotUnicornHunter.js`). Hunts Unicorns around Camelot and Seers Village. Takes Unicorn horns. Banks at the nearer of Seers or Catherby. Optional dragon dagger Puncture switch.
+**CamelotUnicornHunter** (`CamelotUnicornHunter.js`). Hunts Unicorns around Camelot and Seers Village. Takes Unicorn horns. Banks at the nearer of Seers or Catherby. Optional dragon dagger Punctur[...]
 
 https://benzymee.github.io/RS2B2TScripts/CamelotUnicornHunter.js
 
@@ -91,7 +91,7 @@ https://benzymee.github.io/RS2B2TScripts/FaladorTreeFletcher.js
 
 https://benzymee.github.io/RS2B2TScripts/InventoryAlcher.js
 
-**KnowledgeGatherer** (`KnowledgeGatherer.js`). Woodcutting, mining, fishing, and crafting from BotKnowledge. Picks the best camp your level unlocks, gathers, and banks. Buys tools. Optional Nurmof pie.
+**KnowledgeGatherer** (`KnowledgeGatherer.js`). Woodcutting, mining, fishing, and crafting from BotKnowledge. Picks the best camp your level unlocks, gathers, and banks. Buys tools. Optional Nurmo[...]
 
 https://benzymee.github.io/RS2B2TScripts/KnowledgeGatherer.js
 
@@ -99,7 +99,7 @@ https://benzymee.github.io/RS2B2TScripts/KnowledgeGatherer.js
 
 https://benzymee.github.io/RS2B2TScripts/MapleTreeFletcher.js
 
-**NatureRuneCrafter** (`NatureRuneCrafter.js`). Crafts Nature runes via Jiminua's Jungle Store. Sells noted Rune essence, buys it back unnoted, then walks to the Mysterious ruins with a Nature talisman.
+**NatureRuneCrafter** (`NatureRuneCrafter.js`). Crafts Nature runes via Jiminua's Jungle Store. Sells noted Rune essence, buys it back unnoted, then walks to the Mysterious ruins with a Nature ta[...]
 
 https://benzymee.github.io/RS2B2TScripts/NatureRuneCrafter.js
 
@@ -111,7 +111,7 @@ https://benzymee.github.io/RS2B2TScripts/OakTreeFletcher.js
 
 https://benzymee.github.io/RS2B2TScripts/OakTreeFletcherSell.js
 
-**ProgressiveChopper** (`ProgressiveChopper.js`). Chops Falador trees, then oaks, willows, Seers maples, and Falador yews as woodcutting and fletching unlock each camp. Picks up the Lumbridge knife.
+**ProgressiveChopper** (`ProgressiveChopper.js`). Chops Falador trees, then oaks, willows, Seers maples, and Falador yews as woodcutting and fletching unlock each camp. Picks up the Lumbridge kni[...]
 
 https://benzymee.github.io/RS2B2TScripts/ProgressiveChopper.js
 
@@ -119,6 +119,6 @@ https://benzymee.github.io/RS2B2TScripts/ProgressiveChopper.js
 
 https://benzymee.github.io/RS2B2TScripts/WillowTreeFletcher.js
 
-**ZanarisOtherworldlyBeingKiller** (`ZanarisOtherworldlyBeingKiller.js`). Kills Otherworldly beings south of the Zanaris fairy bank. Right-clicks Bank on the fairy bankers. Needs Lost City. Optional dragon scimitar.
+**ZanarisOtherworldlyBeingKiller** (`ZanarisOtherworldlyBeingKiller.js`). Kills Otherworldly beings south of the Zanaris fairy bank. Right-clicks Bank on the fairy bankers. Needs Lost City. Optio[...]
 
 https://benzymee.github.io/RS2B2TScripts/ZanarisOtherworldlyBeingKiller.js

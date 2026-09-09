@@ -54536,13 +54536,23 @@ function locNamed(name, op, within3) {
 function locNamedReachable(name, op, within3) {
   return Locs.query().name(name).action(op).within(within3).where(canUseLoc).nearest();
 }
+function isCannonRoom(t) {
+  if (t === null || t.level !== 1) {
+    return false;
+  }
+  return t.x >= 3022 && t.x <= 3024 && t.z >= 3513 && t.z <= 3516;
+}
 function grillReady() {
   const here2 = Game.tile();
-  if (isSecretPassageLanding(here2)) {
+  if (isSecretPassageLanding(here2) || isSecretLadderTop(here2) || isCannonRoom(here2)) {
     return null;
   }
-  const grill = locNamed("Grill", "Listen-at", 6);
-  if (!grill || !canUseLoc(grill) || chebyshev2(grill.tile(), BKF_TILE.GRILL) > 3) {
+  const grill = locNamed("Grill", "Listen-at", 8);
+  if (!grill || !canUseLoc(grill)) {
+    return null;
+  }
+  const t = grill.tile();
+  if (!isBlackKnightFortressInterior(t)) {
     return null;
   }
   return grill;
@@ -54720,8 +54730,9 @@ async function climbAt2(stand, op, log) {
       }
     }
   }
-  const ladder = Locs.query().name("Ladder").action(op).within(6).where((l) => chebyshev2(l.tile(), stand) <= 2).nearest() ?? locNamedReachable("Ladder", op, 6);
+  const ladder = Locs.query().name("Ladder").action(op).within(6).where((l) => chebyshev2(l.tile(), stand) <= 1).nearest();
   if (!ladder) {
+    log(`no '${op}' ladder at (${stand.x},${stand.z},L${stand.level})`);
     return false;
   }
   const fromLevel = Game.tile()?.level;
@@ -54754,7 +54765,12 @@ async function approachInside(dest, log) {
     return;
   }
   if (toGrill && here2.level === 2) {
+    if (here2.x >= 3024) {
+      await climbAt2(BKF_TILE.EAST_ROOF, "Climb-down", log);
+      return;
+    }
     if (here2.x >= 3022) {
+      log("on the roof above the cannons, taking the east ladder down");
       await climbAt2(BKF_TILE.EAST_ROOF, "Climb-down", log);
       return;
     }
@@ -54762,6 +54778,11 @@ async function approachInside(dest, log) {
     return;
   }
   if (toGrill && here2.level === 1) {
+    if (isCannonRoom(here2)) {
+      log("cannon room, climbing to the roof to take the east ladder");
+      await climbAt2(BKF_TILE.CANNON_UP, "Climb-up", log);
+      return;
+    }
     if (chebyshev2(here2, BKF_TILE.GRILL_LADDER_TOP) <= 1) {
       await climbAt2(BKF_TILE.GRILL_LADDER_TOP, "Climb-down", log);
       return;
@@ -54776,7 +54797,7 @@ async function approachInside(dest, log) {
     if (await openNearbyBarrier(log)) {
       return;
     }
-    await DirectNavigator.walkTo(BKF_TILE.GRILL_LADDER_TOP, 1, 8000);
+    await walkStayOnFloor(BKF_TILE.GRILL_LADDER_TOP, log);
     return;
   }
   if (toHole && here2.level === 0 && (locNamedReachable("Grill", "Listen-at", 12) !== null || chebyshev2(here2, BKF_TILE.GRILL_LADDER_BOTTOM) <= 6)) {

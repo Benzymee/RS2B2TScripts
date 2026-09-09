@@ -54740,6 +54740,7 @@ var BKF_TILE = {
   EAST_HALL_DOOR: new Tile(3025, 3511, 1),
   GRILL_LADDER_TOP: new Tile(3021, 3511, 1),
   GRILL_LADDER_BOTTOM: new Tile(3021, 3512, 0),
+  GRILL_LADDER_LOC: new Tile(3021, 3510, 0),
   GRILL: new Tile(3025, 3508, 0),
   HOLE: new Tile(3031, 3508, 1),
   CABBAGE_FIELD: new Tile(3053, 3306, 0)
@@ -54783,6 +54784,15 @@ function isInteriorSideOfGuardDoor(here2, door) {
 }
 function chebyshev2(a, b) {
   return Math.max(Math.abs(a.x - b.x), Math.abs(a.z - b.z));
+}
+function ladderLocAtStand(stand, loc) {
+  return chebyshev2(stand, loc) <= 2;
+}
+function isGrillPocket(t) {
+  if (t === null || t.level !== 0) {
+    return false;
+  }
+  return t.x >= 3020 && t.x <= 3027 && t.z >= 3506 && t.z <= 3513;
 }
 function canUseLoc(loc) {
   try {
@@ -54994,6 +55004,14 @@ async function walkStayOnFloor(stand, log) {
     if (here2 !== null && here2.level === floorStand.level && chebyshev2(here2, floorStand) <= 1) {
       return true;
     }
+    const ladder = Locs.query().name("Ladder").within(10).where((l) => here2 !== null && l.tile().level === here2.level && ladderLocAtStand(floorStand, l.tile())).nearest();
+    if (ladder && canUseLoc(ladder)) {
+      return true;
+    }
+    if (ladder && here2 !== null) {
+      await DirectNavigator.walkTo(ladder.tile(), 1, 8000);
+      continue;
+    }
     await handleFortressTalk(log);
     const destReachable = here2 !== null && (() => {
       try {
@@ -55045,7 +55063,7 @@ async function climbAt2(stand, op, log) {
   if (here2 === null) {
     return false;
   }
-  const findLadder = () => Locs.query().name("Ladder").action(op).within(8).where((l) => chebyshev2(l.tile(), stand) <= 1).nearest();
+  const findLadder = () => Locs.query().name("Ladder").action(op).within(10).where((l) => ladderLocAtStand(stand, l.tile())).nearest();
   let ladder = findLadder();
   if (!(ladder && canUseLoc(ladder))) {
     if (chebyshev2(here2, stand) > 1 || here2.level !== stand.level) {
@@ -55129,8 +55147,17 @@ async function approachInside(dest, log) {
     await climbAt2(BKF_TILE.CANNON_UP, "Climb-up", log);
     return;
   }
-  if (toHole && here2.level === 0 && (locNamedReachable("Grill", "Listen-at", 12) !== null || chebyshev2(here2, BKF_TILE.GRILL_LADDER_BOTTOM) <= 6)) {
+  if (toHole && (isGrillPocket(here2) || here2.level === 0 && (locNamedReachable("Grill", "Listen-at", 12) !== null || chebyshev2(here2, BKF_TILE.GRILL_LADDER_BOTTOM) <= 6))) {
+    log("climbing back up the grill ladder");
     await climbAt2(BKF_TILE.GRILL_LADDER_BOTTOM, "Climb-up", log);
+    return;
+  }
+  if (toHole && here2.level === 1) {
+    log("walking the L-shaped landing to the cabbage hole");
+    if (await openNearbyBarrier(log)) {
+      return;
+    }
+    await DirectNavigator.walkTo(BKF_TILE.HOLE, 1, 8000);
     return;
   }
   if (await openNearbyBarrier(log)) {

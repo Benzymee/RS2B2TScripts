@@ -34442,6 +34442,12 @@ var BANK_LOCATIONS = [
       op: "Bank",
       openFirst: { name: "Closed chest", op: "Open" }
     }
+  },
+  {
+    name: "Zanaris",
+    tile: new Tile(3153, 9576, 0),
+    requires: { quest: "Lost City" },
+    npcAccess: { name: "Banker", op: "Bank", choose: "I'd like to access my bank account" }
   }
 ];
 function approachOf(bank) {
@@ -41037,7 +41043,7 @@ var GroundItems = {
 };
 
 // src/bot/data/miningRocks.ts
-var ROCK_TYPES2 = {
+var ROCK_TYPES = {
   Clay: [2108, 2109],
   Copper: [2090, 2091],
   Tin: [2094, 2095],
@@ -41049,11 +41055,11 @@ var ROCK_TYPES2 = {
   Adamantite: [2104, 2105],
   Runite: [2106, 2107]
 };
-var QUEST_ROCK_TYPES2 = {
+var QUEST_ROCK_TYPES = {
   Blurite: [2110],
   Limestone: [4027, 4028, 4029]
 };
-var ROCK_OPTIONS = Object.keys(ROCK_TYPES2);
+var ROCK_OPTIONS = Object.keys(ROCK_TYPES);
 var GAS_ROCK_IDS = new Set([
   2119,
   2120,
@@ -41683,7 +41689,7 @@ function miningInterrupted() {
   return EventSignal.pending() || ChatDialog.canContinue() || Game.inCombat() || liveUsablePickaxe() === null;
 }
 function nearbyRock(type) {
-  const ids = new Set(ROCK_TYPES2[type]);
+  const ids = new Set(ROCK_TYPES[type]);
   return Locs.query().where((loc) => ids.has(loc.id) && Reachability.canReach(loc.tile(), { adjacentOk: true })).action("Mine").within(20).nearest();
 }
 async function mineOne(type, item, log) {
@@ -42371,7 +42377,7 @@ async function useOnLoc(itemId, loc, prefer, expect, log) {
 }
 
 // src/bot/api/ai/quests/defs/knightssword/dungeon.ts
-var BLURITE_IDS = new Set(QUEST_ROCK_TYPES2.Blurite);
+var BLURITE_IDS = new Set(QUEST_ROCK_TYPES.Blurite);
 var MINE_ATTEMPTS = 30;
 async function nearestReachableRock(log) {
   const here = Game.tile();

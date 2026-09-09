@@ -39,7 +39,7 @@ const {
 } = abi;
 
 const SCRIPT_NAME = 'InventoryAlcher';
-const SCRIPT_VERSION = '1.2.4';
+const SCRIPT_VERSION = '1.2.5';
 const CURRENT_TILE_BTN_ID = 'inventory-alcher-current-tile';
 
 const WELCOME_SCREEN_ID = 5993;
@@ -450,11 +450,6 @@ function dialogHaystack() {
         if (typeof reader?.chatModalTexts === 'function') {
             parts.push(...(reader.chatModalTexts() ?? []));
         }
-        if (typeof reader?.chat === 'function') {
-            for (const line of reader.chat(20) ?? []) {
-                parts.push(line?.text ?? line ?? '');
-            }
-        }
     } catch {
         /* ABI */
     }
@@ -466,6 +461,18 @@ function dialogHaystack() {
         }
     }
     return parts.filter(Boolean).join(' ');
+}
+
+function gameChatLines() {
+    try {
+        const reader = welcomeHost()?.reader;
+        if (typeof reader?.chat === 'function') {
+            return reader.chat(20) ?? [];
+        }
+    } catch {
+        /* ABI */
+    }
+    return [];
 }
 
 function npcOps(npc) {
@@ -1210,6 +1217,8 @@ class InventoryAlcher extends LoopingBot {
     kittenExpected = false;
     kittenRanOff = false;
     varpLive = false;
+    kittenChatPrimed = false;
+    seenKittenChat = new Set();
 
     async onStart() {
         await Execution.delayUntil(() => Game.ingame() && Game.tile() !== null, 0);
@@ -1230,6 +1239,8 @@ class InventoryAlcher extends LoopingBot {
         this.kittenExpected = !!(packPetKitten() || findKittenNpc());
         this.kittenRanOff = false;
         this.varpLive = false;
+        this.kittenChatPrimed = false;
+        this.seenKittenChat = new Set();
         this.lastFedAt = Date.now();
         this.lastPlayedAt = 0;
         this.syncSettings();
@@ -1439,11 +1450,35 @@ class InventoryAlcher extends LoopingBot {
         }
         this.kittenChatHooked = true;
         this.on('chat.message', e =>
-            this.noteKittenChat(e?.text ?? e?.message ?? '', e?.username ?? e?.type ?? '')
+            this.noteKittenChat(e?.text ?? e?.message ?? '', e?.username ?? '', true)
         );
     }
 
-    noteKittenChat(text, username = '') {
+    scanNewGameChat() {
+        const lines = gameChatLines();
+        if (!this.kittenChatPrimed) {
+            for (const line of lines) {
+                const sig = `${line?.username ?? ''}|${line?.text ?? line ?? ''}`;
+                this.seenKittenChat.add(sig);
+            }
+            this.kittenChatPrimed = true;
+            return;
+        }
+        for (const line of lines) {
+            const text = String(line?.text ?? line ?? '');
+            const sig = `${line?.username ?? ''}|${text}`;
+            if (!text || this.seenKittenChat.has(sig)) {
+                continue;
+            }
+            this.seenKittenChat.add(sig);
+            this.noteKittenChat(text, line?.username ?? '', true);
+        }
+        if (this.seenKittenChat.size > 80) {
+            this.seenKittenChat = new Set([...this.seenKittenChat].slice(-40));
+        }
+    }
+
+    noteKittenChat(text, username = '', timers = false) {
         const t = String(text ?? '');
         if (!t) {
             return;
@@ -1469,11 +1504,14 @@ class InventoryAlcher extends LoopingBot {
             this.kittenWantsPlay = true;
             this.kittenExpected = true;
         }
+        if (!timers) {
+            return;
+        }
         if (KITTEN_CHAT.fed.test(t)) {
             this.kittenHungry = false;
             this.lastFedAt = Date.now();
         }
-        if (KITTEN_CHAT.played.test(t)) {
+        if (KITTEN_CHAT.played.test(t) || /softly stroke your/i.test(t)) {
             this.kittenWantsPlay = false;
             this.lastPlayedAt = Date.now();
         }
@@ -1571,6 +1609,7 @@ class InventoryAlcher extends LoopingBot {
     async careForKitten() {
         this.hookKittenChat();
         this.noteKittenChat(dialogHaystack());
+        this.scanNewGameChat();
 
         const catNpc = findCatNpc();
         const heldCat = Inventory.items().find(i => isPetCatItem(i.name));
@@ -1817,6 +1856,7 @@ class InventoryAlcher extends LoopingBot {
 
         if (ChatDialog.canContinue()) {
             this.noteKittenChat(dialogHaystack());
+            this.scanNewGameChat();
             this.status = 'continue dialog';
             await ChatDialog.continue();
             if (!(this.raiseKitten && (this.kittenWantsPlay || this.kittenHungry))) {
@@ -1983,6 +2023,7 @@ class InventoryAlcher extends LoopingBot {
         try {
             this.raiseKitten = this.settings?.bool?.('raiseKitten', false) ?? this.raiseKitten;
             this.noteKittenChat(dialogHaystack());
+            this.scanNewGameChat();
         } catch {
             /* paint must not throw */
         }

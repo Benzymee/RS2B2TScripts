@@ -54445,6 +54445,10 @@ var BKF_TILE = {
   SECRET_WALL_OUT: new Tile(3016, 3516, 0),
   SECRET_WALL_IN: new Tile(3016, 3517, 0),
   SECRET_LADDER: new Tile(3015, 3518, 0),
+  ROOF_LADDER: new Tile(3015, 3518, 1),
+  SOUTH_ROOF: new Tile(3016, 3516, 2),
+  CANNON_UP: new Tile(3023, 3514, 1),
+  EAST_ROOF: new Tile(3025, 3514, 2),
   GRILL_LADDER_TOP: new Tile(3021, 3511, 1),
   GRILL_LADDER_BOTTOM: new Tile(3021, 3512, 0),
   GRILL: new Tile(3025, 3508, 0),
@@ -54471,6 +54475,12 @@ function isBlackKnightFortressInterior(t) {
 }
 function isSecretPassageLanding(t) {
   if (t === null || t.level !== 0) {
+    return false;
+  }
+  return t.x >= 3014 && t.x <= 3017 && t.z >= 3517 && t.z <= 3521;
+}
+function isSecretLadderTop(t) {
+  if (t === null || t.level !== 1) {
     return false;
   }
   return t.x >= 3014 && t.x <= 3017 && t.z >= 3517 && t.z <= 3521;
@@ -54595,7 +54605,7 @@ async function climbToward(dest, log) {
   } else if (here2.level > dest.level) {
     op = "Climb-down";
   } else if (dest.x === BKF_TILE.GRILL.x) {
-    op = "Climb-up";
+    op = here2.level < 2 ? "Climb-up" : "Climb-down";
   }
   if (op === null) {
     return true;
@@ -54684,7 +54694,7 @@ async function walkStayOnFloor(stand, log) {
     }
     const destReachable = Reachability.probeable(floorStand) && Reachability.canReach(floorStand, { adjacentOk: true, maxSteps: 64 });
     if (!destReachable) {
-      log("grill ladder still behind a shut door on this floor");
+      log("ladder still behind a shut door on this floor");
       await Execution.delayTicks(2);
       continue;
     }
@@ -54738,12 +54748,35 @@ async function approachInside(dest, log) {
     await climbAt2(BKF_TILE.SECRET_LADDER, "Climb-up", log);
     return;
   }
+  if (isSecretLadderTop(here2)) {
+    log("this first-floor room does not reach the grill, climbing to the roof");
+    await climbAt2(BKF_TILE.ROOF_LADDER, "Climb-up", log);
+    return;
+  }
+  if (toGrill && here2.level === 2) {
+    if (here2.x >= 3022) {
+      await climbAt2(BKF_TILE.EAST_ROOF, "Climb-down", log);
+      return;
+    }
+    await climbAt2(BKF_TILE.SOUTH_ROOF, "Climb-down", log);
+    return;
+  }
   if (toGrill && here2.level === 1) {
     if (chebyshev2(here2, BKF_TILE.GRILL_LADDER_TOP) <= 1) {
       await climbAt2(BKF_TILE.GRILL_LADDER_TOP, "Climb-down", log);
       return;
     }
-    await walkStayOnFloor(BKF_TILE.GRILL_LADDER_TOP, log);
+    if (here2.x <= 3018) {
+      if (await openNearbyBarrier(log)) {
+        return;
+      }
+      await climbAt2(BKF_TILE.CANNON_UP, "Climb-up", log);
+      return;
+    }
+    if (await openNearbyBarrier(log)) {
+      return;
+    }
+    await DirectNavigator.walkTo(BKF_TILE.GRILL_LADDER_TOP, 1, 8000);
     return;
   }
   if (toHole && here2.level === 0 && (locNamedReachable("Grill", "Listen-at", 12) !== null || chebyshev2(here2, BKF_TILE.GRILL_LADDER_BOTTOM) <= 6)) {

@@ -44234,6 +44234,27 @@ var ernest = {
   decide: decide8
 };
 
+// src/bot/api/ai/quests/engine/types.ts
+function hasFlag(progress, name) {
+  return progress?.flags.has(name) ?? false;
+}
+function flagValue(progress, name) {
+  const prefix = name + ":";
+  for (const flag of progress?.flags ?? []) {
+    if (flag.startsWith(prefix)) {
+      const value = Number(flag.slice(prefix.length));
+      return Number.isFinite(value) ? value : undefined;
+    }
+  }
+  return;
+}
+function heldId4(snap, id) {
+  return snap.invIds?.get(id) ?? 0;
+}
+function bankedId3(snap, id) {
+  return snap.bankKnown ? snap.bankIds?.get(id) ?? 0 : 0;
+}
+
 // src/bot/api/ai/quests/defs/hetty.ts
 var HETTY = {
   npc: "Hetty",
@@ -44248,8 +44269,28 @@ var ONION_FIELD = new Tile(2950, 3251, 0);
 var BETTY_SHOP = { npc: "Betty", anchor: new Tile(3011, 3260, 0) };
 var WYDIN_SHOP = { npc: "Wydin", anchor: new Tile(3014, 3204, 0) };
 var DRAYNOR_BANK = new Tile(3093, 3243, 0);
+var RECORD = QUESTS.find((r) => r.id === "hetty");
 var RATS_TAIL = "Rat's tail";
+var TAIL_ID = 300;
+var TAIL_RADIUS = 12;
 var INGREDIENTS = [RATS_TAIL.toLowerCase(), "onion", "eye of newt", "burnt meat"];
+function foldItemName(name) {
+  return name.trim().toLowerCase().replace(/['’`]/g, "");
+}
+function isRatsTailName(name) {
+  return name !== null && name !== undefined && foldItemName(name) === "rats tail";
+}
+function holdingRatsTail(snap) {
+  if (heldId4(snap, TAIL_ID) > 0) {
+    return true;
+  }
+  for (const [key, qty] of snap.inv) {
+    if (qty > 0 && isRatsTailName(key)) {
+      return true;
+    }
+  }
+  return false;
+}
 function gpShort(snap, estGp) {
   return Math.max(0, estGp - (snap.inv.get("coins") ?? 0) - snap.bankCoins);
 }
@@ -44266,34 +44307,58 @@ var gatherOnion = (snap) => startedOr(snap, { kind: "pickLoc", loc: "Onion", op:
 var gatherEyeOfNewt = (snap) => startedOr(snap, gpShort(snap, 20) > 0 ? { kind: "wait", reason: "need ~20 gp for Eye of newt" } : { kind: "buy", item: "Eye of newt", qty: 1, shop: BETTY_SHOP, estGp: 20 });
 var gatherRatsTail = (snap) => startedOr(snap, { kind: "custom", name: "kill a rat for its tail", run: killRatGrabTail });
 var gatherBurntMeat = (snap) => startedOr(snap, snap.inv.has("cooked meat") || snap.inv.has("raw beef") ? { kind: "custom", name: "burn the meat on the range", run: burnMeat } : gpShort(snap, 20) > 0 ? { kind: "wait", reason: "need ~20 gp for Raw beef" } : { kind: "buy", item: "Raw beef", qty: 2, shop: WYDIN_SHOP, estGp: 20 });
-async function killRatGrabTail(log) {
-  if (Inventory.contains(RATS_TAIL)) {
+function tailOnGround() {
+  return GroundItems.query().where((item) => item.id === TAIL_ID || isRatsTailName(item.name)).action("Take").within(TAIL_RADIUS).nearest();
+}
+async function takeDroppedTail(log) {
+  if (Inventory.countById(TAIL_ID) > 0) {
     return true;
   }
-  const drop = GroundItems.query().name(RATS_TAIL).within(8).nearest();
-  if (drop) {
-    log(`picking up the dropped ${RATS_TAIL}`);
-    if (!await drop.interact("Take")) {
-      return false;
-    }
-    return Execution.delayUntil(() => Inventory.contains(RATS_TAIL), 6000);
+  const drop = tailOnGround();
+  if (!drop) {
+    return false;
+  }
+  log(`picking up the dropped ${drop.name ?? RATS_TAIL}`);
+  if (drop.distance() > 1 && !await Traversal.walkResilient(drop.tile(), { radius: 1, attempts: 2, timeoutMs: 30000, log })) {
+    return false;
+  }
+  const before = Inventory.countById(TAIL_ID);
+  const again = tailOnGround();
+  if (!again) {
+    return Inventory.countById(TAIL_ID) > before;
+  }
+  if (!await again.interact("Take")) {
+    return false;
+  }
+  return Execution.delayUntil(() => Inventory.countById(TAIL_ID) > before, 6000);
+}
+async function killRatGrabTail(log) {
+  if (Inventory.countById(TAIL_ID) > 0) {
+    return true;
+  }
+  if (await takeDroppedTail(log)) {
+    return true;
   }
   log("walking to the Rimmington rats to get a tail");
   if (!await Traversal.walkResilient(RATS, { radius: 5, attempts: 3, timeoutMs: 120000, log })) {
     return false;
+  }
+  if (await takeDroppedTail(log)) {
+    return true;
   }
   const rat = Npcs.query().name("Rat").action("Attack").where((n) => !n.inCombat).within(10).nearest();
   if (!rat) {
     log("killRatGrabTail: no free Rat near the anchor — LIVE-VERIFY the Rimmington spawn");
     return false;
   }
+  const idx = rat.index;
   Game.setCombatStyle("strength");
   log("attacking a Rat for its tail");
   if (!await rat.interact("Attack")) {
     return false;
   }
-  await Execution.delayUntil(() => GroundItems.query().name(RATS_TAIL).within(8).nearest() !== null || Npcs.query().name("Rat").within(1).nearest() === null, 6000);
-  return false;
+  await Execution.delayUntil(() => Inventory.countById(TAIL_ID) > 0 || tailOnGround() !== null || Npcs.query().where((n) => n.index === idx).nearest() === null, 8000);
+  return takeDroppedTail(log);
 }
 async function burnMeat(log) {
   if (Inventory.contains("Burnt meat")) {
@@ -44375,17 +44440,18 @@ function decide9(snap) {
   if (snap.journal === "notStarted") {
     return { kind: "talk", stop: HETTY };
   }
-  const need = INGREDIENTS.filter((i2) => !snap.inv.has(i2));
+  const need = INGREDIENTS.filter((i2) => i2 === RATS_TAIL.toLowerCase() ? !holdingRatsTail(snap) : !snap.inv.has(i2));
   if (need.length === 0) {
     return { kind: "custom", name: "hand in the ingredients and drink the potion", run: handInAndDrink };
   }
   return gatherFor(need[0], snap);
 }
 var hetty = {
-  record: QUESTS.find((r) => r.id === "hetty"),
+  record: RECORD,
   bank: DRAYNOR_BANK,
   grind: ["Rat"],
   tools: ["coins", "raw beef", "cooked meat"],
+  items: (snap) => RECORD.items.filter((item) => !(isRatsTailName(item.name) && holdingRatsTail(snap))),
   gather: {
     onion: gatherOnion,
     [RATS_TAIL.toLowerCase()]: gatherRatsTail,
@@ -45960,19 +46026,19 @@ var COIN_LOW2 = 300;
 var FOOD_TARGET3 = 8;
 var FOOD_LOW3 = 3;
 var APRON_GP = 50;
-function heldId4(snap, id) {
+function heldId5(snap, id) {
   return snap.invIds?.get(id) ?? 0;
 }
-function bankedId3(snap, id) {
+function bankedId4(snap, id) {
   return snap.bankIds?.get(id) ?? 0;
 }
 function wornId(snap, id) {
   return snap.wornIds?.has(id) ?? false;
 }
 function kit3(snap, wantApron, wantSpade) {
-  const needCoins = heldId4(snap, PT_ID.COINS) < COIN_LOW2;
-  const needApron = wantApron && heldId4(snap, PT_ID.WHITE_APRON) === 0 && !wornId(snap, PT_ID.WHITE_APRON);
-  const needSpade = wantSpade && heldId4(snap, PT_ID.SPADE) === 0;
+  const needCoins = heldId5(snap, PT_ID.COINS) < COIN_LOW2;
+  const needApron = wantApron && heldId5(snap, PT_ID.WHITE_APRON) === 0 && !wornId(snap, PT_ID.WHITE_APRON);
+  const needSpade = wantSpade && heldId5(snap, PT_ID.SPADE) === 0;
   const foodName = QuestFood.name?.trim();
   const foodHeld = foodName ? snap.inv.get(foodName.toLowerCase()) ?? 0 : 0;
   const needFood = Boolean(foodName) && foodHeld < FOOD_LOW3;
@@ -45993,10 +46059,10 @@ function kit3(snap, wantApron, wantSpade) {
       items.push({ name: foodName, qty: Math.min(FOOD_TARGET3 - foodHeld, banked3) });
     }
   }
-  if (needApron && bankedId3(snap, PT_ID.WHITE_APRON) > 0) {
+  if (needApron && bankedId4(snap, PT_ID.WHITE_APRON) > 0) {
     items.push({ name: PT_NAME.WHITE_APRON, qty: 1, id: PT_ID.WHITE_APRON });
   }
-  if (needSpade && bankedId3(snap, PT_ID.SPADE) > 0) {
+  if (needSpade && bankedId4(snap, PT_ID.SPADE) > 0) {
     items.push({ name: PT_NAME.SPADE, qty: 1, id: PT_ID.SPADE });
   }
   if (items.length > 0) {
@@ -46137,7 +46203,7 @@ function smuggle(snap, flag) {
   switch (flag) {
     case "rum-held-unemployed":
     case "employed-need-rum":
-      return heldId4(snap, PT_ID.RUM) > 0 ? talk3(LUTHAS) : buyRum();
+      return heldId5(snap, PT_ID.RUM) > 0 ? talk3(LUTHAS) : buyRum();
     case "rum-held-employed":
     case "rum-in-crate":
     case "crate-full":
@@ -46152,14 +46218,14 @@ function smuggle(snap, flag) {
     case "rum-in-hand":
       return onKaramja2(snap.tile) ? ship() : talk3(FRANK);
     default:
-      return heldId4(snap, PT_ID.RUM) > 0 ? talk3(LUTHAS) : buyRum();
+      return heldId5(snap, PT_ID.RUM) > 0 ? talk3(LUTHAS) : buyRum();
   }
 }
 function treasure(snap) {
-  if (heldId4(snap, PT_ID.PIRATE_MESSAGE) > 0) {
+  if (heldId5(snap, PT_ID.PIRATE_MESSAGE) > 0) {
     return { kind: "custom", name: "read the pirate message", run: readMessage };
   }
-  if (heldId4(snap, PT_ID.CHEST_KEY) > 0) {
+  if (heldId5(snap, PT_ID.CHEST_KEY) > 0) {
     return { kind: "custom", name: "open the Blue Moon chest", run: openChest };
   }
   return talk3(FRANK);
@@ -46210,27 +46276,6 @@ var piratestreasure = {
   readProgress: readPiratesTreasureProgress,
   decide: decide12
 };
-
-// src/bot/api/ai/quests/engine/types.ts
-function hasFlag(progress, name) {
-  return progress?.flags.has(name) ?? false;
-}
-function flagValue(progress, name) {
-  const prefix = name + ":";
-  for (const flag of progress?.flags ?? []) {
-    if (flag.startsWith(prefix)) {
-      const value = Number(flag.slice(prefix.length));
-      return Number.isFinite(value) ? value : undefined;
-    }
-  }
-  return;
-}
-function heldId5(snap, id) {
-  return snap.invIds?.get(id) ?? 0;
-}
-function bankedId4(snap, id) {
-  return snap.bankKnown ? snap.bankIds?.get(id) ?? 0 : 0;
-}
 
 // src/bot/api/ai/quests/defs/shieldofarrav/areas.ts
 var SOA_NAME = "Shield of Arrav";
@@ -46839,21 +46884,21 @@ function blackarmStep(snap) {
       if (inStoreGround(snap.tile) || inWeaponStore(snap.tile)) {
         return { kind: "custom", name: "leave the weapon store", run: leaveWeaponStore };
       }
-      if (heldId5(snap, SOA_ID.CROSSBOW) >= 2) {
+      if (heldId4(snap, SOA_ID.CROSSBOW) >= 2) {
         return say(KATRINE_HANDIN, "hand the crossbows to Katrine");
       }
-      if (heldId5(snap, SOA_ID.STORE_KEY) > 0) {
+      if (heldId4(snap, SOA_ID.STORE_KEY) > 0) {
         return { kind: "custom", name: "steal two crossbows from the weapon store", run: raidWeaponStore };
       }
-      if (bankedId4(snap, SOA_ID.STORE_KEY) > 0) {
+      if (bankedId3(snap, SOA_ID.STORE_KEY) > 0) {
         return { kind: "withdraw", items: [{ name: "Key", qty: 1, id: SOA_ID.STORE_KEY }] };
       }
       return { kind: "wait", reason: "needs a Phoenix weapon-store key from a partner" };
     case SOA_STAGE.BLACKARM_JOINED:
-      if (heldId5(snap, SOA_ID.SHIELD_BLACKARM) > 0) {
+      if (heldId4(snap, SOA_ID.SHIELD_BLACKARM) > 0) {
         return { kind: "wait", reason: "black arm half held — the other half is not this leg" };
       }
-      if (bankedId4(snap, SOA_ID.SHIELD_BLACKARM) > 0) {
+      if (bankedId3(snap, SOA_ID.SHIELD_BLACKARM) > 0) {
         return { kind: "withdraw", items: [{ name: "Broken shield", qty: 1, id: SOA_ID.SHIELD_BLACKARM }] };
       }
       return { kind: "custom", name: "search the Black Arm cupboard", run: takeBlackArmHalf };
@@ -47293,17 +47338,17 @@ var CERT_KEEP_IDS = [
   SOA_ID.COINS
 ];
 function certsHeld(snap) {
-  return heldId5(snap, SOA_ID.CERTIFICATE);
+  return heldId4(snap, SOA_ID.CERTIFICATE);
 }
 function certsBanked(snap) {
-  return bankedId4(snap, SOA_ID.CERTIFICATE);
+  return bankedId3(snap, SOA_ID.CERTIFICATE);
 }
 function curatorStep(snap, gang) {
   const pair = [ownHalf(gang), otherHalf(gang)];
-  if (pair.some((id) => heldId5(snap, id) + bankedId4(snap, id) === 0)) {
+  if (pair.some((id) => heldId4(snap, id) + bankedId3(snap, id) === 0)) {
     return null;
   }
-  const short = pair.filter((id) => heldId5(snap, id) === 0);
+  const short = pair.filter((id) => heldId4(snap, id) === 0);
   if (short.length > 0) {
     return { kind: "withdraw", items: short.map((id) => ({ name: "Broken shield", qty: 1, id })) };
   }
@@ -47466,11 +47511,11 @@ function say2(stop, name) {
 }
 function bankedRecovery(snap) {
   const out = [];
-  if (heldId5(snap, SOA_ID.SHIELD_PHOENIX) === 0 && bankedId4(snap, SOA_ID.SHIELD_PHOENIX) > 0) {
+  if (heldId4(snap, SOA_ID.SHIELD_PHOENIX) === 0 && bankedId3(snap, SOA_ID.SHIELD_PHOENIX) > 0) {
     out.push({ name: "Broken shield", qty: 1, id: SOA_ID.SHIELD_PHOENIX });
   }
   const owed = ArravConfig.partner.trim().length > 0;
-  if (owed && heldId5(snap, SOA_ID.STORE_KEY) === 0 && bankedId4(snap, SOA_ID.STORE_KEY) > 0) {
+  if (owed && heldId4(snap, SOA_ID.STORE_KEY) === 0 && bankedId3(snap, SOA_ID.STORE_KEY) > 0) {
     out.push({ name: "Key", qty: 1, id: SOA_ID.STORE_KEY });
   }
   return out;
@@ -47482,21 +47527,21 @@ function phoenixStep(snap) {
     case SOA_STAGE.NOT_STARTED:
       return say2(RELDO2, "ask Reldo for a quest");
     case SOA_STAGE.TOLD_OF_BOOK:
-      if (heldId5(snap, SOA_ID.BOOK) > 0) {
+      if (heldId4(snap, SOA_ID.BOOK) > 0) {
         return { kind: "custom", name: "read The Shield of Arrav", run: readBook };
       }
       return { kind: "custom", name: "check the palace bookcase", run: takeBook };
     case SOA_STAGE.READ_BOOK:
       return say2(RELDO2, "ask Reldo for a quest");
     case SOA_STAGE.SENT_TO_BARAEK:
-      if (heldId5(snap, SOA_ID.COINS) < BRIBE_GP) {
+      if (heldId4(snap, SOA_ID.COINS) < BRIBE_GP) {
         return { kind: "withdraw", items: [{ name: "Coins", qty: COIN_FLOAT2, id: SOA_ID.COINS }] };
       }
       return say2(BARAEK, "bribe Baraek for the hideout");
     case SOA_STAGE.FIND_STRAVEN:
       return { kind: "custom", name: "offer Straven your services", run: joinPhoenixGang };
     case SOA_STAGE.KILL_JONNY:
-      if (heldId5(snap, SOA_ID.REPORT) > 0 || flags.has("report-held")) {
+      if (heldId4(snap, SOA_ID.REPORT) > 0 || flags.has("report-held")) {
         return { kind: "custom", name: "hand the report to Straven", run: handInReport };
       }
       return { kind: "custom", name: "kill Jonny the beard for the report", run: killJonny };
@@ -47505,7 +47550,7 @@ function phoenixStep(snap) {
       if (recover.length > 0) {
         return { kind: "withdraw", items: recover };
       }
-      if (heldId5(snap, SOA_ID.SHIELD_PHOENIX) > 0) {
+      if (heldId4(snap, SOA_ID.SHIELD_PHOENIX) > 0) {
         return { kind: "wait", reason: "phoenix half held — the other half is not this leg" };
       }
       return { kind: "custom", name: "search the Phoenix hideout chest", run: takePhoenixHalf };
@@ -47549,9 +47594,9 @@ function decide13(snap) {
   const handoff = decideHandoff({
     gang: mine,
     stage,
-    hasKey: heldId5(snap, SOA_ID.STORE_KEY) > 0,
-    hasOwnHalf: heldId5(snap, ownHalf(mine)) > 0,
-    hasOtherHalf: heldId5(snap, otherHalf(mine)) > 0,
+    hasKey: heldId4(snap, SOA_ID.STORE_KEY) > 0,
+    hasOwnHalf: heldId4(snap, ownHalf(mine)) > 0,
+    hasOtherHalf: heldId4(snap, otherHalf(mine)) > 0,
     certs: certsHeld(snap) + certsBanked(snap),
     certsHeld: certsHeld(snap),
     certTarget: ArravConfig.certTarget,
@@ -47566,7 +47611,7 @@ function decide13(snap) {
   if (certs) {
     return certs;
   }
-  if (ArravConfig.partner.trim().length === 0 && certsHeld(snap) + certsBanked(snap) === 0 && heldId5(snap, ownHalf(mine)) > 0) {
+  if (ArravConfig.partner.trim().length === 0 && certsHeld(snap) + certsBanked(snap) === 0 && heldId4(snap, ownHalf(mine)) > 0) {
     return { kind: "wait", reason: "own half held, no partner and no banked certificate: the other gang's half is out of reach alone" };
   }
   return mine === "phoenix" ? phoenixStep(snap) : blackarmStep(snap);
@@ -51568,10 +51613,10 @@ function decide17(snap) {
   if (stage === WH_STAGE.NOT_STARTED) {
     return { kind: "talk", stop: BOY };
   }
-  if (stage >= WH_STAGE.DEFEATED && heldId5(snap, WH_OBJ.BALL) > 0) {
+  if (stage >= WH_STAGE.DEFEATED && heldId4(snap, WH_OBJ.BALL) > 0) {
     return { kind: "talk", stop: BOY };
   }
-  if (heldId5(snap, WH_OBJ.DOOR_KEY) === 0) {
+  if (heldId4(snap, WH_OBJ.DOOR_KEY) === 0) {
     return custom("look under the witch's flower pot for the door key", takeDoorKey);
   }
   if (stage >= WH_STAGE.DEFEATED) {
@@ -51579,28 +51624,28 @@ function decide17(snap) {
   }
   if (stage === WH_STAGE.STARTED || stage === WH_STAGE.FOUND_MAGNET) {
     const gloves = wearingGloves(snap);
-    if (!gloves && heldId5(snap, WH_OBJ.GLOVES) === 0) {
+    if (!gloves && heldId4(snap, WH_OBJ.GLOVES) === 0) {
       return { kind: "withdraw", items: [{ name: WH_NAME.GLOVES, qty: 1, id: WH_OBJ.GLOVES }] };
     }
     if (!gloves) {
       return { kind: "equip", item: WH_NAME.GLOVES };
     }
-    if (heldId5(snap, WH_OBJ.MAGNET) === 0) {
+    if (heldId4(snap, WH_OBJ.MAGNET) === 0) {
       return custom("search the cellar cupboard for the magnet", fetchMagnet);
     }
     if (stage === WH_STAGE.STARTED) {
       return custom("drop the magnet the cupboard will not replace", dropStaleMagnet);
     }
-    if (heldId5(snap, WH_OBJ.CHEESE) === 0) {
+    if (heldId4(snap, WH_OBJ.CHEESE) === 0) {
       return { kind: "buy", item: WH_NAME.CHEESE, qty: 1, shop: WYDIN3, estGp: SHOP_GP2 };
     }
     return custom("lure the mouse and fit the magnet", unlockBackDoor);
   }
-  if (heldId5(snap, WH_OBJ.SHED_KEY) > 0) {
+  if (heldId4(snap, WH_OBJ.SHED_KEY) > 0) {
     return custom("unlock the shed and kill the experiment", killExperiment);
   }
   if (diaryWanted()) {
-    return heldId5(snap, WH_OBJ.DIARY) > 0 ? custom("read the witch's diary so a catch cannot relock the back door", readDiary) : custom("take the witch's diary from the bedroom", fetchDiary);
+    return heldId4(snap, WH_OBJ.DIARY) > 0 ? custom("read the witch's diary so a catch cannot relock the back door", readDiary) : custom("take the witch's diary from the bedroom", fetchDiary);
   }
   return custom("check the garden fountain for the shed key", fountainKey);
 }
@@ -51628,7 +51673,7 @@ var witchshouse = {
     "leather gloves": (_snap, need) => ({ kind: "buy", item: WH_NAME.GLOVES, qty: need, shop: THESSALIA, estGp: SHOP_GP2 })
   },
   observe: (snap, step) => [
-    `stage=${snap.progress?.stage ?? snap.stage ?? "?"} at=${where(snap)}` + ` key=${heldId5(snap, WH_OBJ.DOOR_KEY)} magnet=${heldId5(snap, WH_OBJ.MAGNET)}` + ` cheese=${heldId5(snap, WH_OBJ.CHEESE)} diary=${heldId5(snap, WH_OBJ.DIARY)}` + ` shedkey=${heldId5(snap, WH_OBJ.SHED_KEY)} ball=${heldId5(snap, WH_OBJ.BALL)}` + ` gloves=${wearingGloves(snap) ? "worn" : heldId5(snap, WH_OBJ.GLOVES)} step=${step.kind}`
+    `stage=${snap.progress?.stage ?? snap.stage ?? "?"} at=${where(snap)}` + ` key=${heldId4(snap, WH_OBJ.DOOR_KEY)} magnet=${heldId4(snap, WH_OBJ.MAGNET)}` + ` cheese=${heldId4(snap, WH_OBJ.CHEESE)} diary=${heldId4(snap, WH_OBJ.DIARY)}` + ` shedkey=${heldId4(snap, WH_OBJ.SHED_KEY)} ball=${heldId4(snap, WH_OBJ.BALL)}` + ` gloves=${wearingGloves(snap) ? "worn" : heldId4(snap, WH_OBJ.GLOVES)} step=${step.kind}`
   ],
   decide: decide17
 };
@@ -74903,41 +74948,41 @@ function fromBank6(snap, id, name, qty2) {
   if (!snap.bankKnown) {
     return { kind: "scanBank" };
   }
-  const banked16 = bankedId4(snap, id);
+  const banked16 = bankedId3(snap, id);
   return banked16 > 0 ? { kind: "withdraw", items: [{ name, qty: Math.min(qty2, banked16), id }] } : null;
 }
 function sourcePass(snap) {
-  if (heldId5(snap, FC_ID2.PASS) > 0) {
+  if (heldId4(snap, FC_ID2.PASS) > 0) {
     return null;
   }
   return fromBank6(snap, FC_ID2.PASS, ITEM5.PASS, 1) ?? { kind: "custom", name: "ask the dwarf for another competition pass", run: claimPass };
 }
 function sourceGarlic(snap) {
-  if (heldId5(snap, FC_ID2.GARLIC) > 0) {
+  if (heldId4(snap, FC_ID2.GARLIC) > 0) {
     return null;
   }
   return fromBank6(snap, FC_ID2.GARLIC, GARLIC, 1) ?? { kind: "custom", name: "take garlic from Morgan's cupboard", run: takeGarlic };
 }
 function sourceRod(snap) {
-  if (heldId5(snap, FC_ID2.FISHING_ROD) > 0) {
+  if (heldId4(snap, FC_ID2.FISHING_ROD) > 0) {
     return null;
   }
   return fromBank6(snap, FC_ID2.FISHING_ROD, ITEM5.ROD, 1) ?? { kind: "buy", item: ITEM5.ROD, qty: 1, shop: HARRY_SHOP, estGp: ROD_GP };
 }
 function sourceSpade2(snap) {
-  if (heldId5(snap, FC_ID2.SPADE) > 0) {
+  if (heldId4(snap, FC_ID2.SPADE) > 0) {
     return null;
   }
   return fromBank6(snap, FC_ID2.SPADE, ITEM5.SPADE, 1) ?? { kind: "grabGround", item: ITEM5.SPADE, anchor: nearestSpade(snap.tile), waitIfMissing: true };
 }
 function sourceFee(snap) {
-  if (heldId5(snap, FC_ID2.COINS) >= ENTRY_FEE) {
+  if (heldId4(snap, FC_ID2.COINS) >= ENTRY_FEE) {
     return null;
   }
   return fromBank6(snap, FC_ID2.COINS, ITEM5.COINS, COIN_TRIP) ?? { kind: "wait", reason: `no coins for the ${ENTRY_FEE}gp contest entry fee` };
 }
 function sourceWorms(snap, need) {
-  const held28 = heldId5(snap, FC_ID2.RED_VINE_WORM);
+  const held28 = heldId4(snap, FC_ID2.RED_VINE_WORM);
   if (held28 >= need) {
     return null;
   }
@@ -75005,20 +75050,20 @@ function decide45(snap) {
     case FC_STAGE2.STARTED:
       return outside2(snap, sourcePass(snap) ?? sourceGarlic(snap) ?? sourceRod(snap) ?? sourceWorms(snap, WORM_TARGET) ?? sourceFee(snap)) ?? { kind: "custom", name: "pay Bonzo the contest entry fee", run: payEntryFee };
     case FC_STAGE2.IN_COMP:
-      if (heldId5(snap, FC_ID2.GARLIC) > 0) {
+      if (heldId4(snap, FC_ID2.GARLIC) > 0) {
         return { kind: "custom", name: "stash the garlic in the wall pipe", run: stashGarlic };
       }
-      if (heldId5(snap, FC_ID2.RAW_SARDINE) > 0) {
+      if (heldId4(snap, FC_ID2.RAW_SARDINE) > 0) {
         return { kind: "custom", name: "hand the sardines to Bonzo and re-enter", run: handOverCatch };
       }
       return outside2(snap, sourcePass(snap) ?? sourceGarlic(snap)) ?? { kind: "wait", reason: "the willow spot cannot win and there is no garlic to move the stranger" };
     case FC_STAGE2.GARLIC_COMP:
       return outside2(snap, sourcePass(snap) ?? sourceRod(snap) ?? sourceWorms(snap, 1)) ?? { kind: "custom", name: "fish the contest beside the pipes", run: fishAtPipes };
     case FC_STAGE2.WON_COMP: {
-      if (heldId5(snap, FC_ID2.TROPHY) > 0) {
+      if (heldId4(snap, FC_ID2.TROPHY) > 0) {
         return { kind: "custom", name: "take the trophy to the Mountain Dwarf", run: deliverTrophy };
       }
-      const banked16 = bankedId4(snap, FC_ID2.TROPHY) > 0 ? { kind: "withdraw", items: [{ name: ITEM5.TROPHY, qty: 1, id: FC_ID2.TROPHY }] } : null;
+      const banked16 = bankedId3(snap, FC_ID2.TROPHY) > 0 ? { kind: "withdraw", items: [{ name: ITEM5.TROPHY, qty: 1, id: FC_ID2.TROPHY }] } : null;
       return outside2(snap, banked16 ?? sourcePass(snap)) ?? { kind: "custom", name: "ask Bonzo for a spare trophy", run: claimSpareTrophy };
     }
     default:
@@ -99289,11 +99334,11 @@ function navTeleportWithdraw(snap, need) {
   }
   const wanted = [];
   for (const rune of NAV_TELE_RUNES) {
-    const have2 = heldId5(snap, rune.id);
+    const have2 = heldId4(snap, rune.id);
     if (have2 >= low(rune.qty)) {
       continue;
     }
-    const banked24 = bankedId4(snap, rune.id);
+    const banked24 = bankedId3(snap, rune.id);
     const take3 = Math.min(rune.qty - have2, banked24);
     if (take3 <= 0) {
       continue;

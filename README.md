@@ -23,7 +23,7 @@ Most scripts dismiss the welcome screen on start.
 
 ## Scripts: COPY THE LINK INTO THE BOT URL SPOT WHERE YOU CHOOSE A SCRIPT AND CLICK LOAD TO LOAD THE SCRIPT
 
-**AIOQuester** (`AIOQuester.js`). MAY HAVE BUGS: A somewhat attempted fix of the original script meaning it should run better and gather more quest items/finish quests properly. Completes Lost City 2004 quests and gathers the required items.
+**AIOQuester** (`AIOQuester.js`). MAY HAVE BUGS: A somewhat attempted fix of the original script meaning it should run better and gather more quest items/finish quests properly. Completes Lost City 20x, Reno, and part of MM1.
 
 https://benzymee.github.io/RS2B2TScripts/AIOQuester.js
 
@@ -43,7 +43,7 @@ https://benzymee.github.io/RS2B2TScripts/BackyardYews.js
 
 https://benzymee.github.io/RS2B2TScripts/BankCleaner.js
 
-**BenzymeGoblinKiller** (`BenzymeGoblinKiller.js`). Kills Lumbridge oak goblins. Banks at Al Kharid. Hops to giant rats if more than 5 players fight goblins. Optional bronze dagger, loadout, and Steel dagger.
+**BenzymeGoblinKiller** (`BenzymeGoblinKiller.js`). Kills Lumbridge oak goblins. Banks at Al Kharid. Hops to giant rats if more than 5 players fight goblins. Optional bronze dagger, loadout, and Steel Scim.
 
 https://benzymee.github.io/RS2B2TScripts/BenzymeGoblinKiller.js
 
@@ -91,7 +91,7 @@ https://benzymee.github.io/RS2B2TScripts/FaladorTreeFletcher.js
 
 https://benzymee.github.io/RS2B2TScripts/InventoryAlcher.js
 
-**KnowledgeGatherer** (`KnowledgeGatherer.js`). Woodcutting, mining, fishing, and crafting from BotKnowledge. Picks the best camp your level unlocks, gathers, and banks. Buys tools. Optional Nurmof pickaxe.
+**KnowledgeGatherer** (`KnowledgeGatherer.js`). Woodcutting, mining, fishing, and crafting from BotKnowledge. Picks the best camp your level unlocks, gathers, and banks. Buys tools. Optional Nurmof pie.
 
 https://benzymee.github.io/RS2B2TScripts/KnowledgeGatherer.js
 
@@ -119,6 +119,6 @@ https://benzymee.github.io/RS2B2TScripts/ProgressiveChopper.js
 
 https://benzymee.github.io/RS2B2TScripts/WillowTreeFletcher.js
 
-**ZanarisOtherworldlyBeingKiller** (`ZanarisOtherworldlyBeingKiller.js`). Kills Otherworldly beings south of the Zanaris fairy bank. Right-clicks Bank on the fairy bankers. Needs Lost City. Optional dagger switch.
+**ZanarisOtherworldlyBeingKiller** (`ZanarisOtherworldlyBeingKiller.js`). Kills Otherworldly beings south of the Zanaris fairy bank. Right-clicks Bank on the fairy bankers. Needs Lost City. Optional dragon scimitar.
 
 https://benzymee.github.io/RS2B2TScripts/ZanarisOtherworldlyBeingKiller.js

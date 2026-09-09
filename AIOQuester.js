@@ -54794,6 +54794,12 @@ function isGrillPocket(t) {
   }
   return t.x >= 3020 && t.x <= 3027 && t.z >= 3506 && t.z <= 3513;
 }
+function isSouthRoofLanding(t) {
+  if (t === null || t.level !== 1) {
+    return false;
+  }
+  return t.x >= 3014 && t.x <= 3018 && t.z >= 3514 && t.z <= 3516;
+}
 function canUseLoc(loc) {
   try {
     return Reachability.canReach(loc.tile(), { adjacentOk: true, maxSteps: 64 });
@@ -55004,7 +55010,12 @@ async function walkStayOnFloor(stand, log) {
     if (here2 !== null && here2.level === floorStand.level && chebyshev2(here2, floorStand) <= 1) {
       return true;
     }
-    const ladder = Locs.query().name("Ladder").within(10).where((l) => here2 !== null && l.tile().level === here2.level && ladderLocAtStand(floorStand, l.tile())).nearest();
+    const ladder = Locs.query().name("Ladder").within(10).where((l) => {
+      if (here2 === null || l.tile().level !== here2.level || !ladderLocAtStand(floorStand, l.tile())) {
+        return false;
+      }
+      return chebyshev2(here2, l.tile()) <= 3;
+    }).nearest();
     if (ladder && canUseLoc(ladder)) {
       return true;
     }
@@ -55114,19 +55125,21 @@ async function approachInside(dest, log) {
     return;
   }
   if (toGrill && here2.level === 2) {
-    if (here2.x >= 3024) {
-      await climbAt2(BKF_TILE.EAST_ROOF, "Climb-down", log);
-      return;
-    }
     if (here2.x >= 3022) {
       log("on the roof above the cannons, taking the east ladder down");
       await climbAt2(BKF_TILE.EAST_ROOF, "Climb-down", log);
       return;
     }
-    await climbAt2(BKF_TILE.SOUTH_ROOF, "Climb-down", log);
+    log("crossing the roof east, not climbing back down the south ladder");
+    await climbAt2(BKF_TILE.EAST_ROOF, "Climb-down", log);
     return;
   }
   if (toGrill && here2.level === 1) {
+    if (isSouthRoofLanding(here2)) {
+      log("south-roof landing, climbing back up to cross the roof east");
+      await climbAt2(BKF_TILE.SOUTH_ROOF, "Climb-up", log);
+      return;
+    }
     if (isCannonRoom(here2)) {
       log("cannon room, climbing to the roof to take the east ladder");
       await climbAt2(BKF_TILE.CANNON_UP, "Climb-up", log);

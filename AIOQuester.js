@@ -50303,7 +50303,13 @@ var AGGIE_ANCHOR = new Tile(3086, 3259, 0);
 var AGGIE_RED = { npc: "Aggie", anchor: AGGIE_ANCHOR, leash: 6, prefer: ["Can you make dyes for me please?", "What do you need to make red dye?", "Okay, make me some red dye please."] };
 var AGGIE_YELLOW = { npc: "Aggie", anchor: AGGIE_ANCHOR, leash: 6, prefer: ["Can you make dyes for me please?", "What do you need to make yellow dye?", "Okay, make me some yellow dye please."] };
 var AGGIE_BLUE = { npc: "Aggie", anchor: AGGIE_ANCHOR, leash: 6, prefer: ["Can you make dyes for me please?", "What do you need to make blue dye?", "Okay, make me some blue dye please."] };
-var WYSON = { npc: "Wyson the gardener", anchor: new Tile(3013, 3377, 0), leash: 10, prefer: ["I'm looking for woad leaves.", "How about 20 coins?"] };
+var FALADOR_PARK_SHED = new Tile(3024, 3379, 0);
+var WYSON = {
+  npc: "Wyson the gardener",
+  anchor: FALADOR_PARK_SHED,
+  leash: 20,
+  prefer: ["I'm looking for woad leaves.", "How about 20 coins?"]
+};
 var GOBLIN_FARM = new Tile(2956, 3504, 0);
 var ONION_PATCH = new Tile(3188, 3267, 0);
 var PORT_SARIM_SHOP = { npc: "Wydin", anchor: new Tile(3014, 3204, 0) };
@@ -50324,6 +50330,12 @@ var FUNDING_STALL_MS2 = 120000;
 var FUNDING_REGEN_WAIT_MS = 60000;
 var has = (snap, name) => (snap.inv.get(name) ?? 0) > 0;
 var qty = (snap, name) => snap.inv.get(name) ?? 0;
+function woadLeavesHeld() {
+  return Inventory.count("Woad leaf") + Inventory.count("Woad leaves");
+}
+function findWyson() {
+  return Npcs.query().where((npc) => /wyson/i.test(npc.name ?? "")).nearest();
+}
 function combatFoodNames() {
   const configured = QuestFood.name?.trim();
   return [...new Map([configured, FALLBACK_FOOD].filter((name) => Boolean(name)).map((name) => [name.toLowerCase(), name])).values()];
@@ -50673,15 +50685,33 @@ async function makeBlueDye(log) {
   if (Inventory.contains("Blue dye")) {
     return true;
   }
-  if (Inventory.count("Woad leaf") < 2) {
+  if (woadLeavesHeld() < 2) {
     if (Inventory.count("Coins") < 20) {
       log("need ~20 coins for woad leaves");
       return false;
     }
-    if (!await gotoNpc(WYSON, [], log)) {
+    let wyson = findWyson();
+    if (!wyson || wyson.distance() > WYSON.leash) {
+      log("walking to Wyson the gardener at the Falador Park shed");
+      if (!await Traversal.walkResilient(FALADOR_PARK_SHED, { radius: 6, attempts: 4, timeoutMs: 180000, log })) {
+        return false;
+      }
+      wyson = findWyson();
+    }
+    if (!wyson) {
+      log("waiting for Wyson the gardener by the park shed");
+      await Execution.delayUntil(() => findWyson() !== null, 20000);
+      wyson = findWyson();
+    }
+    if (!wyson) {
+      log("no Wyson the gardener in Falador Park");
       return false;
     }
-    await talkThrough(WYSON.npc, WYSON.prefer, log);
+    if (wyson.distance() > 1) {
+      await DirectNavigator.walkTo(wyson.tile(), 1, 20000);
+    }
+    const name = wyson.name ?? WYSON.npc;
+    await talkThrough(name, WYSON.prefer, log);
     return false;
   }
   if (Inventory.count("Coins") < 5) {
@@ -54209,6 +54239,7 @@ var BKF_TILE = {
   CABBAGE_FIELD: new Tile(3053, 3306, 0)
 };
 var SECRET_WALL_ID = 2341;
+var GUARD_DOOR_ID = 2337;
 var ALREADY_LISTENED = /i can't hear much right now/i;
 var FORTRESS_TALK = ["I don't care. I'm going in anyway.", "Yes, but I work here!"];
 var has5 = (snap, name) => (snap.inv.get(name.toLowerCase()) ?? 0) > 0;
@@ -54230,6 +54261,13 @@ function isSecretPassageLanding(t) {
     return false;
   }
   return t.x >= 3014 && t.x <= 3017 && t.z >= 3517 && t.z <= 3521;
+}
+function isInteriorSideOfGuardDoor(here2, door) {
+  if (here2 === null || here2.level !== 0 || here2.z < 3516) {
+    return false;
+  }
+  const t = door.tile();
+  return door.id === GUARD_DOOR_ID || t.x === 3016 && t.z === 3514 && t.level === 0;
 }
 function chebyshev2(a, b) {
   return Math.max(Math.abs(a.x - b.x), Math.abs(a.z - b.z));
@@ -54275,8 +54313,19 @@ function locNamed(name, op, within3) {
 function locNamedReachable(name, op, within3) {
   return Locs.query().name(name).action(op).within(within3).where(canUseLoc).nearest();
 }
+function grillReady() {
+  const here2 = Game.tile();
+  if (isSecretPassageLanding(here2)) {
+    return null;
+  }
+  const grill = locNamed("Grill", "Listen-at", 6);
+  if (!grill || !canUseLoc(grill) || chebyshev2(grill.tile(), BKF_TILE.GRILL) > 3) {
+    return null;
+  }
+  return grill;
+}
 async function enterFortress(log) {
-  if (isBlackKnightFortressInterior(Game.tile()) || locNamed("Grill", "Listen-at", 12) !== null) {
+  if (isBlackKnightFortressInterior(Game.tile()) || grillReady() !== null) {
     return true;
   }
   log("walking to the fortress east wall");
@@ -54310,12 +54359,11 @@ async function enterFortress(log) {
     await Execution.delayUntil(() => isBlackKnightFortressInterior(Game.tile()), 8000);
     await settleScene();
   }
-  return isBlackKnightFortressInterior(Game.tile()) || locNamed("Grill", "Listen-at", 12) !== null;
+  return isBlackKnightFortressInterior(Game.tile()) || grillReady() !== null;
 }
 function targetLocInScene(dest) {
   if (dest.x === BKF_TILE.GRILL.x && dest.z === BKF_TILE.GRILL.z) {
-    const grill = locNamed("Grill", "Listen-at", 12);
-    return grill !== null && canUseLoc(grill);
+    return grillReady() !== null;
   }
   const hole = Locs.query().name("Hole").within(8).nearest();
   return hole !== null && canUseLoc(hole);
@@ -54367,7 +54415,7 @@ async function openNearbyBarrier(log) {
     await Execution.delayTicks(3);
     return !GameMessages.sawSince(mark2, CANT_REACH);
   }
-  const door = Locs.query().action("Open").within(3).where((l) => /^(sturdy door|door)$/i.test(l.name ?? "") && canUseLoc(l)).nearest();
+  const door = Locs.query().action("Open").within(3).where((l) => /^(sturdy door|door)$/i.test(l.name ?? "") && canUseLoc(l) && !isInteriorSideOfGuardDoor(here2, l)).nearest();
   if (!door) {
     return false;
   }
@@ -54393,7 +54441,7 @@ async function climbAt2(stand, op, log) {
       return false;
     }
   }
-  const ladder = locNamedReachable("Ladder", op, 6);
+  const ladder = Locs.query().name("Ladder").action(op).within(6).where((l) => chebyshev2(l.tile(), stand) <= 2).nearest() ?? locNamedReachable("Ladder", op, 6);
   if (!ladder) {
     return false;
   }
@@ -54449,8 +54497,8 @@ async function approachInside(dest, log) {
 }
 async function listenAtGrill(log) {
   const mark = GameMessages.mark();
-  const grill = locNamed("Grill", "Listen-at", 12);
-  if (!grill || !canUseLoc(grill)) {
+  const grill = grillReady();
+  if (!grill) {
     await approachInside(BKF_TILE.GRILL, log);
     return false;
   }
@@ -54496,6 +54544,11 @@ async function infiltrate(log) {
     return true;
   }
   if (!await enterFortress(log)) {
+    return false;
+  }
+  if (isSecretPassageLanding(Game.tile())) {
+    log("climbing the secret-passage ladder, the south-face Sturdy door is not reachable from here");
+    await climbAt2(BKF_TILE.SECRET_LADDER, "Climb-up", log);
     return false;
   }
   if (!listened) {
@@ -99583,6 +99636,7 @@ class QuestEngine {
   lastBankCounts = new Map;
   lastBankIdCounts = new Map;
   bankKnown = false;
+  startupBankScanTried = false;
   runningId = null;
   waitKey = "";
   waitCount = 0;
@@ -99610,6 +99664,9 @@ class QuestEngine {
     }
     if (!skipEarly && Bank.isOpen()) {
       await this.captureOpenBank();
+      return;
+    }
+    if (!skipEarly && await this.scanNearbyBankOnStart()) {
       return;
     }
     const mainModal = reader.modals().main;
@@ -100021,6 +100078,35 @@ class QuestEngine {
   }
   nameOf(id, elig) {
     return elig.get(id)?.name ?? id;
+  }
+  standingNearBank() {
+    const here11 = Game.tile();
+    if (!here11) {
+      return false;
+    }
+    const booth = Locs.query().name("Bank booth").where((loc) => loc.actions().length > 0 && loc.distance() <= NEARBY_BANK_RADIUS).nearest();
+    if (booth) {
+      return true;
+    }
+    if (Npcs.query().name("Banker").within(NEARBY_BANK_RADIUS).nearest()) {
+      return true;
+    }
+    const nearest = nearestBank(here11);
+    return nearest !== null && bankDistance(here11, nearest.tile) <= NEARBY_BANK_RADIUS;
+  }
+  async scanNearbyBankOnStart() {
+    if (this.bankKnown || this.startupBankScanTried || !this.standingNearBank()) {
+      return false;
+    }
+    this.startupBankScanTried = true;
+    this.host.log("starting next to a bank — scanning it before the queue");
+    const here11 = Game.tile();
+    const stand = here11 ? nearestBank(here11)?.tile : undefined;
+    const opened = await executeStep({ kind: "scanBank", bank: stand }, [], (m) => this.host.log(`  ${m}`));
+    await Execution.delayUntil(() => Bank.loaded(), 3000);
+    this.refreshBankCounts(true);
+    await Modals.closeIfOpen();
+    return opened || this.bankKnown;
   }
   applySessionBank(step3, snap, module) {
     const teleportsOn = Traversal.teleportsEnabled();

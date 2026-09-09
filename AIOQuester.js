@@ -43041,9 +43041,9 @@ var FRED = {
 var BALLS_NEEDED = 20;
 var SITES = {
   pen: new Tile(3197, 3266, 0),
-  wheelStand: new Tile(2982, 3315, 0),
+  wheelStand: new Tile(3209, 3213, 1),
   shearsSpawn: new Tile(3152, 3306, 0),
-  spinLabel: "spin wool at Falador"
+  spinLabel: "spin wool at Lumbridge"
 };
 function gatherBalls(snap, need) {
   return gatherWool(snap, need, SITES);
@@ -54245,8 +54245,13 @@ var BKF_TILE = {
 };
 var SECRET_WALL_ID = 2341;
 var GUARD_DOOR_ID = 2337;
+var MEETING_DOOR_ID = 2338;
 var ALREADY_LISTENED = /i can't hear much right now/i;
-var FORTRESS_TALK = ["I don't care. I'm going in anyway.", "Yes, but I work here!"];
+var FORTRESS_TALK = [
+  "I don't care. I'm going in anyway.",
+  "Yes, but I work here!",
+  "I'm going in anyway"
+];
 var has5 = (snap, name) => (snap.inv.get(name.toLowerCase()) ?? 0) > 0;
 var worn3 = (snap, name) => snap.worn.has(name.toLowerCase());
 function isBlackKnightFortressInterior(t) {
@@ -54314,9 +54319,12 @@ function decide22(snap) {
   return { kind: "talk", stop: SIR_AMIK };
 }
 async function handleFortressTalk(log) {
-  if (ChatDialog.isOpen() || ChatDialog.canContinue()) {
+  if (ChatDialog.isOpen() || ChatDialog.canContinue() || ChatDialog.options().length > 0) {
+    log("clearing fortress guard chat");
     await driveDialog(FORTRESS_TALK, log);
+    return true;
   }
+  return false;
 }
 function locNamed(name, op, within3) {
   return Locs.query().name(name).action(op).within(within3).nearest();
@@ -54326,11 +54334,11 @@ function locNamedReachable(name, op, within3) {
 }
 function grillReady() {
   const here2 = Game.tile();
-  if (isSecretPassageLanding(here2)) {
+  if (isSecretPassageLanding(here2) || isSecretPassageUpper(here2)) {
     return null;
   }
-  const grill = locNamed("Grill", "Listen-at", 6);
-  if (!grill || !canUseLoc(grill) || chebyshev2(grill.tile(), BKF_TILE.GRILL) > 3) {
+  const grill = locNamed("Grill", "Listen-at", 8);
+  if (!grill || !canUseLoc(grill)) {
     return null;
   }
   return grill;

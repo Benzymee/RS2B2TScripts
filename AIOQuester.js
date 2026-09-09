@@ -1,8 +1,3 @@
-/**
- * AIOQuester. Completes Lost City 2004 quests and gathers required items.
- *
- * Load URL: https://benzymee.github.io/RS2B2TScripts/AIOQuester.js
- */
 if(typeof process==="undefined"){globalThis.process={env:{}}};
 
 // src/bot/runtime/ScriptRegistry.ts
@@ -38027,6 +38022,37 @@ async function dismissQuestLockDialogue(maxSteps = 8) {
     }
   }
 }
+var PASSABLE_DOOR_TALK = [
+  "I don't care. I'm going in anyway.",
+  "Yes, but I work here!"
+];
+async function drivePassableDoorTalk(maxSteps = 24) {
+  let handled = false;
+  for (let i2 = 0;i2 < maxSteps; i2++) {
+    if (!ChatDialog.isOpen() && !ChatDialog.canContinue()) {
+      return handled;
+    }
+    if (ChatDialog.canContinue()) {
+      await ChatDialog.continue();
+      handled = true;
+      await Execution.delayTicks(1);
+      continue;
+    }
+    const options = ChatDialog.options();
+    if (options.length === 0) {
+      await Execution.delayTicks(1);
+      continue;
+    }
+    const pick = options.find((option) => PASSABLE_DOOR_TALK.some((prefer) => option.toLowerCase().includes(prefer.toLowerCase())));
+    if (!pick) {
+      return handled;
+    }
+    await ChatDialog.chooseOption(pick);
+    handled = true;
+    await Execution.delayTicks(2);
+  }
+  return handled;
+}
 
 // src/bot/event/webwalk/exec/doorCrossing.ts
 var MULTI_DOOR_CROSS_MS = 36000;
@@ -38302,6 +38328,17 @@ async function crossMultiTileDoor(approach, step, transport, log, onQuestLock) {
       log(`crossed '${transport.locName}' at (${transport.locX},${transport.locZ})`);
       return true;
     }
+    if (ChatDialog.isOpen() || ChatDialog.canContinue()) {
+      if (chatShowsQuestLock()) {
+        log(`quest-locked '${transport.locName}' at (${transport.locX},${transport.locZ}) — blacklisting`);
+        await dismissQuestLockDialogue();
+        onQuestLock?.(transport.locX, transport.locZ);
+        return false;
+      }
+      if (await drivePassableDoorTalk()) {
+        continue;
+      }
+    }
     if (isSlashWebTransport(transport.locName, transport.action) && webPassageReady(transport, approach, step)) {
       return walkThroughWeb(approach, step, transport, log, slashedWebAtPlacement(transport.locX, transport.locZ) ? "slashed" : "passage open");
     }
@@ -38342,7 +38379,7 @@ async function crossMultiTileDoor(approach, step, transport, log, onQuestLock) {
         log(`'${transport.action}' not offered by ${transport.locName} (ops: ${shut.actions().join(", ")})`);
         return false;
       }
-      await Execution.delayUntil(() => findTransportLoc(transport) === null || Reachability.canStep(approach, step) || GameMessages.sawSince(mark, CANT_REACH) || chatShowsQuestLock(mark), OPEN_WAIT_MS);
+      await Execution.delayUntil(() => findTransportLoc(transport) === null || Reachability.canStep(approach, step) || GameMessages.sawSince(mark, CANT_REACH) || ChatDialog.isOpen() || ChatDialog.canContinue() || chatShowsQuestLock(mark), OPEN_WAIT_MS);
       if (GameMessages.sawSince(mark, CANT_REACH)) {
         log(`server says can't reach ${transport.locName} — repathing`);
         return false;
@@ -38352,6 +38389,11 @@ async function crossMultiTileDoor(approach, step, transport, log, onQuestLock) {
         await dismissQuestLockDialogue();
         onQuestLock?.(transport.locX, transport.locZ);
         return false;
+      }
+      if (ChatDialog.isOpen() || ChatDialog.canContinue()) {
+        log(`talking through ${transport.locName} doorman`);
+        await drivePassableDoorTalk();
+        continue;
       }
       await Execution.delayTicks(1);
       DirectNavigator.walk(step);
@@ -39304,7 +39346,12 @@ ${formatHops(hops)}`);
         }
       } else {
         const open2 = () => findTransportLoc(transport) === null || Reachability.canStep(approach, step);
-        crossed = await Execution.delayUntil(() => open2() || cantReach() || chatShowsQuestLock(), TRANSPORT_WAIT_MS) && open2();
+        crossed = await Execution.delayUntil(() => open2() || cantReach() || ChatDialog.isOpen() || ChatDialog.canContinue() || chatShowsQuestLock(), TRANSPORT_WAIT_MS) && open2();
+        if (!crossed && (ChatDialog.isOpen() || ChatDialog.canContinue()) && !chatShowsQuestLock()) {
+          log(`talking through ${transport.locName} doorman`);
+          await drivePassableDoorTalk();
+          crossed = open2();
+        }
       }
       if (crossed) {
         if (transport.toLevel !== undefined) {
@@ -43041,9 +43088,9 @@ var FRED = {
 var BALLS_NEEDED = 20;
 var SITES = {
   pen: new Tile(3197, 3266, 0),
-  wheelStand: new Tile(3209, 3213, 1),
+  wheelStand: new Tile(2982, 3315, 0),
   shearsSpawn: new Tile(3152, 3306, 0),
-  spinLabel: "spin wool at Lumbridge"
+  spinLabel: "spin wool at Falador"
 };
 function gatherBalls(snap, need) {
   return gatherWool(snap, need, SITES);
@@ -50572,7 +50619,36 @@ function foodAcquisitionSpace(snap, slots) {
     exactKeep: true
   };
 }
+function goblinDiplomacyItems(snap) {
+  const orange = has(snap, "orange goblin mail");
+  const blue = has(snap, "blue goblin mail");
+  const plain = qty(snap, "goblin mail");
+  const filled = (orange ? 1 : 0) + (blue ? 1 : 0);
+  const remainingPlain = Math.max(0, 3 - filled);
+  const items = [];
+  if (plain < remainingPlain) {
+    items.push({ name: "Goblin mail", qty: remainingPlain, kind: "acquirable" });
+  }
+  if (!orange && !has(snap, "orange dye")) {
+    items.push({ name: "Orange dye", qty: 1, kind: "acquirable" });
+  }
+  if (!blue && !has(snap, "blue dye")) {
+    items.push({ name: "Blue dye", qty: 1, kind: "acquirable" });
+  }
+  return items;
+}
 function goblinMailGatherStep(snap, need = 1) {
+  if (!snap.bankKnown) {
+    return { kind: "scanBank", bank: DRAYNOR_BANK2 };
+  }
+  const bankedMail = snap.bank?.get("goblin mail") ?? 0;
+  if (bankedMail > 0 && qty(snap, "goblin mail") < need) {
+    return {
+      kind: "withdraw",
+      items: [{ name: "Goblin mail", qty: Math.min(need - qty(snap, "goblin mail"), bankedMail) }],
+      bank: DRAYNOR_BANK2
+    };
+  }
   const carriedFood = combatFoodCount(snap);
   const heldCoins = qty(snap, "coins");
   const foodReady = inGoblinMailField(snap.tile) ? carriedFood > GOBLIN_MAIL_FOOD_RESTOCK_FLOOR : carriedFood >= GOBLIN_MAIL_FOOD_TARGET;
@@ -50584,9 +50660,6 @@ function goblinMailGatherStep(snap, need = 1) {
     if (heldCoins >= GOBLIN_DIPLOMACY_QUEST_COIN_RESERVE) {
       return { kind: "custom", name: "farm goblin mail", run: farmGoblinMail };
     }
-  }
-  if (!snap.bankKnown) {
-    return { kind: "scanBank", bank: DRAYNOR_BANK2 };
   }
   const missingFood = Math.max(0, GOBLIN_MAIL_FOOD_TARGET - carriedFood);
   const makeSupplySpace = foodAcquisitionSpace(snap, missingFood + Math.max(1, need) + (heldCoins > 0 ? 0 : 1));
@@ -50679,6 +50752,12 @@ async function farmGoblinMail(log) {
     }
     if (!Npcs.all().some((n) => n.index === index)) {
       await Execution.delayTicks(2);
+      const loot = GroundItems.query().name("Goblin mail").within(15).nearest();
+      if (loot) {
+        const before = Inventory.count("Goblin mail");
+        await loot.interact("Take");
+        return Execution.delayUntil(() => Inventory.count("Goblin mail") > before, 6000);
+      }
       return false;
     }
     await Execution.delayTicks(1);
@@ -50763,6 +50842,32 @@ async function makeOrangeDye(log) {
   }
   return executeStep({ kind: "useOn", item: "Red dye", targetKind: "item", target: "Yellow dye", anchor: AGGIE_ANCHOR, product: "Orange dye" }, [], log);
 }
+async function stepOutOfGoblinCombat(log) {
+  if (!Game.inCombat()) {
+    return true;
+  }
+  log("under attack in Goblin Village — stepping into the generals hut");
+  await DirectNavigator.walkTo(GENERAL.anchor, 1, 15000);
+  const closer = Locs.query().name("Door").action("Close").within(3).nearest();
+  if (closer) {
+    await closer.interact("Close");
+    await Execution.delayTicks(2);
+  }
+  if (!await Execution.delayUntil(() => !Game.inCombat(), 20000)) {
+    log("still under attack, cannot talk to the generals");
+    return false;
+  }
+  return true;
+}
+async function handInArmour(log) {
+  if (!await stepOutOfGoblinCombat(log)) {
+    return false;
+  }
+  if (!await gotoNpc(GENERAL, [], log)) {
+    return false;
+  }
+  return talkThrough(GENERAL.npc, GENERAL.prefer, log);
+}
 function decide15(snap) {
   if (snap.journal === "complete") {
     return { kind: "done" };
@@ -50782,6 +50887,9 @@ function decide15(snap) {
   if (has(snap, "blue dye") && !blueMail && plainMail >= 2) {
     return { kind: "useOn", item: "Blue dye", targetKind: "item", target: "Goblin mail", anchor: GENERAL.anchor, product: "Blue goblin mail" };
   }
+  if (orangeMail && blueMail) {
+    return { kind: "custom", name: "hand in armour", run: handInArmour };
+  }
   return { kind: "talk", stop: GENERAL };
 }
 var goblindiplomacy = {
@@ -50792,6 +50900,7 @@ var goblindiplomacy = {
     return ["goblin mail", "dye", "woad", "redberries", "onion", "coins", ...combatFoodNames().map((name) => name.toLowerCase())];
   },
   grind: ["Goblin"],
+  items: goblinDiplomacyItems,
   gather: {
     "goblin mail": goblinMailGatherStep,
     "orange dye": () => ({ kind: "custom", name: "make orange dye", run: makeOrangeDye }),
@@ -54245,13 +54354,8 @@ var BKF_TILE = {
 };
 var SECRET_WALL_ID = 2341;
 var GUARD_DOOR_ID = 2337;
-var MEETING_DOOR_ID = 2338;
 var ALREADY_LISTENED = /i can't hear much right now/i;
-var FORTRESS_TALK = [
-  "I don't care. I'm going in anyway.",
-  "Yes, but I work here!",
-  "I'm going in anyway"
-];
+var FORTRESS_TALK = ["I don't care. I'm going in anyway.", "Yes, but I work here!"];
 var has5 = (snap, name) => (snap.inv.get(name.toLowerCase()) ?? 0) > 0;
 var worn3 = (snap, name) => snap.worn.has(name.toLowerCase());
 function isBlackKnightFortressInterior(t) {
@@ -54268,12 +54372,6 @@ function isBlackKnightFortressInterior(t) {
 }
 function isSecretPassageLanding(t) {
   if (t === null || t.level !== 0) {
-    return false;
-  }
-  return t.x >= 3014 && t.x <= 3017 && t.z >= 3517 && t.z <= 3521;
-}
-function isSecretPassageUpper(t) {
-  if (t === null || t.level !== 1) {
     return false;
   }
   return t.x >= 3014 && t.x <= 3017 && t.z >= 3517 && t.z <= 3521;
@@ -54319,12 +54417,9 @@ function decide22(snap) {
   return { kind: "talk", stop: SIR_AMIK };
 }
 async function handleFortressTalk(log) {
-  if (ChatDialog.isOpen() || ChatDialog.canContinue() || ChatDialog.options().length > 0) {
-    log("clearing fortress guard chat");
+  if (ChatDialog.isOpen() || ChatDialog.canContinue()) {
     await driveDialog(FORTRESS_TALK, log);
-    return true;
   }
-  return false;
 }
 function locNamed(name, op, within3) {
   return Locs.query().name(name).action(op).within(within3).nearest();
@@ -54334,11 +54429,11 @@ function locNamedReachable(name, op, within3) {
 }
 function grillReady() {
   const here2 = Game.tile();
-  if (isSecretPassageLanding(here2) || isSecretPassageUpper(here2)) {
+  if (isSecretPassageLanding(here2)) {
     return null;
   }
-  const grill = locNamed("Grill", "Listen-at", 8);
-  if (!grill || !canUseLoc(grill)) {
+  const grill = locNamed("Grill", "Listen-at", 6);
+  if (!grill || !canUseLoc(grill) || chebyshev2(grill.tile(), BKF_TILE.GRILL) > 3) {
     return null;
   }
   return grill;
@@ -54426,7 +54521,7 @@ async function openNearbyBarrier(log) {
   if (isSecretPassageLanding(here2)) {
     return false;
   }
-  const wall = Locs.query().action("Push").within(6).where((l) => (l.id === SECRET_WALL_ID || (l.name ?? "").toLowerCase() === "wall") && canUseLoc(l)).nearest();
+  const wall = Locs.query().action("Push").within(3).where((l) => (l.id === SECRET_WALL_ID || (l.name ?? "").toLowerCase() === "wall") && canUseLoc(l)).nearest();
   if (wall && (!isBlackKnightFortressInterior(here2) || chebyshev2(wall.tile(), BKF_TILE.HOLE) <= 6)) {
     log("pushing a fortress wall");
     const mark2 = GameMessages.mark();
@@ -54434,7 +54529,13 @@ async function openNearbyBarrier(log) {
     await Execution.delayTicks(3);
     return !GameMessages.sawSince(mark2, CANT_REACH);
   }
-  const door = Locs.query().action("Open").within(8).where((l) => /^(sturdy door|door)$/i.test(l.name ?? "") && canUseLoc(l) && !isInteriorSideOfGuardDoor(here2, l)).nearest();
+  const door = Locs.query().action("Open").within(3).where((l) => {
+    const t = l.tile();
+    if (here2 !== null && t.level !== here2.level) {
+      return false;
+    }
+    return /^(sturdy door|door)$/i.test(l.name ?? "") && canUseLoc(l) && !isInteriorSideOfGuardDoor(here2, l);
+  }).nearest();
   if (!door) {
     return false;
   }
@@ -54449,15 +54550,42 @@ async function openNearbyBarrier(log) {
   }
   return true;
 }
+async function walkStayOnFloor(stand, log) {
+  const start = Game.tile();
+  if (start === null) {
+    return false;
+  }
+  if (start.level === stand.level && chebyshev2(start, stand) <= 1) {
+    return true;
+  }
+  log(`staying on this floor to the ladder at (${stand.x},${stand.z})`);
+  const floorStand = start.level === stand.level ? stand : new Tile(stand.x, stand.z, start.level);
+  for (let attempt = 0;attempt < 6; attempt++) {
+    const here2 = Game.tile();
+    if (here2 !== null && here2.level === floorStand.level && chebyshev2(here2, floorStand) <= 1) {
+      return true;
+    }
+    await openNearbyBarrier(log);
+    await DirectNavigator.walkTo(floorStand, 1, 8000);
+  }
+  const now = Game.tile();
+  return now !== null && now.level === floorStand.level && chebyshev2(now, floorStand) <= 1;
+}
 async function climbAt2(stand, op, log) {
   const here2 = Game.tile();
   if (here2 === null) {
     return false;
   }
-  if (here2.level !== stand.level || chebyshev2(here2, stand) > 1) {
-    log(`walking to the fortress ladder at (${stand.x},${stand.z})`);
-    if (!await Traversal.walkResilient(stand, { radius: 1, attempts: 4, timeoutMs: 60000, log })) {
-      return false;
+  if (chebyshev2(here2, stand) > 1 || here2.level !== stand.level) {
+    if (isBlackKnightFortressInterior(here2) || here2.level === stand.level) {
+      if (!await walkStayOnFloor(stand, log)) {
+        return false;
+      }
+    } else {
+      log(`walking to the fortress ladder at (${stand.x},${stand.z})`);
+      if (!await Traversal.walkResilient(stand, { radius: 1, attempts: 4, timeoutMs: 60000, log })) {
+        return false;
+      }
     }
   }
   const ladder = Locs.query().name("Ladder").action(op).within(6).where((l) => chebyshev2(l.tile(), stand) <= 2).nearest() ?? locNamedReachable("Ladder", op, 6);
@@ -54493,22 +54621,7 @@ async function approachInside(dest, log) {
       await climbAt2(BKF_TILE.GRILL_LADDER_TOP, "Climb-down", log);
       return;
     }
-    if (isSecretPassageUpper(here2)) {
-      log("leaving the secret-passage landing toward the grill ladder");
-    }
-    if (await openNearbyBarrier(log)) {
-      return;
-    }
-    log("walking across the first floor to the grill ladder");
-    const reached = await Traversal.walkResilient(BKF_TILE.GRILL_LADDER_TOP, {
-      radius: 1,
-      attempts: 6,
-      timeoutMs: 180000,
-      log
-    });
-    if (reached) {
-      await climbAt2(BKF_TILE.GRILL_LADDER_TOP, "Climb-down", log);
-    }
+    await walkStayOnFloor(BKF_TILE.GRILL_LADDER_TOP, log);
     return;
   }
   if (toHole && here2.level === 0 && (locNamedReachable("Grill", "Listen-at", 12) !== null || chebyshev2(here2, BKF_TILE.GRILL_LADDER_BOTTOM) <= 6)) {
@@ -54579,9 +54692,8 @@ async function infiltrate(log) {
   }
   if (isSecretPassageLanding(Game.tile())) {
     log("climbing the secret-passage ladder, the south-face Sturdy door is not reachable from here");
-    if (!await climbAt2(BKF_TILE.SECRET_LADDER, "Climb-up", log)) {
-      return false;
-    }
+    await climbAt2(BKF_TILE.SECRET_LADDER, "Climb-up", log);
+    return false;
   }
   if (!listened) {
     log("infiltrating the fortress to eavesdrop at the grill");

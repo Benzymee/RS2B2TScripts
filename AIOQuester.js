@@ -50350,7 +50350,13 @@ var waterfall = {
 // src/bot/api/ai/quests/defs/goblindiplomacy.ts
 var DRAYNOR_BANK2 = new Tile(3093, 3243, 0);
 var BARTENDER2 = { npc: "Bartender", anchor: new Tile(3045, 3257, 0), leash: 8, prefer: ["Not very busy in here today, is it?"] };
-var GENERAL = { npc: "General Wartface", anchor: new Tile(2957, 3510, 0), leash: 6, prefer: ["Do you want me to pick an armour colour for you?"] };
+var GENERAL = {
+  npc: "General Wartface",
+  anchor: new Tile(2957, 3510, 0),
+  leash: 6,
+  prefer: ["Do you want me to pick an armour colour for you?"],
+  gapMs: 5000
+};
 var AGGIE_ANCHOR = new Tile(3086, 3259, 0);
 var AGGIE_RED = { npc: "Aggie", anchor: AGGIE_ANCHOR, leash: 6, prefer: ["Can you make dyes for me please?", "What do you need to make red dye?", "Okay, make me some red dye please."] };
 var AGGIE_YELLOW = { npc: "Aggie", anchor: AGGIE_ANCHOR, leash: 6, prefer: ["Can you make dyes for me please?", "What do you need to make yellow dye?", "Okay, make me some yellow dye please."] };
@@ -50382,6 +50388,49 @@ var FUNDING_STALL_MS2 = 120000;
 var FUNDING_REGEN_WAIT_MS = 60000;
 var has = (snap, name) => (snap.inv.get(name) ?? 0) > 0;
 var qty = (snap, name) => snap.inv.get(name) ?? 0;
+var orangeShown = false;
+var blueShown = false;
+function noteHandInProgress(snap) {
+  if (snap.journal !== "inProgress") {
+    orangeShown = false;
+    blueShown = false;
+    return;
+  }
+  const orange = has(snap, "orange goblin mail");
+  const blue = has(snap, "blue goblin mail");
+  if (orange) {
+    orangeShown = false;
+  } else if (blue && !has(snap, "orange dye")) {
+    orangeShown = true;
+  }
+  if (blue) {
+    blueShown = false;
+  } else if (orangeShown && !has(snap, "blue dye") && qty(snap, "goblin mail") <= 1 && !orange) {
+    blueShown = true;
+  }
+}
+function colourAccounted(snap) {
+  noteHandInProgress(snap);
+  const orangeHeld = has(snap, "orange goblin mail");
+  const blueHeld = has(snap, "blue goblin mail");
+  return {
+    orange: orangeHeld || has(snap, "orange dye") || orangeShown,
+    blue: blueHeld || has(snap, "blue dye") || blueShown
+  };
+}
+function armourReadyToShow(snap) {
+  noteHandInProgress(snap);
+  const orange = has(snap, "orange goblin mail");
+  const blue = has(snap, "blue goblin mail");
+  const plain = qty(snap, "goblin mail");
+  if (orange && blue) {
+    return true;
+  }
+  if (blue && !orange) {
+    return true;
+  }
+  return orangeShown && !orange && !blue && plain >= 1;
+}
 function woadLeavesHeld() {
   return Inventory.count("Woad leaf") + Inventory.count("Woad leaves");
 }
@@ -50620,19 +50669,18 @@ function foodAcquisitionSpace(snap, slots) {
   };
 }
 function goblinDiplomacyItems(snap) {
-  const orange = has(snap, "orange goblin mail");
-  const blue = has(snap, "blue goblin mail");
+  const accounted = colourAccounted(snap);
   const plain = qty(snap, "goblin mail");
-  const filled = (orange ? 1 : 0) + (blue ? 1 : 0);
+  const filled = (accounted.orange ? 1 : 0) + (accounted.blue ? 1 : 0);
   const remainingPlain = Math.max(0, 3 - filled);
   const items = [];
   if (plain < remainingPlain) {
     items.push({ name: "Goblin mail", qty: remainingPlain, kind: "acquirable" });
   }
-  if (!orange && !has(snap, "orange dye")) {
+  if (!accounted.orange) {
     items.push({ name: "Orange dye", qty: 1, kind: "acquirable" });
   }
-  if (!blue && !has(snap, "blue dye")) {
+  if (!accounted.blue) {
     items.push({ name: "Blue dye", qty: 1, kind: "acquirable" });
   }
   return items;
@@ -50859,14 +50907,65 @@ async function stepOutOfGoblinCombat(log) {
   }
   return true;
 }
+async function stayWithWartface(log) {
+  const find = () => Npcs.query().name(GENERAL.npc).within(8).nearest();
+  let npc = find();
+  if (!npc || npc.distance() > 1) {
+    await DirectNavigator.walkTo(npc?.tile() ?? GENERAL.anchor, 1, 12000);
+    npc = find();
+  }
+  if (!npc) {
+    log("no General Wartface in the hut");
+    return false;
+  }
+  const closer = Locs.query().name("Door").action("Close").within(3).nearest();
+  if (closer) {
+    await closer.interact("Close");
+    await Execution.delayTicks(1);
+  }
+  return true;
+}
 async function handInArmour(log) {
-  if (!await stepOutOfGoblinCombat(log)) {
-    return false;
+  for (let round = 0;round < 6; round++) {
+    if (EventSignal.pending()) {
+      return false;
+    }
+    if (!await stepOutOfGoblinCombat(log)) {
+      return false;
+    }
+    if (!await stayWithWartface(log)) {
+      return false;
+    }
+    const orangeBefore = Inventory.count("Orange goblin mail");
+    const blueBefore = Inventory.count("Blue goblin mail");
+    const plainBefore = Inventory.count("Goblin mail");
+    if (orangeBefore === 0 && blueBefore === 0 && plainBefore === 0) {
+      return true;
+    }
+    log(round === 0 ? "showing the generals the goblin armour" : "still in the hut, showing the next colour");
+    await talkThrough(GENERAL.npc, GENERAL.prefer, log, GENERAL.gapMs);
+    const orangeAfter = Inventory.count("Orange goblin mail");
+    const blueAfter = Inventory.count("Blue goblin mail");
+    const plainAfter = Inventory.count("Goblin mail");
+    if (orangeAfter < orangeBefore) {
+      orangeShown = true;
+      log("generals took the orange mail, staying to show blue");
+      continue;
+    }
+    if (blueAfter < blueBefore) {
+      blueShown = true;
+      log("generals took the blue mail, staying to show brown");
+      continue;
+    }
+    if (plainAfter < plainBefore && orangeAfter === 0 && blueAfter === 0) {
+      log("generals took the brown mail");
+      return true;
+    }
+    if (orangeAfter === 0 && blueAfter === 0 && plainAfter === 0) {
+      return true;
+    }
   }
-  if (!await gotoNpc(GENERAL, [], log)) {
-    return false;
-  }
-  return talkThrough(GENERAL.npc, GENERAL.prefer, log);
+  return Inventory.count("Orange goblin mail") === 0 && Inventory.count("Blue goblin mail") === 0;
 }
 function decide15(snap) {
   if (snap.journal === "complete") {
@@ -50887,7 +50986,7 @@ function decide15(snap) {
   if (has(snap, "blue dye") && !blueMail && plainMail >= 2) {
     return { kind: "useOn", item: "Blue dye", targetKind: "item", target: "Goblin mail", anchor: GENERAL.anchor, product: "Blue goblin mail" };
   }
-  if (orangeMail && blueMail) {
+  if (armourReadyToShow(snap)) {
     return { kind: "custom", name: "hand in armour", run: handInArmour };
   }
   return { kind: "talk", stop: GENERAL };
@@ -54560,12 +54659,35 @@ async function walkStayOnFloor(stand, log) {
   }
   log(`staying on this floor to the ladder at (${stand.x},${stand.z})`);
   const floorStand = start.level === stand.level ? stand : new Tile(stand.x, stand.z, start.level);
-  for (let attempt = 0;attempt < 6; attempt++) {
+  for (let attempt = 0;attempt < 10; attempt++) {
     const here2 = Game.tile();
     if (here2 !== null && here2.level === floorStand.level && chebyshev2(here2, floorStand) <= 1) {
       return true;
     }
-    await openNearbyBarrier(log);
+    await handleFortressTalk(log);
+    const door = Locs.query().action("Open").within(10).where((l) => {
+      const t = l.tile();
+      if (here2 === null || t.level !== here2.level) {
+        return false;
+      }
+      if (!canUseLoc(l) || isInteriorSideOfGuardDoor(here2, l)) {
+        return false;
+      }
+      return /^(sturdy door|door)$/i.test(l.name ?? "") && (chebyshev2(t, floorStand) < chebyshev2(here2, floorStand) || chebyshev2(here2, t) <= 2);
+    }).nearest();
+    if (door) {
+      log(`opening ${door.name ?? "door"} on this floor`);
+      await door.interact("Open");
+      await handleFortressTalk(log);
+      await Execution.delayTicks(2);
+      continue;
+    }
+    const destReachable = Reachability.probeable(floorStand) && Reachability.canReach(floorStand, { adjacentOk: true, maxSteps: 64 });
+    if (!destReachable) {
+      log("grill ladder still behind a shut door on this floor");
+      await Execution.delayTicks(2);
+      continue;
+    }
     await DirectNavigator.walkTo(floorStand, 1, 8000);
   }
   const now = Game.tile();

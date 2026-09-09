@@ -87,6 +87,10 @@ https://benzymee.github.io/RS2B2TScripts/InventoryAlcher.js
 
 https://benzymee.github.io/RS2B2TScripts/MapleTreeFletcher.js
 
+**NatureRuneCrafter** (`NatureRuneCrafter.js`). Crafts Nature runes via Jiminua's Jungle Store. Sells noted Rune essence, buys it back unnoted, then walks to the Mysterious ruins with a Nature talisman. Needs Runecrafting 44 and Magic 51. Lost City 289 (no tiaras).
+
+https://benzymee.github.io/RS2B2TScripts/NatureRuneCrafter.js
+
 **OakTreeFletcher** (`OakTreeFletcher.js`). Chops oak trees north of Varrock. Optional fletching into oak shortbows at 20 or longbows at 25.
 
 https://benzymee.github.io/RS2B2TScripts/OakTreeFletcher.js

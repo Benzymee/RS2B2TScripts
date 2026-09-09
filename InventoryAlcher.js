@@ -39,7 +39,7 @@ const {
 } = abi;
 
 const SCRIPT_NAME = 'InventoryAlcher';
-const SCRIPT_VERSION = '1.2.0';
+const SCRIPT_VERSION = '1.2.1';
 const CURRENT_TILE_BTN_ID = 'inventory-alcher-current-tile';
 
 const WELCOME_SCREEN_ID = 5993;
@@ -246,6 +246,24 @@ function writePrefRaw(key, value) {
     } catch {
         /* private mode / blocked storage */
     }
+}
+
+function readPrefRaw(key) {
+    const k = prefStorageKey(key);
+    try {
+        if (typeof sessionStorage !== 'undefined') {
+            const v = sessionStorage.getItem(k);
+            if (v !== null) {
+                return v;
+            }
+        }
+        if (typeof localStorage !== 'undefined') {
+            return localStorage.getItem(k);
+        }
+    } catch {
+        /* private mode / blocked storage */
+    }
+    return null;
 }
 
 function setNativeInputValue(el, value) {
@@ -777,16 +795,45 @@ function asTile(raw, fallback = new Tile(0, 0, 0)) {
     return fallback;
 }
 
-function readStandTile(settings) {
-    if (typeof settings?.tile === 'function') {
-        return asTile(settings.tile('standTile', new Tile(0, 0, 0)));
+function parseStandTileRaw(raw) {
+    if (!raw) {
+        return new Tile(0, 0, 0);
     }
-    const raw = typeof settings?.str === 'function' ? settings.str('standTile', '') : '';
-    const m = String(raw).match(/(-?\d+)\s*[,:\s]\s*(-?\d+)(?:\s*[,:\s]\s*(-?\d+))?/);
+    if (typeof raw === 'object') {
+        return asTile(raw);
+    }
+    const text = String(raw).trim();
+    if (!text) {
+        return new Tile(0, 0, 0);
+    }
+    try {
+        const o = JSON.parse(text);
+        if (o && typeof o === 'object') {
+            return asTile(o);
+        }
+    } catch {
+        /* not JSON */
+    }
+    const m = text.match(/(-?\d+)\s*[,:\s]\s*(-?\d+)(?:\s*[,:\s]\s*(-?\d+))?/);
     if (m) {
         return new Tile(Number(m[1]), Number(m[2]), Number(m[3] ?? 0));
     }
     return new Tile(0, 0, 0);
+}
+
+function readStandTile(settings) {
+    if (typeof settings?.tile === 'function') {
+        const fromSettings = asTile(settings.tile('standTile', new Tile(0, 0, 0)));
+        if (isStandSet(fromSettings)) {
+            return fromSettings;
+        }
+    }
+    const fromPref = parseStandTileRaw(readPrefRaw('standTile'));
+    if (isStandSet(fromPref)) {
+        return fromPref;
+    }
+    const raw = typeof settings?.str === 'function' ? settings.str('standTile', '') : '';
+    return parseStandTileRaw(raw);
 }
 
 function isStandSet(tile) {
@@ -1013,7 +1060,12 @@ class InventoryAlcher extends LoopingBot {
     syncSettings() {
         const s = this.settings;
         this.standSpot = s?.bool?.('standSpot', false) ?? false;
-        this.standTile = readStandTile(s);
+        const fromSettings = readStandTile(s);
+        if (isStandSet(fromSettings)) {
+            this.standTile = fromSettings;
+        } else if (!isStandSet(this.standTile)) {
+            this.standTile = fromSettings;
+        }
         this.alchInventory = s?.bool?.('alchInventory', false) ?? false;
         this.alchItemsRaw = s?.str?.('alchItems', '') ?? '';
         this.raiseKitten = s?.bool?.('raiseKitten', false) ?? false;
@@ -1286,7 +1338,6 @@ class InventoryAlcher extends LoopingBot {
 
         let still = Math.max(0, KITTEN_FISH_KEEP - packFishCount());
         const rows = bankFishRows();
-        const bankHadFish = rows.length > 0;
         if (still > 0) {
             const inPack = packFishItem();
             const preferredName = inPack ? normName(inPack.name) : '';
@@ -1324,11 +1375,15 @@ class InventoryAlcher extends LoopingBot {
             await Execution.delayTicks(1);
         }
 
-        if (needFish > 0 && packFishCount() < KITTEN_FISH_KEEP && !bankHadFish) {
+        if (needFish > 0 && packFishCount() < KITTEN_FISH_KEEP) {
             this.kittenBankDryUntil = Date.now() + 30_000;
-            this.log(`bank has no kitten fish, have ${packFishCount()}/${KITTEN_FISH_KEEP} in pack`);
+            this.log(`kitten fish ${packFishCount()}/${KITTEN_FISH_KEEP}, back to alching`);
         }
-        return true;
+
+        if (this.standSpot && isStandSet(this.standTile) && !onStandTile(this.standTile)) {
+            await this.returnToStand();
+        }
+        return false;
     }
 
     async feedKitten(npc) {

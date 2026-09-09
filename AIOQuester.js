@@ -11811,7 +11811,7 @@ class GameMessagesImpl {
   ring = [];
   lastSeq = 0;
   record(text) {
-    this.ring.push({ seq: ++this.lastSeq, text });
+    this.ring.push({ seq: ++this.lastSeq, text, time: Date.now() });
     if (this.ring.length > CAP) {
       this.ring.shift();
     }
@@ -11828,11 +11828,13 @@ class GameMessagesImpl {
   firstSince(mark, pattern) {
     return this.ring.find((m) => m.seq > mark && matches(pattern, m.text));
   }
-  recent(limit = 8) {
+  recent(limit = 8, withinMs) {
     if (limit <= 0 || this.ring.length === 0) {
       return [];
     }
-    return this.ring.slice(-limit).reverse();
+    const now = Date.now();
+    const slice = this.ring.slice(-limit).reverse();
+    return withinMs !== undefined ? slice.filter((m) => now - m.time <= withinMs) : slice;
   }
   reset() {
     this.ring = [];
@@ -13543,7 +13545,11 @@ var localQuests = {
     }
     const opened = await Execution.delayUntil(() => {
       const main = reader.modals().main;
-      return main !== -1 && main !== before;
+      if (main === -1 || main === before) {
+        return false;
+      }
+      const texts = reader.mainModalTexts();
+      return texts.length > 0 && texts.some((t) => t && t.trim().length > 0);
     }, 5000);
     return opened ? reader.mainModalTexts() : [];
   },
@@ -37929,12 +37935,15 @@ function isQuestLockText(line) {
 function isQuestLockDialogue(texts) {
   return texts.some(isQuestLockText);
 }
-function chatShowsQuestLock() {
+function chatShowsQuestLock(mark) {
   try {
-    if (!ChatDialog.isOpen() && !ChatDialog.canContinue()) {
-      return false;
+    if ((ChatDialog.isOpen() || ChatDialog.canContinue()) && isQuestLockDialogue(ChatDialog.texts())) {
+      return true;
     }
-    return isQuestLockDialogue(ChatDialog.texts());
+    if (mark !== undefined) {
+      return QUEST_LOCK_PATTERNS.some((re) => GameMessages.sawSince(mark, re));
+    }
+    return GameMessages.recent(3, 3000).some((m) => isQuestLockText(m.text));
   } catch {
     return false;
   }
@@ -38042,10 +38051,16 @@ async function attemptSlashWeb(shut, transport, mark, log) {
   return "fail";
 }
 function isOpenableBarrier(name, ops) {
-  return /(door|gate)/i.test(name ?? "") && ops.some((op) => op !== null && /^open/i.test(op));
+  if (!name || /prison door/i.test(name)) {
+    return false;
+  }
+  return /(door|gate)/i.test(name) && ops.some((op) => op !== null && /^open/i.test(op));
 }
 function isOpenBarrierLeaf(name, ops) {
-  return /(door|gate)/i.test(name ?? "") && ops.some((op) => op !== null && /^close/i.test(op));
+  if (!name || /prison door/i.test(name)) {
+    return false;
+  }
+  return /(door|gate)/i.test(name) && ops.some((op) => op !== null && /^close/i.test(op));
 }
 var DOOR_AVOID_STRIKES = 2;
 var DOOR_SESSION_STRIKES = 3;
@@ -38106,8 +38121,6 @@ function pickNearbyDoorTile(candidates, me, path) {
         score = 2000 - distMe;
       } else if (onPath) {
         score = 1000 - pathDist - distMe * 0.01;
-      } else if (distMe <= 1 && pathDist <= 3) {
-        score = 500 - pathDist - distMe * 0.01;
       } else {
         continue;
       }
@@ -38150,14 +38163,18 @@ async function tryNearbyDoor(log, path, exclude) {
   const hopHit = path?.hopDoors?.some((h) => h.x === t.x && h.z === t.z) ?? false;
   const scoped = path && path.tiles.length > 0 ? hopHit ? " (path hop)" : " (path corridor)" : "";
   log(`stalled next to closed '${door.name}' at (${t.x},${t.z})${scoped} — opening it`);
+  const mark = GameMessages.mark();
   if (!op || !door.interact(op)) {
     return false;
   }
   const opened = await Execution.delayUntil(() => {
+    if (chatShowsQuestLock(mark)) {
+      return false;
+    }
     const cur = Locs.query().where((l) => l.tile().x === t.x && l.tile().z === t.z && (l.name ?? "") === (door.name ?? "") && isOpenableBarrier(l.name, l.actions())).nearest();
     return cur === null || Reachability.canReach(t, { maxSteps: 200, adjacentOk: true });
   }, 5000);
-  if (!opened && chatShowsQuestLock()) {
+  if (!opened && chatShowsQuestLock(mark)) {
     await dismissQuestLockDialogue();
     return false;
   }
@@ -38258,12 +38275,12 @@ async function crossMultiTileDoor(approach, step, transport, log, onQuestLock) {
         log(`'${transport.action}' not offered by ${transport.locName} (ops: ${shut.actions().join(", ")})`);
         return false;
       }
-      await Execution.delayUntil(() => findTransportLoc(transport) === null || Reachability.canStep(approach, step) || GameMessages.sawSince(mark, CANT_REACH) || chatShowsQuestLock(), OPEN_WAIT_MS);
+      await Execution.delayUntil(() => findTransportLoc(transport) === null || Reachability.canStep(approach, step) || GameMessages.sawSince(mark, CANT_REACH) || chatShowsQuestLock(mark), OPEN_WAIT_MS);
       if (GameMessages.sawSince(mark, CANT_REACH)) {
         log(`server says can't reach ${transport.locName} — repathing`);
         return false;
       }
-      if (chatShowsQuestLock()) {
+      if (chatShowsQuestLock(mark)) {
         log(`quest-locked '${transport.locName}' at (${transport.locX},${transport.locZ}) — blacklisting`);
         await dismissQuestLockDialogue();
         onQuestLock?.(transport.locX, transport.locZ);
@@ -41020,7 +41037,7 @@ var GroundItems = {
 };
 
 // src/bot/data/miningRocks.ts
-var ROCK_TYPES = {
+var ROCK_TYPES2 = {
   Clay: [2108, 2109],
   Copper: [2090, 2091],
   Tin: [2094, 2095],
@@ -41032,11 +41049,11 @@ var ROCK_TYPES = {
   Adamantite: [2104, 2105],
   Runite: [2106, 2107]
 };
-var QUEST_ROCK_TYPES = {
+var QUEST_ROCK_TYPES2 = {
   Blurite: [2110],
   Limestone: [4027, 4028, 4029]
 };
-var ROCK_OPTIONS = Object.keys(ROCK_TYPES);
+var ROCK_OPTIONS = Object.keys(ROCK_TYPES2);
 var GAS_ROCK_IDS = new Set([
   2119,
   2120,
@@ -41123,10 +41140,14 @@ async function openBlockingDoor(toward, log) {
     return false;
   }
   log(`reach: opening blocking '${shut.name}' at (${t.x},${t.z})`);
+  const mark = GameMessages.mark();
   if (!await shut.interact(op)) {
     return false;
   }
   return Execution.delayUntil(() => {
+    if (chatShowsQuestLock(mark)) {
+      return false;
+    }
     const still = Locs.query().where((l) => l.tile().x === t.x && l.tile().z === t.z && isOpenableBarrier(l.name, l.actions())).nearest();
     return still === null;
   }, 5000);
@@ -41392,26 +41413,32 @@ async function openDialogue(npcName, log) {
   if (dialogReady()) {
     return true;
   }
-  const find = () => Npcs.query().name(npcName).where((n) => talkOp(n.actions()) !== null).nearest();
-  const npc = find();
-  if (!npc) {
-    log(`no '${npcName}' nearby to talk to`);
-    return false;
+  for (let attempt = 0;attempt < 2; attempt++) {
+    const find = () => Npcs.query().name(npcName).where((n) => talkOp(n.actions()) !== null).nearest();
+    const npc = find();
+    if (!npc) {
+      log(`no '${npcName}' nearby to talk to`);
+      return false;
+    }
+    const status = await Reach.entityOp({
+      find,
+      op: talkOp(npc.actions()),
+      expect: dialogReady,
+      openWhenUnreachable: true,
+      expectMs: DIALOGUE_OPEN_MS,
+      what: npcName,
+      log
+    });
+    if (status === "done") {
+      return true;
+    }
+    if (status === "unreachable") {
+      break;
+    }
+    await Execution.delayTicks(2);
   }
-  const status = await Reach.entityOp({
-    find,
-    op: talkOp(npc.actions()),
-    expect: dialogReady,
-    openWhenUnreachable: true,
-    expectMs: DIALOGUE_OPEN_MS,
-    what: npcName,
-    log
-  });
-  if (status !== "done") {
-    log(`'${npcName}' never opened a dialogue`);
-    return false;
-  }
-  return true;
+  log(`'${npcName}' never opened a dialogue`);
+  return false;
 }
 async function talkThrough(npcName, prefer, log, gapMs) {
   if (!await openDialogue(npcName, log)) {
@@ -41656,7 +41683,7 @@ function miningInterrupted() {
   return EventSignal.pending() || ChatDialog.canContinue() || Game.inCombat() || liveUsablePickaxe() === null;
 }
 function nearbyRock(type) {
-  const ids = new Set(ROCK_TYPES[type]);
+  const ids = new Set(ROCK_TYPES2[type]);
   return Locs.query().where((loc) => ids.has(loc.id) && Reachability.canReach(loc.tile(), { adjacentOk: true })).action("Mine").within(20).nearest();
 }
 async function mineOne(type, item, log) {
@@ -42344,7 +42371,7 @@ async function useOnLoc(itemId, loc, prefer, expect, log) {
 }
 
 // src/bot/api/ai/quests/defs/knightssword/dungeon.ts
-var BLURITE_IDS = new Set(QUEST_ROCK_TYPES.Blurite);
+var BLURITE_IDS = new Set(QUEST_ROCK_TYPES2.Blurite);
 var MINE_ATTEMPTS = 30;
 async function nearestReachableRock(log) {
   const here = Game.tile();
@@ -42661,14 +42688,13 @@ function pie(snap) {
   if (heldId2(snap, KS_ID.PASTRY_DOUGH) > 0) {
     return heldId2(snap, KS_ID.PIE_DISH) > 0 ? combine(KS_NAME.PASTRY_DOUGH, KS_NAME.PIE_DISH, KS_NAME.PIE_SHELL) : pieDish(snap);
   }
-  if (heldId2(snap, KS_ID.POT_OF_FLOUR) > 0 && heldId2(snap, KS_ID.BUCKET_OF_WATER) > 0) {
-    return { kind: "custom", name: "mix pastry dough", run: mixDough };
+  const hasFinishedPie = heldId2(snap, KS_ID.REDBERRY_PIE) > 0;
+  const hasAllIngredients = heldId2(snap, KS_ID.PIE_DISH) > 0 && heldId2(snap, KS_ID.POT_OF_FLOUR) > 0 && (heldId2(snap, KS_ID.BUCKET_OF_WATER) > 0 || heldId2(snap, KS_ID.BUCKET) > 0) && heldId2(snap, KS_ID.REDBERRIES) > 0;
+  if (!snap.bankKnown && !hasFinishedPie && !hasAllIngredients) {
+    return scanBank;
   }
-  if (heldId2(snap, KS_ID.BUCKET) > 0 && heldId2(snap, KS_ID.BUCKET_OF_WATER) === 0) {
-    return { kind: "custom", name: "fill the bucket", run: fillBucket };
-  }
-  if (heldId2(snap, KS_ID.BUCKET_OF_WATER) === 0 && heldId2(snap, KS_ID.BUCKET) === 0) {
-    return buy(KS_NAME.BUCKET, GENERAL_STORE);
+  if (heldId2(snap, KS_ID.BUCKET_OF_WATER) === 0) {
+    return heldId2(snap, KS_ID.BUCKET) > 0 ? { kind: "custom", name: "fill the bucket", run: fillBucket } : buy(KS_NAME.BUCKET, GENERAL_STORE);
   }
   if (heldId2(snap, KS_ID.PIE_DISH) === 0) {
     return pieDish(snap);
@@ -42678,9 +42704,6 @@ function pie(snap) {
   }
   if (heldId2(snap, KS_ID.REDBERRIES) === 0) {
     return buy(KS_NAME.REDBERRIES, WYDIN);
-  }
-  if (!snap.bankKnown && heldId2(snap, KS_ID.BUCKET) === 0 && heldId2(snap, KS_ID.BUCKET_OF_WATER) === 0) {
-    return scanBank;
   }
   return { kind: "custom", name: "mix pastry dough", run: mixDough };
 }
@@ -45033,10 +45056,33 @@ function decideJailbreak(snap) {
   }
   return missingKit(snap) ?? { kind: "custom", name: "tie Lady Keli, unlock the cell and free the prince", run: breakOut };
 }
+function atPrince() {
+  const here2 = Game.tile();
+  return here2 !== null && here2.z <= PA_TILE.PRINCE.z && Math.abs(here2.x - PA_TILE.PRINCE.x) <= 1;
+}
+function inCell() {
+  const here2 = Game.tile();
+  return here2 !== null && here2.z <= PA_TILE.CELL.z && Math.abs(here2.x - PA_TILE.CELL.x) <= 1;
+}
+function northOfDoor() {
+  const here2 = Game.tile();
+  return here2 !== null && here2.z > PA_TILE.CELL.z;
+}
+async function stepIntoCell() {
+  await DirectNavigator.walk(PA_TILE.PRINCE);
+  return Execution.delayUntil(atPrince, 6000);
+}
 async function tieKeli(log) {
-  const keli = Npcs.query().name(PA_NPC.KELI).within(KELI_BLOCK_RADIUS).nearest();
+  let keli = Npcs.query().name(PA_NPC.KELI).within(KELI_BLOCK_RADIUS).nearest();
   if (!keli) {
-    return true;
+    if (!await Traversal.walkResilient(PA_TILE.KELI, { radius: 2, attempts: 3, timeoutMs: 60000, log })) {
+      return false;
+    }
+    await settleScene();
+    keli = Npcs.query().name(PA_NPC.KELI).within(KELI_BLOCK_RADIUS).nearest();
+    if (!keli) {
+      return true;
+    }
   }
   const rope = heldItem(PA_ITEM.ROPE.id);
   if (!rope) {
@@ -45054,12 +45100,11 @@ async function tieKeli(log) {
   return driveUntil(gone, [], log, 12000);
 }
 async function unlockCell(log) {
-  const inCell = () => {
-    const here2 = Game.tile();
-    return here2 !== null && here2.z <= PA_TILE.CELL.z && Math.abs(here2.x - PA_TILE.CELL.x) <= 1;
-  };
-  if (inCell()) {
+  if (atPrince()) {
     return true;
+  }
+  if (inCell()) {
+    return stepIntoCell();
   }
   if (!await Traversal.walkResilient(PA_TILE.DOOR_STAND, { radius: 0, attempts: 4, timeoutMs: 90000, log })) {
     return false;
@@ -45074,7 +45119,22 @@ async function unlockCell(log) {
   if (!await key.useOn(door)) {
     return false;
   }
-  return Execution.delayUntil(inCell, 6000);
+  return stepIntoCell();
+}
+async function leaveCell(log) {
+  if (northOfDoor()) {
+    return true;
+  }
+  const door = Locs.query().name(PA_LOC.PRISON_DOOR).action("Open").within(4).nearest();
+  if (!door) {
+    log("breakOut: Prince Ali is free but the Prison Door is not in the cell");
+    return false;
+  }
+  if (!await door.interact("Open")) {
+    return false;
+  }
+  await DirectNavigator.walk(PA_TILE.DOOR_STAND);
+  return Execution.delayUntil(northOfDoor, 6000);
 }
 async function breakOut(log) {
   if (!await tieKeli(log)) {
@@ -45088,7 +45148,13 @@ async function breakOut(log) {
   if (!await talkStrict(PA_NPC.PRINCE, [], log)) {
     log("breakOut: could not open a dialogue with Prince Ali");
   }
-  return driveUntil(handedOver, [], log, 20000);
+  if (!await driveUntil(handedOver, [], log, 20000)) {
+    return false;
+  }
+  if (!inCell()) {
+    return true;
+  }
+  return leaveCell(log);
 }
 
 // src/bot/api/ai/quests/defs/princeali/key.ts
@@ -45281,11 +45347,34 @@ function decide11(snap) {
       return { kind: "wait", reason: `Prince Ali Rescue stage ${stage} is not implemented` };
   }
 }
+function stageName(stage) {
+  switch (stage) {
+    case PRINCE_STAGE.NOT_STARTED:
+      return "not started, speak to Hassan in Al-Kharid Palace";
+    case PRINCE_STAGE.STARTED:
+      return "Hassan sent us to Osman";
+    case PRINCE_STAGE.SPOKEN_OSMAN:
+      return "Osman briefed, gather the disguise and Bronze key";
+    case PRINCE_STAGE.PREP_FINISHED:
+      return "prep finished, get Joe drunk";
+    case PRINCE_STAGE.GUARD_DRUNK:
+      return "Joe is drunk, tie Lady Keli";
+    case PRINCE_STAGE.TIED_KELI:
+      return "Keli is tied, unlock the cell and free Prince Ali";
+    case PRINCE_STAGE.SAVED:
+      return "Prince Ali is free, return to Hassan";
+    case PRINCE_STAGE.COMPLETE:
+      return "Prince Ali Rescue complete";
+    default:
+      return `stage ${stage}`;
+  }
+}
 var princeali = {
   record: QUESTS.find((record) => record.id === "prince"),
   bank: PA_TILE.DRAYNOR_BANK,
   ownsInventory: true,
   readProgress: readPrinceProgress,
+  stageName,
   decide: decide11
 };
 
@@ -47476,6 +47565,18 @@ async function executeStep(step, hops, log) {
       if (!await gotoNpc(step.stop, hops, log)) {
         return false;
       }
+      if (step.stop.npc === "Joe" && Inventory.contains("Beer")) {
+        const beer = Inventory.first("Beer");
+        const joe = Npcs.query().name("Joe").within(6).nearest();
+        if (beer && joe) {
+          log("using Beer on Joe the guard");
+          if (await beer.useOn(joe)) {
+            if (await Execution.delayUntil(() => ChatDialog.isOpen() || ChatDialog.canContinue(), 4000)) {
+              return driveDialog(step.stop.prefer, log, step.stop.gapMs);
+            }
+          }
+        }
+      }
       return talkThrough(step.stop.npc, step.stop.prefer, log, step.stop.gapMs);
     }
     case "grabGround": {
@@ -47569,8 +47670,13 @@ async function executeStep(step, hops, log) {
     }
     case "equip":
       return Equipment.equip(step.item);
-    case "scanBank":
-      return openBankLeg("scanBank: no known bank", step.bank, log);
+    case "scanBank": {
+      if (!await openBankLeg("scanBank: no known bank", step.bank, log)) {
+        return false;
+      }
+      await Execution.delayUntil(() => Bank.loaded(), 3000);
+      return Bank.isOpen();
+    }
     case "withdraw": {
       if (!await openBankLeg("withdraw: no known bank", step.bank, log)) {
         return false;
@@ -78543,8 +78649,15 @@ var GRAIL_STAGE = {
 function normalize29(lines) {
   return (typeof lines === "string" ? lines : lines.join(" ")).replace(/@[a-z0-9]{3}@/gi, " ").replace(/[|\s]+/g, " ").trim().toLowerCase();
 }
+var GRAIL_FLAG = {
+  HAVE_GRAIL: "have_grail",
+  NEED_GRAIL: "need_grail"
+};
 var STAGES6 = [
   ["quest complete!", GRAIL_STAGE.COMPLETE],
+  ["i should take it to arthur", GRAIL_STAGE.GIVEN_WHISTLE],
+  ["now i have the grail with me", GRAIL_STAGE.GIVEN_WHISTLE],
+  ["i should follow him to the castle", GRAIL_STAGE.GIVEN_WHISTLE],
   ["i honoured the fisher king's request", GRAIL_STAGE.GIVEN_WHISTLE],
   ["the fisher king is very sick", GRAIL_STAGE.FINDING_PERCIVAL],
   ["i need to find a weapon", GRAIL_STAGE.FAILED_TITAN],
@@ -78560,7 +78673,16 @@ function parseHolyGrailJournal(lines) {
     return;
   }
   const hit = STAGES6.find(([needle]) => text.includes(needle));
-  return hit ? { stage: hit[1], flags: new Set } : undefined;
+  if (!hit) {
+    return;
+  }
+  const flags = new Set;
+  if (text.includes("now i have the grail with me") || text.includes("i should take it to arthur") || text.includes("take it to arthur")) {
+    flags.add(GRAIL_FLAG.HAVE_GRAIL);
+  } else if (text.includes("i should follow him to the castle")) {
+    flags.add(GRAIL_FLAG.NEED_GRAIL);
+  }
+  return { stage: hit[1], flags };
 }
 var lastGood13;
 async function readHolyGrailProgress() {
@@ -78977,6 +79099,10 @@ function custom19(name, run2) {
   return { kind: "custom", name, run: run2 };
 }
 function excaliburPlan(snap) {
+  const stage = snap.progress?.stage ?? snap.stage;
+  if (stage !== undefined && stage >= GRAIL_STAGE.FINDING_PERCIVAL) {
+    return decide49(snap);
+  }
   if (banked18(snap, ITEM6.EXCALIBUR) > 0) {
     return { kind: "withdraw", items: [{ name: ITEM6.EXCALIBUR, qty: 1 }] };
   }
@@ -79075,8 +79201,18 @@ function percivalLeg(snap) {
   return whistleStep(snap, 1) ?? custom19("free Sir Percival from the Goblin Village sacks", freePercival);
 }
 function grailLeg(snap) {
-  if (held30(snap, ITEM6.GRAIL) > 0) {
-    return inFisherRealm(snap.tile) ? custom19("carry the Grail out of the realm", whistleOut) : { kind: "talk", stop: KING_ARTHUR_FINISH };
+  const hasGrail = held30(snap, ITEM6.GRAIL) > 0 || snap.progress?.flags.has(GRAIL_FLAG.HAVE_GRAIL);
+  if (hasGrail) {
+    if (inFisherRealm(snap.tile)) {
+      return custom19("carry the Grail out of the realm", whistleOut);
+    }
+    if (held30(snap, ITEM6.GRAIL) === 0 && banked18(snap, ITEM6.GRAIL) > 0) {
+      return { kind: "withdraw", items: [{ name: ITEM6.GRAIL, qty: 1 }] };
+    }
+    return { kind: "talk", stop: KING_ARTHUR_FINISH };
+  }
+  if (banked18(snap, ITEM6.GRAIL) > 0) {
+    return { kind: "withdraw", items: [{ name: ITEM6.GRAIL, qty: 1 }] };
   }
   if (inRenewedRealm(snap.tile)) {
     return custom19("take the Holy Grail from the round table", takeGrail);
@@ -79122,10 +79258,49 @@ function decide49(snap, food = selectedFood3()) {
       return { kind: "wait", reason: `unmapped Holy Grail stage ${stage}` };
   }
 }
+function stageName2(stage, progress) {
+  switch (stage) {
+    case GRAIL_STAGE.NOT_STARTED:
+      return "not started, speak to King Arthur at Camelot";
+    case GRAIL_STAGE.STARTED:
+      return "started, speak to Merlin in his study";
+    case GRAIL_STAGE.SPOKEN_MERLIN:
+      return "Merlin briefed, travel to Entrana";
+    case GRAIL_STAGE.SPOKEN_CRONE:
+      return "spoken to the crone, blow the whistle at the six heads";
+    case GRAIL_STAGE.FAILED_TITAN:
+      return "need a weapon that can defeat the Black Knight Titan";
+    case GRAIL_STAGE.FINDING_PERCIVAL:
+      return "the Fisher King is sick, find Sir Percival";
+    case GRAIL_STAGE.GIVEN_WHISTLE:
+      if (progress?.flags.has(GRAIL_FLAG.HAVE_GRAIL)) {
+        return "have the Holy Grail, take it to King Arthur";
+      }
+      if (progress?.flags.has(GRAIL_FLAG.NEED_GRAIL)) {
+        return "follow Percival to the castle for the Holy Grail";
+      }
+      return "collect the Holy Grail";
+    case GRAIL_STAGE.COMPLETE:
+      return "Holy Grail complete";
+    default:
+      return `stage ${stage}`;
+  }
+}
 var holygrail = {
   record: QUESTS.find((r) => r.id === "grail"),
   bank: "nearest",
   food: FOOD_FLOAT,
+  items: (snap) => {
+    const stage = snap.progress?.stage ?? snap.stage;
+    if (stage !== undefined && stage >= GRAIL_STAGE.FINDING_PERCIVAL) {
+      return [];
+    }
+    return [{ name: "Excalibur", qty: 1, kind: "acquirable" }];
+  },
+  foodReady: (snap) => {
+    const stage = snap.progress?.stage ?? snap.stage;
+    return stage === GRAIL_STAGE.SPOKEN_CRONE || stage === GRAIL_STAGE.FAILED_TITAN;
+  },
   grind: ["Black Knight Titan"],
   tools: [
     ITEM6.EXCALIBUR.toLowerCase(),
@@ -79139,6 +79314,7 @@ var holygrail = {
   sustain: { foods: ["Lobster", "Swordfish", "Tuna"], eatBelowHp: 0.5 },
   gather: { excalibur: excaliburPlan },
   readProgress: readHolyGrailProgress,
+  stageName: stageName2,
   warnReadiness: () => "Holy Grail fights a level-120 Black Knight Titan (142 hp, 91 defence); the proven floor is 70 combat in rune with Lobsters",
   decide: decide49
 };
@@ -81742,11 +81918,11 @@ async function jailedByGlough(log) {
     const t = here4();
     return t !== null && t.level === 3 && t.z === GT_TILE.jail.z && t.x > GT_TILE.jail.x && !ChatDialog.isOpen() && !ChatDialog.canContinue();
   };
-  const inCell = () => {
+  const inCell2 = () => {
     const t = here4();
     return t !== null && t.level === 3 && GT_TILE.jail.distanceTo(t) === 0;
   };
-  const stop = inCell() ? CHARLIE2 : GLOUGH;
+  const stop = inCell2() ? CHARLIE2 : GLOUGH;
   if (!await gotoNpc(stop, GT_HOPS, log)) {
     return false;
   }
@@ -82497,7 +82673,7 @@ async function openLoc(locId, op, expect, what, log) {
   }
   return driveUntil(expect, [], log, DOOR_MS2);
 }
-function inCell() {
+function inCell2() {
   const at2 = here6();
   return at2 !== null && at2.level === 0 && at2.z <= SC_TILE.JAIL_CELL.z && at2.x >= 2928 && at2.x <= 2934 && at2.z >= 9683;
 }
@@ -82528,7 +82704,7 @@ async function fetchDustyKey(log) {
   if (heldId(SC_ID.DUSTY_KEY) > 0) {
     return true;
   }
-  if (!inCell()) {
+  if (!inCell2()) {
     if (!await walkTo10(SC_TILE.JAIL_DOOR, 1, log)) {
       return false;
     }
@@ -82539,7 +82715,7 @@ async function fetchDustyKey(log) {
       return false;
     }
     log("scorpcatcher: unlocking Velrak's cell");
-    if (!await unlockWithKey(SC_ID.JAIL_KEY, SC_ID.JAIL_DOOR, inCell, "cell door", log)) {
+    if (!await unlockWithKey(SC_ID.JAIL_KEY, SC_ID.JAIL_DOOR, inCell2, "cell door", log)) {
       return false;
     }
     await settleScene();
@@ -82552,7 +82728,7 @@ async function fetchDustyKey(log) {
     log("scorpcatcher: Velrak handed over no dusty key");
     return false;
   }
-  return openLoc(SC_ID.JAIL_DOOR, "Open", () => !inCell(), "cell door", log);
+  return openLoc(SC_ID.JAIL_DOOR, "Open", () => !inCell2(), "cell door", log);
 }
 function inDeepDungeon2() {
   const at2 = here6();
@@ -98808,6 +98984,7 @@ class QuestEngine {
   waitKey = "";
   waitCount = 0;
   lastStepLogged = "";
+  lastKnownStages = new Map;
   stepSubLog = new Set;
   tracker = new StepTracker;
   tick = 0;
@@ -98828,9 +99005,7 @@ class QuestEngine {
       return;
     }
     if (!skipEarly && Bank.isOpen()) {
-      await Execution.delayUntil(() => Bank.loaded(), 3000);
-      this.refreshBankCounts(true);
-      await Modals.close();
+      await this.captureOpenBank();
       return;
     }
     const mainModal = reader.modals().main;
@@ -98880,8 +99055,7 @@ class QuestEngine {
         this.host.log(`${module.record.name}: ${note}`);
       }
     }
-    const progress = await module.readProgress?.();
-    const stage = progress ? progress.stage : await module.readStage?.();
+    const { progress, stage } = await this.readQuestLog(module);
     const snap = this.buildSnapshot(module, stage, progress);
     if (await prayerUpkeep()) {
       return;
@@ -98938,7 +99112,8 @@ class QuestEngine {
       }
     }
     if (!this.provisioned.has(id)) {
-      const plan2 = planProvisioning(module.record.items, snap.inv, this.lastBankCounts);
+      const items = module.items ? module.items(snap) : module.record.items;
+      const plan2 = planProvisioning(items, snap.inv, this.lastBankCounts);
       const coinFloat = coinFloatWithdraw(snap.inv, this.lastBankCounts, module.coinFloat ?? COIN_FLOAT3);
       const foodItem2 = this.host.foodItem();
       const foodReady = module.foodReady?.(snap) ?? true;
@@ -99057,11 +99232,15 @@ class QuestEngine {
       }
     });
     const took = Date.now() - startedAt;
+    await this.captureOpenBank();
     if (await this.recoverDeathIfPending()) {
       return;
     }
+    const afterLog = await this.readQuestLog(module);
+    const afterProgress = afterLog.progress ?? progress;
+    const afterStage = afterLog.stage ?? stage;
+    const after = this.buildSnapshot(module, afterStage, afterProgress);
     if (announce || !ok) {
-      const after = this.buildSnapshot(module, stage, progress);
       this.host.log(`  → ${ok ? "ok" : "FAILED"} in ${formatDuration(took)} · ${invDelta(snap.inv, after.inv)}`);
       if (!ok && module.observe) {
         for (const line of module.observe(after, step3)) {
@@ -99074,13 +99253,8 @@ class QuestEngine {
     } else if (++this.failStreak % FAIL_WARN === 0) {
       this.host.log(`WARN: '${stepDesc}' has failed ${this.failStreak}x in a row ` + `over ${formatDuration(this.tracker.elapsed(Date.now()))} — failures do not feed the no-progress watchdog, so this will not park itself`);
     }
-    if (Bank.isOpen()) {
-      await Execution.delayUntil(() => Bank.loaded(), 3000);
-      this.refreshBankCounts(true);
-      await Modals.close();
-    }
     if (ok && advancesWorld(step3)) {
-      const count = this.watchdog.note(progressSignature(this.buildSnapshot(module, stage, progress)));
+      const count = this.watchdog.note(progressSignature(after));
       this.noProgressCount = count;
       if (count === NO_PROGRESS_WARN) {
         this.host.log(`WARN: ${count} steps with no progress on ${module.record.name} — check the decide()/prefer lists`);
@@ -99114,12 +99288,13 @@ class QuestEngine {
     if (chat2.length > 0) {
       this.host.log(`  chat: ${chat2.map((m) => m.text).join(" | ")}`);
     }
-    if (deadModule?.observe) {
-      const progress = await deadModule.readProgress?.();
-      const stage = progress ? progress.stage : await deadModule.readStage?.();
-      const deathSnap = this.buildSnapshot(deadModule, stage, progress);
-      for (const line of deadModule.observe(deathSnap, { kind: "wait", reason: "death" })) {
-        this.host.log(`  ${line}`);
+    if (deadModule) {
+      const { progress, stage } = await this.readQuestLog(deadModule);
+      if (deadModule.observe) {
+        const deathSnap = this.buildSnapshot(deadModule, stage, progress);
+        for (const line of deadModule.observe(deathSnap, { kind: "wait", reason: "death" })) {
+          this.host.log(`  ${line}`);
+        }
       }
     }
     this.provisioned.delete(deadId);
@@ -99231,6 +99406,32 @@ class QuestEngine {
   }
   nameOf(id, elig) {
     return elig.get(id)?.name ?? id;
+  }
+  async captureOpenBank() {
+    if (!Bank.isOpen()) {
+      return;
+    }
+    await Execution.delayUntil(() => Bank.loaded(), 3000);
+    this.refreshBankCounts(true);
+    await Modals.close();
+  }
+  async readQuestLog(module) {
+    const progress = await module.readProgress?.();
+    const stage = progress ? progress.stage : await module.readStage?.();
+    this.acknowledgeStage(module, stage, progress);
+    return { progress, stage };
+  }
+  acknowledgeStage(module, stage, progress) {
+    if (stage === undefined) {
+      return;
+    }
+    const prev = this.lastKnownStages.get(module.record.id);
+    if (prev === stage) {
+      return;
+    }
+    this.lastKnownStages.set(module.record.id, stage);
+    const description = module.stageName?.(stage, progress) ?? `stage ${stage}`;
+    this.host.log(`[Quest Log] ${module.record.name}: acknowledged step -> ${description}`);
   }
   buildSnapshot(module, stage, progress) {
     const inv = new Map;

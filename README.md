@@ -23,7 +23,7 @@ Most scripts dismiss the welcome screen on start.
 
 ## Scripts: COPY THE LINK INTO THE BOT URL SPOT WHERE YOU CHOOSE A SCRIPT AND CLICK LOAD TO LOAD THE SCRIPT
 
-**AIOQuester** (`AIOQuester.js`). Completes Lost City 2004 quests and gathers the required items.
+**AIOQuester** (`AIOQuester.js`). MAY HAVE BUGS: A somewhat attempted fix of the original script meaning it should run better and gather more quest items/finish quests properly. Completes Lost City 2004 quests and gathers the required items.
 
 https://benzymee.github.io/RS2B2TScripts/AIOQuester.js
 

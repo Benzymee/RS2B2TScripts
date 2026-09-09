@@ -115,7 +115,7 @@ https://benzymee.github.io/RS2B2TScripts/OakTreeFletcherSell.js
 
 https://benzymee.github.io/RS2B2TScripts/ProgressiveChopper.js
 
-**RuneCrafter** (`RuneCrafter.js`). Crafts runes at 2004 altars except Nature. Best picks the highest rune your level and talismans allow. Cosmic banks in Zanaris.
+**RuneCrafter** (`RuneCrafter.js`). Crafts all runes at altars except Nature. Best option picks the highest rune your level and talismans in bank allow. Best to be inside Zanaris before choosing to craft cosmic runes. Will walk to next tier altar/bank
 
 https://benzymee.github.io/RS2B2TScripts/RuneCrafter.js
 

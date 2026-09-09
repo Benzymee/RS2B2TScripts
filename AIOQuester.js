@@ -109678,6 +109678,199 @@ class DismissWelcomeModal {
   }
 }
 
+// src/bot/scripts/AIOQuester/questPickerUi.ts
+var MARK = "rs2b0tQuestPicker";
+function page() {
+  return globalThis.document ?? null;
+}
+function chipLabel(chip) {
+  return (chip.textContent ?? "").replace(/\s+/g, " ").trim();
+}
+function idForLabel(label, byName, byId3) {
+  const key3 = label.toLowerCase();
+  return byName.get(key3) ?? (byId3.has(key3) ? key3 : null);
+}
+function fireChange(box) {
+  box.dispatchEvent(new Event("change", { bubbles: true }));
+}
+function maps() {
+  const records = loadQuestRecords();
+  const byName = new Map;
+  const byId3 = new Set;
+  for (const record of records) {
+    byName.set(record.name.toLowerCase(), record.id);
+    byId3.add(record.id);
+  }
+  return { byName, byId: byId3 };
+}
+function questChips(grid) {
+  const { byName, byId: byId3 } = maps();
+  const out = [];
+  for (const chip of grid.querySelectorAll("label")) {
+    const box = chip.querySelector('input[type="checkbox"]');
+    if (!box) {
+      continue;
+    }
+    const id = idForLabel(chipLabel(chip), byName, byId3);
+    if (id === null) {
+      continue;
+    }
+    out.push({ chip, box, id });
+  }
+  return out;
+}
+function isQuestGrid(grid) {
+  const row = grid.closest(".rs2b0t-param-row");
+  const title = row?.querySelector(".rs2b0t-param-label")?.textContent ?? "";
+  if (/quest queue/i.test(title)) {
+    return true;
+  }
+  const labels = [...grid.querySelectorAll("label")].map((node) => chipLabel(node).toLowerCase());
+  return labels.includes("cook's assistant") && labels.includes("sheep shearer");
+}
+function styleColumn(node) {
+  Object.assign(node.style, { display: "flex", flexDirection: "column", alignItems: "stretch", gap: "8px" });
+}
+function enhanceGrid(d, grid) {
+  if (grid.dataset[MARK] === "1") {
+    return;
+  }
+  if (grid.closest('[data-rs2b0t-quest-picker="1"]') || grid.parentElement?.querySelector(":scope > .rs2b0t-param-livepick") || grid.parentElement?.querySelector(":scope > .rs2b0t-param-selectgroup")) {
+    return;
+  }
+  if (!isQuestGrid(grid)) {
+    return;
+  }
+  const parent = grid.parentElement;
+  if (!parent) {
+    return;
+  }
+  const chips = questChips(grid);
+  if (chips.length === 0) {
+    return;
+  }
+  const column = d.createElement("div");
+  column.className = "rs2b0t-ctl-multiselect rs2b0t-param-control";
+  column.dataset.rs2b0tQuestPicker = "1";
+  styleColumn(column);
+  const bar = d.createElement("div");
+  bar.className = "rs2b0t-param-livepick";
+  Object.assign(bar.style, { display: "flex", flexDirection: "column", gap: "6px" });
+  const btn = d.createElement("button");
+  btn.type = "button";
+  btn.className = "rs2b0t-button";
+  btn.textContent = "Quests I can do";
+  const summary = d.createElement("div");
+  summary.className = "rs2b0t-param-livesummary";
+  Object.assign(summary.style, {
+    font: "12px ui-sans-serif, system-ui",
+    color: "#9aa3ad",
+    lineHeight: "1.45"
+  });
+  summary.textContent = "Checks this character's stats and completed quests, then ticks every implemented quest that can start now.";
+  btn.addEventListener("click", () => {
+    const result = pickQuestsICanDo(chips.map((chip) => chip.id));
+    summary.textContent = result.summary;
+    if (result.selected === undefined) {
+      return;
+    }
+    const wanted = new Set(result.selected.map((id) => id.toLowerCase()));
+    for (const chip of chips) {
+      chip.box.checked = wanted.has(chip.id.toLowerCase());
+    }
+    fireChange(chips[0].box);
+    syncF2p();
+  });
+  bar.appendChild(btn);
+  bar.appendChild(summary);
+  const f2pIds = new Set(F2P_QUEST_IDS.map((id) => id.toLowerCase()));
+  const group = d.createElement("label");
+  group.className = "rs2b0t-param-selectgroup";
+  Object.assign(group.style, {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "8px",
+    font: "13px ui-sans-serif, system-ui",
+    color: "#e6edf3",
+    fontWeight: "600",
+    width: "fit-content"
+  });
+  const groupBox = d.createElement("input");
+  groupBox.type = "checkbox";
+  groupBox.className = "rs2b0t-param-cb";
+  const syncF2p = () => {
+    const present = chips.filter((chip) => f2pIds.has(chip.id.toLowerCase()));
+    const hits = present.filter((chip) => chip.box.checked).length;
+    groupBox.checked = present.length > 0 && hits === present.length;
+    groupBox.indeterminate = hits > 0 && hits < present.length;
+  };
+  groupBox.addEventListener("change", () => {
+    for (const chip of chips) {
+      if (f2pIds.has(chip.id.toLowerCase())) {
+        chip.box.checked = groupBox.checked;
+      }
+    }
+    fireChange(chips[0].box);
+  });
+  group.appendChild(groupBox);
+  group.appendChild(d.createTextNode("F2P Quests"));
+  const divider = d.createElement("hr");
+  divider.className = "rs2b0t-param-divider";
+  Object.assign(divider.style, {
+    border: "0",
+    borderTop: "1px solid #3d444d",
+    margin: "2px 0 4px",
+    width: "100%"
+  });
+  for (const chip of chips) {
+    chip.box.addEventListener("change", syncF2p);
+  }
+  syncF2p();
+  grid.classList.remove("rs2b0t-param-control");
+  grid.dataset[MARK] = "1";
+  parent.insertBefore(column, grid);
+  column.appendChild(bar);
+  column.appendChild(group);
+  column.appendChild(divider);
+  column.appendChild(grid);
+}
+function enhanceQuestPicker(root) {
+  const d = page();
+  if (!d) {
+    return 0;
+  }
+  let n = 0;
+  for (const grid of root.querySelectorAll(".rs2b0t-ctl-chips")) {
+    const before = grid.dataset[MARK];
+    enhanceGrid(d, grid);
+    if (grid.dataset[MARK] === "1" && before !== "1") {
+      n++;
+    }
+  }
+  return n;
+}
+function installQuestPickerUi() {
+  const d = page();
+  if (!d) {
+    return () => {};
+  }
+  let observer = null;
+  const start = () => {
+    if (!d.body) {
+      return;
+    }
+    enhanceQuestPicker(d);
+    observer = new globalThis.MutationObserver(() => enhanceQuestPicker(d));
+    observer.observe(d.body, { childList: true, subtree: true });
+  };
+  if (d.body) {
+    start();
+  } else {
+    d.addEventListener("DOMContentLoaded", start, { once: true });
+  }
+  return () => observer?.disconnect();
+}
+
 // src/bot/scripts/AIOQuester/standalone.ts
 if (typeof globalThis !== "undefined") {
   const hostClient = globalThis.rs2b0t?.client;
@@ -109686,6 +109879,7 @@ if (typeof globalThis !== "undefined") {
     BotHost.attach(hostClient);
   }
 }
+installQuestPickerUi();
 var standalone_default = defineBot({
   name: "AIOQuester",
   description: "All-in-one quest completer for rs2b2t / LostCity 2004 — automatically gathers required items, strictly enforces LostHQ 2004 requirements (including Underground Pass Thieving 50, Hero's Quest stats, etc.), dismisses welcome modals, and completes quests.",

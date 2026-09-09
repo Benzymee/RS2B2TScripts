@@ -39,7 +39,7 @@ const {
 } = abi;
 
 const SCRIPT_NAME = 'InventoryAlcher';
-const SCRIPT_VERSION = '1.2.2';
+const SCRIPT_VERSION = '1.2.4';
 const CURRENT_TILE_BTN_ID = 'inventory-alcher-current-tile';
 
 const WELCOME_SCREEN_ID = 5993;
@@ -106,8 +106,10 @@ const FEEDABLE_RAW_FISH_NORM = new Set([
 const BALL_OF_WOOL = 'Ball of wool';
 const PET_KITTEN_NAME = 'Pet kitten';
 const PET_CAT_NAME = 'Pet cat';
-const KITTEN_NPC_NAME = 'Kitten';
-const CAT_NPC_NAME = 'Cat';
+const KITTEN_NPC_IDS = new Set([761, 762, 763, 764, 765, 766]);
+const CAT_NPC_IDS = new Set([768, 769, 770, 771, 772, 773]);
+const USEHELD_START = 102;
+const USEHELD_ONNPC = 829;
 const KITTEN_FISH_KEEP = 10;
 /** varp cat_growth (pack/varp.pack). Bits 0-4 hunger 0-20, bits 5-10 attention. */
 const CAT_GROWTH_VARP = 182;
@@ -484,6 +486,49 @@ function npcHasOp(npc, want) {
     return npcOps(npc).some(op => normName(op) === n);
 }
 
+function npcIdOf(npc) {
+    if (!npc) {
+        return -1;
+    }
+    try {
+        const raw = typeof npc.id === 'function' ? npc.id() : npc.id ?? npc.snap?.id;
+        const n = Number(raw);
+        return Number.isFinite(n) ? n : -1;
+    } catch {
+        return -1;
+    }
+}
+
+function npcIndexOf(npc) {
+    if (!npc) {
+        return -1;
+    }
+    const raw = npc.index ?? npc.snap?.index;
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : -1;
+}
+
+function readerNpcSnaps() {
+    try {
+        const reader = welcomeHost()?.reader;
+        if (typeof reader?.npcs === 'function') {
+            return reader.npcs() ?? [];
+        }
+    } catch {
+        /* ABI */
+    }
+    return [];
+}
+
+function sceneNpcSummary(limit = 8) {
+    const snaps = readerNpcSnaps()
+        .slice()
+        .sort((a, b) => (a.distance ?? 99) - (b.distance ?? 99))
+        .slice(0, limit)
+        .map(s => `${s.name ?? '?'}#${s.id} d${s.distance ?? '?'}`);
+    return snaps.join(', ') || 'none';
+}
+
 function npcTile(npc) {
     if (!npc) {
         return null;
@@ -515,18 +560,66 @@ function isCatName(name) {
     return normName(name) === 'cat';
 }
 
+function snapDistance(snap) {
+    if (typeof snap?.distance === 'number') {
+        return snap.distance;
+    }
+    return npcCheb(snap);
+}
+
 function isFollowerKittenNpc(npc) {
-    if (!isKittenName(npc?.name)) {
-        return false;
+    const id = npcIdOf(npc);
+    if (KITTEN_NPC_IDS.has(id)) {
+        return snapDistance(npc) <= 15;
     }
-    if (npcHasOp(npc, 'Stroke') || npcHasOp(npc, 'Pick-up')) {
-        return true;
-    }
-    return npcCheb(npc) <= 8;
+    return isKittenName(npc?.name) && snapDistance(npc) <= 12;
 }
 
 function isFollowerCatNpc(npc) {
-    return isCatName(npc?.name) && (npcHasOp(npc, 'Stroke') || npcCheb(npc) <= 8);
+    const id = npcIdOf(npc);
+    if (CAT_NPC_IDS.has(id)) {
+        return snapDistance(npc) <= 15;
+    }
+    return isCatName(npc?.name) && snapDistance(npc) <= 12;
+}
+
+function wrapNpcSnap(snap) {
+    if (!snap) {
+        return null;
+    }
+    if (typeof snap.interact === 'function' || typeof snap.distance === 'function') {
+        return snap;
+    }
+    const index = npcIndexOf(snap);
+    if (Npcs && typeof Npcs.query === 'function' && index >= 0) {
+        try {
+            const wrapped = Npcs.query().where(n => npcIndexOf(n) === index).nearest();
+            if (wrapped) {
+                return wrapped;
+            }
+        } catch {
+            /* ABI */
+        }
+    }
+    if (typeof Npcs?.all === 'function') {
+        try {
+            const wrapped = (Npcs.all() ?? []).find(n => npcIndexOf(n) === index);
+            if (wrapped) {
+                return wrapped;
+            }
+        } catch {
+            /* ABI */
+        }
+    }
+    return {
+        name: snap.name,
+        id: snap.id,
+        index: snap.index,
+        snap,
+        tile: () => snap.tile,
+        distance: () => snap.distance ?? 0,
+        actions: () => (snap.ops ?? []).filter(Boolean)
+    };
 }
 
 function listNpcs() {
@@ -536,13 +629,17 @@ function listNpcs() {
         if (!npc) {
             return;
         }
-        const key = npc.index ?? npc.uid ?? `${npc.name}:${npcCheb(npc)}`;
-        if (seen.has(key)) {
+        const key = npcIndexOf(npc);
+        const id = key >= 0 ? key : `${npc.name}:${npcIdOf(npc)}`;
+        if (seen.has(id)) {
             return;
         }
-        seen.add(key);
+        seen.add(id);
         out.push(npc);
     };
+    for (const snap of readerNpcSnaps()) {
+        push(wrapNpcSnap(snap));
+    }
     try {
         if (typeof Npcs?.all === 'function') {
             for (const n of Npcs.all() ?? []) {
@@ -554,11 +651,8 @@ function listNpcs() {
     }
     try {
         if (Npcs && typeof Npcs.query === 'function') {
-            let q = Npcs.query();
-            if (typeof q.within === 'function') {
-                q = q.within(15);
-            }
-            const list = typeof q.results === 'function' ? q.results() : [];
+            const list =
+                typeof Npcs.query().results === 'function' ? Npcs.query().results() : [];
             for (const n of list ?? []) {
                 push(n);
             }
@@ -576,7 +670,7 @@ function nearestNpc(pred) {
         if (!pred(npc)) {
             continue;
         }
-        const d = npcCheb(npc);
+        const d = typeof npc.distance === 'function' ? npc.distance() : snapDistance(npc);
         if (d < bestD) {
             bestD = d;
             best = npc;
@@ -585,41 +679,41 @@ function nearestNpc(pred) {
     return best;
 }
 
-function queryNpc(name, pred) {
-    const byName = nearestNpc(n => (!name || normName(n?.name) === normName(name)) && pred(n));
-    if (byName) {
-        return byName;
-    }
-    if (!Npcs || typeof Npcs.query !== 'function') {
-        return null;
-    }
-    try {
-        let q = Npcs.query();
-        if (name && typeof q.name === 'function') {
-            q = q.name(name);
-        }
-        if (typeof q.within === 'function') {
-            q = q.within(15);
-        }
-        if (typeof q.where === 'function') {
-            q = q.where(pred);
-        }
-        if (typeof q.nearest === 'function') {
-            return q.nearest() ?? null;
-        }
-        const list = typeof q.results === 'function' ? q.results() : [];
-        return list[0] ?? null;
-    } catch {
-        return null;
-    }
-}
-
 function findKittenNpc() {
-    return queryNpc(KITTEN_NPC_NAME, isFollowerKittenNpc) ?? queryNpc(null, isFollowerKittenNpc);
+    return nearestNpc(isFollowerKittenNpc);
 }
 
 function findCatNpc() {
-    return queryNpc(CAT_NPC_NAME, isFollowerCatNpc) ?? queryNpc(null, isFollowerCatNpc);
+    return nearestNpc(isFollowerCatNpc);
+}
+
+function useHeldOnNpc(item, npc) {
+    if (!item || !npc) {
+        return false;
+    }
+    const index = npcIndexOf(npc);
+    if (typeof item.useOn === 'function' && typeof npc.interact === 'function') {
+        return item.useOn(npc);
+    }
+    if (typeof item.useOn === 'function' && typeof npc.distance === 'function' && npc.snap) {
+        try {
+            const ok = item.useOn(npc);
+            if (ok) {
+                return ok;
+            }
+        } catch {
+            /* duck type failed */
+        }
+    }
+    const host = welcomeHost();
+    const snap = item.snap ?? item;
+    if (index < 0 || !host?.actions?.menuAction || snap.id == null || snap.slot == null) {
+        return false;
+    }
+    return (
+        !!host.actions.menuAction(USEHELD_START, snap.id, snap.slot, snap.comId) &&
+        !!host.actions.menuAction(USEHELD_ONNPC, index, 0, 0)
+    );
 }
 
 function packFishCount() {
@@ -1273,7 +1367,20 @@ class InventoryAlcher extends LoopingBot {
         }
         const held = !!packPetKitten();
         const following = findKittenNpc();
-        const where = held ? 'in pack' : following ? 'following' : this.kittenExpected ? 'not seen' : 'none';
+        const id = following ? npcIdOf(following) : -1;
+        const dist =
+            following && typeof following.distance === 'function'
+                ? following.distance()
+                : following
+                  ? snapDistance(following)
+                  : -1;
+        const where = held
+            ? 'in pack'
+            : following
+              ? `out #${id} d${dist}`
+              : this.kittenExpected
+                ? 'not seen'
+                : 'none';
         const now = Date.now();
         const bits = this.kittenBits();
         let hunger;
@@ -1421,6 +1528,30 @@ class InventoryAlcher extends LoopingBot {
         return this.kittenExpected;
     }
 
+    kittenNeedsCareNow() {
+        if (!this.raiseKitten || this.kittenGrown || this.kittenRanOff) {
+            return false;
+        }
+        if (packPetKitten()) {
+            return true;
+        }
+        if (!this.hasKitten()) {
+            return false;
+        }
+        return this.wantsPlay() || this.hungerReadyToFeed();
+    }
+
+    async waitIdleForKitten() {
+        if (typeof Bank.isOpen === 'function' && Bank.isOpen()) {
+            this.status = 'close bank for kitten';
+            await Bank.close();
+            await Execution.delayTicks(1);
+        }
+        if (typeof Game.animating === 'function') {
+            await Execution.delayUntil(() => !Game.animating(), 5000);
+        }
+    }
+
     kittenNeedsBank() {
         if (!this.raiseKitten || this.kittenGrown || !this.hasKitten()) {
             return false;
@@ -1469,29 +1600,41 @@ class InventoryAlcher extends LoopingBot {
             this.log('dropping Pet kitten so it can follow');
             this.kittenExpected = true;
             this.lastPlayedAt = 0;
+            await this.waitIdleForKitten();
             if (typeof held.interact === 'function') {
                 await held.interact('Drop');
-                await Execution.delayTicks(2);
             }
-            return true;
+            await Execution.delayUntil(() => !!findKittenNpc(), 5000);
+            const found = findKittenNpc();
+            if (!found) {
+                this.log(`kitten npc not listed after drop, nearby: ${sceneNpcSummary()}`);
+                return true;
+            }
+            this.log(
+                `kitten out id ${npcIdOf(found)} d${typeof found.distance === 'function' ? found.distance() : snapDistance(found)}`
+            );
         }
 
-        if (following && (this.wantsPlay() || this.hungerReadyToFeed())) {
+        const kitty = findKittenNpc();
+        if (kitty && (this.wantsPlay() || this.hungerReadyToFeed())) {
+            await this.waitIdleForKitten();
             if (this.hungerReadyToFeed()) {
                 if (packFishCount() <= 0) {
                     this.kittenBankDryUntil = 0;
                     return await this.restockKittenSupplies();
                 }
-                return await this.feedKitten(following);
+                this.status = 'pause alch, feed kitten';
+                return await this.feedKitten(kitty);
             }
             if (packWoolCount() <= 0) {
                 this.kittenBankDryUntil = 0;
                 return await this.restockKittenSupplies();
             }
-            return await this.playWithKitten(following);
+            this.status = 'pause alch, play with kitten';
+            return await this.playWithKitten(kitty);
         }
 
-        if (this.kittenNeedsBank()) {
+        if (this.kittenNeedsBank() && !this.kittenNeedsCareNow()) {
             if (packUsed() >= 28) {
                 this.log('pack full, alching to free a slot for kitten supplies');
                 return false;
@@ -1499,8 +1642,14 @@ class InventoryAlcher extends LoopingBot {
             return await this.restockKittenSupplies();
         }
 
-        if (!following) {
-            return false;
+        if (!findKittenNpc() && this.hasKitten() && this.kittenNeedsCareNow()) {
+            this.status = 'looking for kitten, alch paused';
+            if (Date.now() - (this.lastKittenScanLog || 0) > 8000) {
+                this.lastKittenScanLog = Date.now();
+                this.log(`kitten not in npc list, nearby: ${sceneNpcSummary()}`);
+            }
+            await Execution.delayTicks(1);
+            return true;
         }
 
         return false;
@@ -1599,13 +1748,17 @@ class InventoryAlcher extends LoopingBot {
     async feedKitten(npc) {
         const kitten = npc ?? findKittenNpc();
         const fish = packFishItem();
-        if (!kitten || !fish || typeof fish.useOn !== 'function') {
+        if (!kitten || !fish) {
             return false;
         }
         const before = packFishCount();
-        this.status = `feed kitten ${fish.name}`;
+        this.status = `pause alch, feed ${fish.name}`;
         this.log(`feeding kitten ${fish.name} (hunger ${this.lastKittenHunger ?? '?'}/${KITTEN_HUNGER_MAX})`);
-        await fish.useOn(kitten);
+        const used = !!(await useHeldOnNpc(fish, kitten));
+        if (!used) {
+            this.log('feed use-on kitten failed');
+            return true;
+        }
         const ok = await Execution.delayUntil(
             () => packFishCount() < before || ChatDialog.canContinue(),
             4000
@@ -1624,18 +1777,19 @@ class InventoryAlcher extends LoopingBot {
             return false;
         }
         const wool = packWoolItem();
-        this.status = 'play with kitten';
-        this.log('playing with kitten');
+        this.status = 'pause alch, play with kitten';
+        this.log('playing with kitten (Ball of wool)');
         let used = false;
-        if (wool && typeof wool.useOn === 'function') {
-            used = !!(await wool.useOn(kitten));
+        if (wool) {
+            used = !!(await useHeldOnNpc(wool, kitten));
         }
-        if (!used && typeof kitten.interact === 'function' && npcHasOp(kitten, 'Stroke')) {
+        if (!used && typeof kitten.interact === 'function') {
             this.log('stroking kitten');
             used = !!(await kitten.interact('Stroke'));
         }
         if (!used) {
-            return false;
+            this.log('play use-on kitten failed');
+            return true;
         }
         await Execution.delayUntil(() => ChatDialog.canContinue(), 4000);
         this.noteKittenChat(dialogHaystack());
@@ -1675,8 +1829,19 @@ class InventoryAlcher extends LoopingBot {
             return;
         }
 
-        if (this.raiseKitten && (await this.careForKitten())) {
-            return;
+        if (this.raiseKitten) {
+            if (this.kittenNeedsCareNow() && typeof Game.animating === 'function' && Game.animating()) {
+                this.status = 'finish alch, then kitten';
+                await Execution.delayUntil(() => !Game.animating(), 5000);
+            }
+            if (await this.careForKitten()) {
+                return;
+            }
+            if (this.kittenNeedsCareNow()) {
+                this.status = 'alch paused for kitten';
+                await Execution.delayTicks(1);
+                return;
+            }
         }
 
         if (this.failStreak >= 8) {

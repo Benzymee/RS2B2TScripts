@@ -35665,7 +35665,7 @@ var SPECIAL_CROSSINGS = [
     locName: "Bookcase",
     action: "Search",
     toTile: { x: 3096, z: 3358, level: 0 },
-    arrivalRadius: 2,
+    arrivalRadius: 1,
     label: "Draynor Manor bookcase → ladder alcove (#229)"
   },
   {
@@ -35675,7 +35675,7 @@ var SPECIAL_CROSSINGS = [
     locName: "Bookcase",
     action: "Search",
     toTile: { x: 3096, z: 3359, level: 0 },
-    arrivalRadius: 2,
+    arrivalRadius: 1,
     label: "Draynor Manor bookcase → ladder alcove (#229)"
   },
   {
@@ -35685,7 +35685,7 @@ var SPECIAL_CROSSINGS = [
     locName: "Lever",
     action: "Pull",
     toTile: { x: 3098, z: 3358, level: 0 },
-    arrivalRadius: 2,
+    arrivalRadius: 1,
     label: "Draynor Manor alcove lever → manor (#229)"
   }
 ];

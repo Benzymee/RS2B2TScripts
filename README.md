@@ -1,4 +1,4 @@
-<p align="center"><u><b>ANY PROBLEMS/QUESTIONS ADD .benzyme ON DISCORD</b></u></p>
+<p align="center"><u><b>ANY PROBLEMS/QUESTIONS ADD .benzyme ON DISCORD. COPY YOUR CLIENT LOG AND SEND IT TO ME AS WELL AS A SCREENSHOT OF WHERE YOU WERE IN THE GAME WHEN IT HAPPENED</b></u></p>
 <p align="center"><u><b>I'M A LOVELY GUY AND WOULD LOVE TO ANSWER YOUR QUESTIONS</b></u></p>
 
 <p align="center">

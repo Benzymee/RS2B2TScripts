@@ -1,3 +1,8 @@
+/**
+ * AIOQuester. Completes Lost City 2004 quests and gathers required items.
+ *
+ * Load URL: https://benzymee.github.io/RS2B2TScripts/AIOQuester.js
+ */
 if(typeof process==="undefined"){globalThis.process={env:{}}};
 
 // src/bot/runtime/ScriptRegistry.ts
@@ -54262,6 +54267,12 @@ function isSecretPassageLanding(t) {
   }
   return t.x >= 3014 && t.x <= 3017 && t.z >= 3517 && t.z <= 3521;
 }
+function isSecretPassageUpper(t) {
+  if (t === null || t.level !== 1) {
+    return false;
+  }
+  return t.x >= 3014 && t.x <= 3017 && t.z >= 3517 && t.z <= 3521;
+}
 function isInteriorSideOfGuardDoor(here2, door) {
   if (here2 === null || here2.level !== 0 || here2.z < 3516) {
     return false;
@@ -54407,7 +54418,7 @@ async function openNearbyBarrier(log) {
   if (isSecretPassageLanding(here2)) {
     return false;
   }
-  const wall = Locs.query().action("Push").within(3).where((l) => (l.id === SECRET_WALL_ID || (l.name ?? "").toLowerCase() === "wall") && canUseLoc(l)).nearest();
+  const wall = Locs.query().action("Push").within(6).where((l) => (l.id === SECRET_WALL_ID || (l.name ?? "").toLowerCase() === "wall") && canUseLoc(l)).nearest();
   if (wall && (!isBlackKnightFortressInterior(here2) || chebyshev2(wall.tile(), BKF_TILE.HOLE) <= 6)) {
     log("pushing a fortress wall");
     const mark2 = GameMessages.mark();
@@ -54415,7 +54426,7 @@ async function openNearbyBarrier(log) {
     await Execution.delayTicks(3);
     return !GameMessages.sawSince(mark2, CANT_REACH);
   }
-  const door = Locs.query().action("Open").within(3).where((l) => /^(sturdy door|door)$/i.test(l.name ?? "") && canUseLoc(l) && !isInteriorSideOfGuardDoor(here2, l)).nearest();
+  const door = Locs.query().action("Open").within(8).where((l) => /^(sturdy door|door)$/i.test(l.name ?? "") && canUseLoc(l) && !isInteriorSideOfGuardDoor(here2, l)).nearest();
   if (!door) {
     return false;
   }
@@ -54474,10 +54485,22 @@ async function approachInside(dest, log) {
       await climbAt2(BKF_TILE.GRILL_LADDER_TOP, "Climb-down", log);
       return;
     }
+    if (isSecretPassageUpper(here2)) {
+      log("leaving the secret-passage landing toward the grill ladder");
+    }
     if (await openNearbyBarrier(log)) {
       return;
     }
-    await DirectNavigator.walkTo(BKF_TILE.GRILL_LADDER_TOP, 1, 8000);
+    log("walking across the first floor to the grill ladder");
+    const reached = await Traversal.walkResilient(BKF_TILE.GRILL_LADDER_TOP, {
+      radius: 1,
+      attempts: 6,
+      timeoutMs: 180000,
+      log
+    });
+    if (reached) {
+      await climbAt2(BKF_TILE.GRILL_LADDER_TOP, "Climb-down", log);
+    }
     return;
   }
   if (toHole && here2.level === 0 && (locNamedReachable("Grill", "Listen-at", 12) !== null || chebyshev2(here2, BKF_TILE.GRILL_LADDER_BOTTOM) <= 6)) {
@@ -54548,8 +54571,9 @@ async function infiltrate(log) {
   }
   if (isSecretPassageLanding(Game.tile())) {
     log("climbing the secret-passage ladder, the south-face Sturdy door is not reachable from here");
-    await climbAt2(BKF_TILE.SECRET_LADDER, "Climb-up", log);
-    return false;
+    if (!await climbAt2(BKF_TILE.SECRET_LADDER, "Climb-up", log)) {
+      return false;
+    }
   }
   if (!listened) {
     log("infiltrating the fortress to eavesdrop at the grill");

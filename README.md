@@ -115,6 +115,10 @@ https://benzymee.github.io/RS2B2TScripts/OakTreeFletcherSell.js
 
 https://benzymee.github.io/RS2B2TScripts/ProgressiveChopper.js
 
+**RuneCrafter** (`RuneCrafter.js`). Crafts runes at 2004 altars except Nature. Best picks the highest rune your level and talismans allow. Cosmic banks in Zanaris.
+
+https://benzymee.github.io/RS2B2TScripts/RuneCrafter.js
+
 **WillowTreeFletcher** (`WillowTreeFletcher.js`). Chops willow trees at Draynor. Optional fletching into willow shortbows at 35 or longbows at 40.
 
 https://benzymee.github.io/RS2B2TScripts/WillowTreeFletcher.js

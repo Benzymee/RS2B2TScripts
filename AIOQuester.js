@@ -51687,7 +51687,18 @@ var LANCELOT = {
   ]
 };
 var CAM_STAIR_L0 = new Tile(2750, 3510, 0);
-var LADY_LAKE = { npc: "The Lady of the Lake", anchor: new Tile(2924, 3405, 0), leash: 6, prefer: ["I seek the sword Excalibur."] };
+var LADY_LAKE = {
+  npc: "The Lady of the Lake",
+  anchor: new Tile(2924, 3405, 0),
+  leash: 6,
+  prefer: [
+    "I seek the sword Excalibur",
+    "I have lost Excalibur",
+    "Can I have another Excalibur",
+    "Excalibur",
+    "Who are you?"
+  ]
+};
 var CANDLE_MAKER = { npc: "Candle maker", anchor: new Tile(2800, 3439, 0), leash: 6, prefer: ["Have you got any black candles?"] };
 var CATHERBY_CRATE_STAND = new Tile(2801, 3443, 0);
 function insideKeep(t) {
@@ -78461,7 +78472,25 @@ var LADY_OF_THE_LAKE = {
   npc: "The Lady of the Lake",
   anchor: new Tile(2924, 3405, 0),
   leash: 6,
-  prefer: ["I seek the sword Excalibur."]
+  prefer: [
+    "I seek the sword Excalibur",
+    "I have lost Excalibur",
+    "Can I have another Excalibur",
+    "I need another Excalibur",
+    "lost the sword",
+    "Excalibur",
+    "Who are you?",
+    "here is the money",
+    "here's the money",
+    "sounds fair",
+    "500 coins",
+    "500 gp",
+    "500",
+    "Yes, please",
+    "Yes please",
+    "Okay",
+    "Yes"
+  ]
 };
 function within4(t, x0, x1, z0, z1) {
   return !!t && t.x >= x0 && t.x <= x1 && t.z >= z0 && t.z <= z1;

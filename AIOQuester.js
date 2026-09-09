@@ -54737,6 +54737,7 @@ var BKF_TILE = {
   SOUTH_ROOF: new Tile(3016, 3516, 2),
   CANNON_UP: new Tile(3023, 3514, 1),
   EAST_ROOF: new Tile(3025, 3514, 2),
+  EAST_HALL_DOOR: new Tile(3025, 3511, 1),
   GRILL_LADDER_TOP: new Tile(3021, 3511, 1),
   GRILL_LADDER_BOTTOM: new Tile(3021, 3512, 0),
   GRILL: new Tile(3025, 3508, 0),
@@ -54829,6 +54830,9 @@ function isCannonRoom(t) {
     return false;
   }
   return t.x >= 3022 && t.x <= 3024 && t.z >= 3513 && t.z <= 3516;
+}
+function doorHelpsToward(here2, door, dest) {
+  return chebyshev2(door, dest) <= chebyshev2(here2, dest) || chebyshev2(here2, door) <= 4;
 }
 function grillReady() {
   const here2 = Game.tile();
@@ -54936,7 +54940,7 @@ async function openNearbyBarrier(log) {
     await Execution.delayTicks(3);
     return !GameMessages.sawSince(mark2, CANT_REACH);
   }
-  const door = Locs.query().action("Open").within(3).where((l) => {
+  const door = Locs.query().action("Open").within(6).where((l) => {
     const t = l.tile();
     if (here2 !== null && t.level !== here2.level) {
       return false;
@@ -54973,17 +54977,21 @@ async function walkStayOnFloor(stand, log) {
       return true;
     }
     await handleFortressTalk(log);
-    const door = Locs.query().action("Open").within(10).where((l) => {
+    const door = Locs.query().action("Open").within(12).where((l) => {
       const t = l.tile();
       if (here2 === null || t.level !== here2.level) {
         return false;
       }
-      if (!canUseLoc(l) || isInteriorSideOfGuardDoor(here2, l)) {
+      if (isInteriorSideOfGuardDoor(here2, l)) {
         return false;
       }
-      return /^(sturdy door|door)$/i.test(l.name ?? "") && (chebyshev2(t, floorStand) < chebyshev2(here2, floorStand) || chebyshev2(here2, t) <= 2);
+      return /^(sturdy door|door)$/i.test(l.name ?? "") && doorHelpsToward(here2, t, floorStand);
     }).nearest();
     if (door) {
+      const t = door.tile();
+      if (chebyshev2(here2, t) > 1) {
+        await DirectNavigator.walkTo(t, 1, 8000);
+      }
       log(`opening ${door.name ?? "door"} on this floor`);
       await door.interact("Open");
       await handleFortressTalk(log);
@@ -54993,7 +55001,8 @@ async function walkStayOnFloor(stand, log) {
     const destReachable = Reachability.probeable(floorStand) && Reachability.canReach(floorStand, { adjacentOk: true, maxSteps: 64 });
     if (!destReachable) {
       log("ladder still behind a shut door on this floor");
-      await Execution.delayTicks(2);
+      await DirectNavigator.walkTo(floorStand, 1, 8000);
+      await Execution.delayTicks(1);
       continue;
     }
     await DirectNavigator.walkTo(floorStand, 1, 8000);

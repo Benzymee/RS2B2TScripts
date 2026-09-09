@@ -54794,12 +54794,6 @@ function isGrillPocket(t) {
   }
   return t.x >= 3020 && t.x <= 3027 && t.z >= 3506 && t.z <= 3513;
 }
-function isSouthRoofLanding(t) {
-  if (t === null || t.level !== 1) {
-    return false;
-  }
-  return t.x >= 3014 && t.x <= 3018 && t.z >= 3514 && t.z <= 3516;
-}
 function canUseLoc(loc) {
   try {
     return Reachability.canReach(loc.tile(), { adjacentOk: true, maxSteps: 64 });
@@ -55031,10 +55025,7 @@ async function walkStayOnFloor(stand, log) {
         return false;
       }
     })();
-    if (destReachable) {
-      await DirectNavigator.walkTo(floorStand, 1, 8000);
-      continue;
-    }
+    const nearDest = here2 !== null && chebyshev2(here2, floorStand) <= 2;
     const door = Locs.query().action("Open").within(12).where((l) => {
       const t = l.tile();
       if (here2 === null || t.level !== here2.level) {
@@ -55045,6 +55036,21 @@ async function walkStayOnFloor(stand, log) {
       }
       return /door/i.test(l.name ?? "") && doorHelpsToward(here2, t, floorStand);
     }).nearest();
+    if (door && !nearDest) {
+      const t = door.tile();
+      if (here2 !== null && chebyshev2(here2, t) > 1) {
+        await DirectNavigator.walkTo(t, 1, 8000);
+      }
+      log(`opening ${door.name ?? "door"} on this floor`);
+      await door.interact("Open");
+      await handleFortressTalk(log);
+      await Execution.delayTicks(2);
+      continue;
+    }
+    if (destReachable) {
+      await DirectNavigator.walkTo(floorStand, 1, 8000);
+      continue;
+    }
     if (door) {
       const t = door.tile();
       if (here2 !== null && chebyshev2(here2, t) > 1) {
@@ -55130,16 +55136,11 @@ async function approachInside(dest, log) {
       await climbAt2(BKF_TILE.EAST_ROOF, "Climb-down", log);
       return;
     }
-    log("crossing the roof east, not climbing back down the south ladder");
-    await climbAt2(BKF_TILE.EAST_ROOF, "Climb-down", log);
+    log("west roof, climbing down the south ladder toward the cannon hall");
+    await climbAt2(BKF_TILE.SOUTH_ROOF, "Climb-down", log);
     return;
   }
   if (toGrill && here2.level === 1) {
-    if (isSouthRoofLanding(here2)) {
-      log("south-roof landing, climbing back up to cross the roof east");
-      await climbAt2(BKF_TILE.SOUTH_ROOF, "Climb-up", log);
-      return;
-    }
     if (isCannonRoom(here2)) {
       log("cannon room, climbing to the roof to take the east ladder");
       await climbAt2(BKF_TILE.CANNON_UP, "Climb-up", log);

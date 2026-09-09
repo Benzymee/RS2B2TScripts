@@ -39,7 +39,7 @@ const {
 } = abi;
 
 const SCRIPT_NAME = 'InventoryAlcher';
-const SCRIPT_VERSION = '1.2.1';
+const SCRIPT_VERSION = '1.2.2';
 const CURRENT_TILE_BTN_ID = 'inventory-alcher-current-tile';
 
 const WELCOME_SCREEN_ID = 5993;
@@ -115,6 +115,9 @@ const KITTEN_HUNGER_MAX = 20;
 const KITTEN_HUNGER_FEED_AT = 10;
 const KITTEN_ATTENT_PLAY_AT = 40;
 const KITTEN_ATTENT_DEFAULT = 28;
+/** Growth timer is 150 ticks (90s). Hunger 10/20 = 50%. Attention warning at 40 from default 28 is 18 min. */
+const KITTEN_FEED_EVERY_MS = 10 * 90_000;
+const KITTEN_PLAY_EVERY_MS = 12 * 60_000;
 const KITTEN_CHAT = {
     hungry: /i think it'?s hungry/i,
     reallyHungry: /i think it'?s really hungry/i,
@@ -123,7 +126,9 @@ const KITTEN_CHAT = {
     fed: /kitten gobbles up/i,
     played: /loves to play with that ball of wool/i,
     ranHungry: /kitten has run away to look for food/i,
-    ranLonely: /kitten got lonely and ran off/i
+    ranLonely: /kitten got lonely and ran off/i,
+    purr: /\bpurr/i,
+    miaow: /miaow/i
 };
 
 function welcomeHost() {
@@ -219,6 +224,13 @@ function fmtElapsed(ms) {
     if (h > 0) {
         return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
     }
+    return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function fmtRemain(ms) {
+    const totalSec = Math.max(0, Math.ceil(ms / 1000));
+    const m = Math.floor(totalSec / 60);
+    const s = totalSec % 60;
     return `${m}:${String(s).padStart(2, '0')}`;
 }
 
@@ -427,12 +439,31 @@ function readVarp(id) {
 }
 
 function dialogHaystack() {
+    const parts = [];
     try {
-        const texts = welcomeHost()?.reader?.mainModalTexts?.() ?? [];
-        return texts.join(' ');
+        const reader = welcomeHost()?.reader;
+        if (typeof reader?.mainModalTexts === 'function') {
+            parts.push(...(reader.mainModalTexts() ?? []));
+        }
+        if (typeof reader?.chatModalTexts === 'function') {
+            parts.push(...(reader.chatModalTexts() ?? []));
+        }
+        if (typeof reader?.chat === 'function') {
+            for (const line of reader.chat(20) ?? []) {
+                parts.push(line?.text ?? line ?? '');
+            }
+        }
     } catch {
-        return '';
+        /* ABI */
     }
+    if (typeof ChatDialog?.text === 'function') {
+        try {
+            parts.push(String(ChatDialog.text() ?? ''));
+        } catch {
+            /* ABI */
+        }
+    }
+    return parts.filter(Boolean).join(' ');
 }
 
 function npcOps(npc) {
@@ -453,15 +484,112 @@ function npcHasOp(npc, want) {
     return npcOps(npc).some(op => normName(op) === n);
 }
 
+function npcTile(npc) {
+    if (!npc) {
+        return null;
+    }
+    try {
+        if (typeof npc.tile === 'function') {
+            return npc.tile();
+        }
+    } catch {
+        /* ABI */
+    }
+    return npc.tile ?? null;
+}
+
+function npcCheb(npc) {
+    const here = Game.tile();
+    const t = npcTile(npc);
+    if (!here || !t || typeof t.x !== 'number' || typeof t.z !== 'number') {
+        return 99;
+    }
+    return Math.max(Math.abs(here.x - t.x), Math.abs(here.z - t.z));
+}
+
+function isKittenName(name) {
+    return normName(name) === 'kitten';
+}
+
+function isCatName(name) {
+    return normName(name) === 'cat';
+}
+
 function isFollowerKittenNpc(npc) {
-    return normName(npc?.name) === 'kitten' && npcHasOp(npc, 'Stroke');
+    if (!isKittenName(npc?.name)) {
+        return false;
+    }
+    if (npcHasOp(npc, 'Stroke') || npcHasOp(npc, 'Pick-up')) {
+        return true;
+    }
+    return npcCheb(npc) <= 8;
 }
 
 function isFollowerCatNpc(npc) {
-    return normName(npc?.name) === 'cat' && npcHasOp(npc, 'Stroke');
+    return isCatName(npc?.name) && (npcHasOp(npc, 'Stroke') || npcCheb(npc) <= 8);
+}
+
+function listNpcs() {
+    const out = [];
+    const seen = new Set();
+    const push = npc => {
+        if (!npc) {
+            return;
+        }
+        const key = npc.index ?? npc.uid ?? `${npc.name}:${npcCheb(npc)}`;
+        if (seen.has(key)) {
+            return;
+        }
+        seen.add(key);
+        out.push(npc);
+    };
+    try {
+        if (typeof Npcs?.all === 'function') {
+            for (const n of Npcs.all() ?? []) {
+                push(n);
+            }
+        }
+    } catch {
+        /* ABI */
+    }
+    try {
+        if (Npcs && typeof Npcs.query === 'function') {
+            let q = Npcs.query();
+            if (typeof q.within === 'function') {
+                q = q.within(15);
+            }
+            const list = typeof q.results === 'function' ? q.results() : [];
+            for (const n of list ?? []) {
+                push(n);
+            }
+        }
+    } catch {
+        /* ABI */
+    }
+    return out;
+}
+
+function nearestNpc(pred) {
+    let best = null;
+    let bestD = 99;
+    for (const npc of listNpcs()) {
+        if (!pred(npc)) {
+            continue;
+        }
+        const d = npcCheb(npc);
+        if (d < bestD) {
+            bestD = d;
+            best = npc;
+        }
+    }
+    return best;
 }
 
 function queryNpc(name, pred) {
+    const byName = nearestNpc(n => (!name || normName(n?.name) === normName(name)) && pred(n));
+    if (byName) {
+        return byName;
+    }
     if (!Npcs || typeof Npcs.query !== 'function') {
         return null;
     }
@@ -983,6 +1111,11 @@ class InventoryAlcher extends LoopingBot {
     kittenBankDryUntil = 0;
     lastKittenHunger = null;
     lastKittenAttent = null;
+    lastFedAt = 0;
+    lastPlayedAt = 0;
+    kittenExpected = false;
+    kittenRanOff = false;
+    varpLive = false;
 
     async onStart() {
         await Execution.delayUntil(() => Game.ingame() && Game.tile() !== null, 0);
@@ -997,6 +1130,14 @@ class InventoryAlcher extends LoopingBot {
         this.skippedIds = new Set();
         this.currentName = '';
         this.done = false;
+        this.kittenHungry = false;
+        this.kittenWantsPlay = false;
+        this.kittenGrown = false;
+        this.kittenExpected = !!(packPetKitten() || findKittenNpc());
+        this.kittenRanOff = false;
+        this.varpLive = false;
+        this.lastFedAt = Date.now();
+        this.lastPlayedAt = 0;
         this.syncSettings();
         this.hookKittenChat();
         this.startUiTimer();
@@ -1112,21 +1253,49 @@ class InventoryAlcher extends LoopingBot {
         return 'waiting for items';
     }
 
+    kittenPaintSafe() {
+        try {
+            return this.kittenPaintLine();
+        } catch {
+            return 'kitten';
+        }
+    }
+
     kittenPaintLine() {
         if (!this.raiseKitten) {
             return 'kitten off';
         }
+        if (this.kittenRanOff) {
+            return 'kitten ran off';
+        }
         if (this.kittenGrown) {
             return `kitten grown · fish ${packFishCount()} · wool ${packWoolCount()}`;
         }
+        const held = !!packPetKitten();
+        const following = findKittenNpc();
+        const where = held ? 'in pack' : following ? 'following' : this.kittenExpected ? 'not seen' : 'none';
+        const now = Date.now();
         const bits = this.kittenBits();
-        const hunger = bits
-            ? `${bits.hunger}/${KITTEN_HUNGER_MAX} (${Math.round((bits.hunger / KITTEN_HUNGER_MAX) * 100)}%)`
-            : this.kittenHungry
-              ? 'hungry'
-              : 'ok';
-        const play = this.wantsPlay() ? 'play' : 'play ok';
-        return `kitten hunger ${hunger} · ${play} · fish ${packFishCount()}/${KITTEN_FISH_KEEP} · wool ${packWoolCount()}`;
+        let hunger;
+        if (this.kittenHungry) {
+            hunger = 'hungry';
+        } else if (this.varpLive && bits) {
+            hunger = `${bits.hunger}/${KITTEN_HUNGER_MAX} (${Math.round((bits.hunger / KITTEN_HUNGER_MAX) * 100)}%)`;
+        } else {
+            const untilFeed = KITTEN_FEED_EVERY_MS - (now - this.lastFedAt);
+            hunger =
+                untilFeed <= 0 ? 'feed now' : `feed ${fmtRemain(untilFeed)}`;
+        }
+        let play;
+        if (this.kittenWantsPlay) {
+            play = 'play now';
+        } else if (this.lastPlayedAt <= 0) {
+            play = following || this.kittenExpected ? 'play now' : 'play';
+        } else {
+            const untilPlay = KITTEN_PLAY_EVERY_MS - (now - this.lastPlayedAt);
+            play = untilPlay <= 0 ? 'play now' : `play ${fmtRemain(untilPlay)}`;
+        }
+        return `kitten ${where} · ${hunger} · ${play} · fish ${packFishCount()}/${KITTEN_FISH_KEEP} · wool ${packWoolCount()}`;
     }
 
     finish(reason) {
@@ -1162,37 +1331,51 @@ class InventoryAlcher extends LoopingBot {
             return;
         }
         this.kittenChatHooked = true;
-        this.on('chat.message', e => this.noteKittenChat(e?.text ?? ''));
+        this.on('chat.message', e =>
+            this.noteKittenChat(e?.text ?? e?.message ?? '', e?.username ?? e?.type ?? '')
+        );
     }
 
-    noteKittenChat(text) {
+    noteKittenChat(text, username = '') {
         const t = String(text ?? '');
         if (!t) {
             return;
         }
+        const who = normName(username);
         if (KITTEN_CHAT.ranHungry.test(t) || KITTEN_CHAT.ranLonely.test(t)) {
             this.kittenHungry = false;
             this.kittenWantsPlay = false;
+            this.kittenExpected = false;
+            this.kittenRanOff = true;
             this.log('kitten ran off');
             return;
         }
-        if (KITTEN_CHAT.reallyHungry.test(t) || KITTEN_CHAT.hungry.test(t)) {
+        if (KITTEN_CHAT.reallyHungry.test(t) || KITTEN_CHAT.hungry.test(t) || (who === 'kitten' && KITTEN_CHAT.miaow.test(t))) {
             this.kittenHungry = true;
+            this.kittenExpected = true;
         }
-        if (KITTEN_CHAT.attention.test(t) || KITTEN_CHAT.lonely.test(t)) {
+        if (
+            KITTEN_CHAT.attention.test(t) ||
+            KITTEN_CHAT.lonely.test(t) ||
+            (who === 'kitten' && KITTEN_CHAT.purr.test(t))
+        ) {
             this.kittenWantsPlay = true;
+            this.kittenExpected = true;
         }
         if (KITTEN_CHAT.fed.test(t)) {
             this.kittenHungry = false;
+            this.lastFedAt = Date.now();
         }
         if (KITTEN_CHAT.played.test(t)) {
             this.kittenWantsPlay = false;
+            this.lastPlayedAt = Date.now();
         }
     }
 
     kittenBits() {
         const bits = catGrowthBits();
-        if (bits) {
+        if (bits && bits.raw !== 0) {
+            this.varpLive = true;
             this.lastKittenHunger = bits.hunger;
             this.lastKittenAttent = bits.attent;
         }
@@ -1204,7 +1387,13 @@ class InventoryAlcher extends LoopingBot {
             return true;
         }
         const bits = this.kittenBits();
-        return !!(bits && bits.hunger >= KITTEN_HUNGER_FEED_AT);
+        if (this.varpLive && bits && bits.hunger >= KITTEN_HUNGER_FEED_AT) {
+            return true;
+        }
+        if (!this.lastFedAt) {
+            return false;
+        }
+        return Date.now() - this.lastFedAt >= KITTEN_FEED_EVERY_MS;
     }
 
     wantsPlay() {
@@ -1212,11 +1401,24 @@ class InventoryAlcher extends LoopingBot {
             return true;
         }
         const bits = this.kittenBits();
-        return !!(bits && bits.attent >= KITTEN_ATTENT_PLAY_AT);
+        if (this.varpLive && bits && bits.attent >= KITTEN_ATTENT_PLAY_AT) {
+            return true;
+        }
+        if (!this.lastPlayedAt) {
+            return true;
+        }
+        return Date.now() - this.lastPlayedAt >= KITTEN_PLAY_EVERY_MS;
     }
 
     hasKitten() {
-        return !!(findKittenNpc() || packPetKitten());
+        if (this.kittenRanOff || this.kittenGrown) {
+            return false;
+        }
+        if (packPetKitten() || findKittenNpc()) {
+            this.kittenExpected = true;
+            return true;
+        }
+        return this.kittenExpected;
     }
 
     kittenNeedsBank() {
@@ -1241,17 +1443,52 @@ class InventoryAlcher extends LoopingBot {
 
         const catNpc = findCatNpc();
         const heldCat = Inventory.items().find(i => isPetCatItem(i.name));
-        if ((catNpc || heldCat) && !this.hasKitten()) {
+        const following = findKittenNpc();
+        const held = packPetKitten();
+        if ((catNpc || heldCat) && !following && !held) {
             if (!this.kittenGrown) {
                 this.kittenGrown = true;
+                this.kittenExpected = false;
                 this.log('kitten grew into a cat, stopping feed and play');
             }
             return false;
         }
         this.kittenGrown = false;
 
+        if (held || following) {
+            this.kittenExpected = true;
+            this.kittenRanOff = false;
+        }
+
         if (!this.hasKitten()) {
             return false;
+        }
+
+        if (!following && held) {
+            this.status = 'drop Pet kitten';
+            this.log('dropping Pet kitten so it can follow');
+            this.kittenExpected = true;
+            this.lastPlayedAt = 0;
+            if (typeof held.interact === 'function') {
+                await held.interact('Drop');
+                await Execution.delayTicks(2);
+            }
+            return true;
+        }
+
+        if (following && (this.wantsPlay() || this.hungerReadyToFeed())) {
+            if (this.hungerReadyToFeed()) {
+                if (packFishCount() <= 0) {
+                    this.kittenBankDryUntil = 0;
+                    return await this.restockKittenSupplies();
+                }
+                return await this.feedKitten(following);
+            }
+            if (packWoolCount() <= 0) {
+                this.kittenBankDryUntil = 0;
+                return await this.restockKittenSupplies();
+            }
+            return await this.playWithKitten(following);
         }
 
         if (this.kittenNeedsBank()) {
@@ -1262,35 +1499,8 @@ class InventoryAlcher extends LoopingBot {
             return await this.restockKittenSupplies();
         }
 
-        const following = findKittenNpc();
-        const held = packPetKitten();
-        if (!following && held) {
-            this.status = 'drop Pet kitten';
-            this.log('dropping Pet kitten so it can follow');
-            if (typeof held.interact === 'function') {
-                await held.interact('Drop');
-                await Execution.delayTicks(2);
-            }
-            return true;
-        }
         if (!following) {
             return false;
-        }
-
-        if (this.hungerReadyToFeed()) {
-            if (packFishCount() <= 0) {
-                this.kittenBankDryUntil = 0;
-                return await this.restockKittenSupplies();
-            }
-            return await this.feedKitten(following);
-        }
-
-        if (this.wantsPlay()) {
-            if (packWoolCount() <= 0) {
-                this.kittenBankDryUntil = 0;
-                return await this.restockKittenSupplies();
-            }
-            return await this.playWithKitten(following);
         }
 
         return false;
@@ -1402,6 +1612,7 @@ class InventoryAlcher extends LoopingBot {
         );
         if (ok) {
             this.kittenHungry = false;
+            this.lastFedAt = Date.now();
         }
         await Execution.delayTicks(1);
         return true;
@@ -1409,15 +1620,27 @@ class InventoryAlcher extends LoopingBot {
 
     async playWithKitten(npc) {
         const kitten = npc ?? findKittenNpc();
-        const wool = packWoolItem();
-        if (!kitten || !wool || typeof wool.useOn !== 'function') {
+        if (!kitten) {
             return false;
         }
-        this.status = 'play ball of wool';
-        this.log('playing with kitten (Ball of wool)');
-        await wool.useOn(kitten);
+        const wool = packWoolItem();
+        this.status = 'play with kitten';
+        this.log('playing with kitten');
+        let used = false;
+        if (wool && typeof wool.useOn === 'function') {
+            used = !!(await wool.useOn(kitten));
+        }
+        if (!used && typeof kitten.interact === 'function' && npcHasOp(kitten, 'Stroke')) {
+            this.log('stroking kitten');
+            used = !!(await kitten.interact('Stroke'));
+        }
+        if (!used) {
+            return false;
+        }
         await Execution.delayUntil(() => ChatDialog.canContinue(), 4000);
+        this.noteKittenChat(dialogHaystack());
         this.kittenWantsPlay = false;
+        this.lastPlayedAt = Date.now();
         await Execution.delayTicks(1);
         return true;
     }
@@ -1442,7 +1665,9 @@ class InventoryAlcher extends LoopingBot {
             this.noteKittenChat(dialogHaystack());
             this.status = 'continue dialog';
             await ChatDialog.continue();
-            return;
+            if (!(this.raiseKitten && (this.kittenWantsPlay || this.kittenHungry))) {
+                return;
+            }
         }
 
         if (Skills.level('magic') < SPELL.level) {
@@ -1590,6 +1815,12 @@ class InventoryAlcher extends LoopingBot {
     }
 
     onPaint(ctx) {
+        try {
+            this.raiseKitten = this.settings?.bool?.('raiseKitten', false) ?? this.raiseKitten;
+            this.noteKittenChat(dialogHaystack());
+        } catch {
+            /* paint must not throw */
+        }
         const elapsed = Date.now() - this.startedAt;
         const hrs = elapsed / 3_600_000;
         const xp = Math.max(0, Skills.xp('magic') - this.magicXpAtStart);
@@ -1613,7 +1844,7 @@ class InventoryAlcher extends LoopingBot {
             `magic: ${fmtXph(xph)} xp/hr  (+${Math.round(xp)} xp)`,
             `Nature ${natureCount()} · Fire ${hasFireStaff() ? 'staff' : fireCount()}`,
             `${stand} · ${this.alchModeLabel()}`,
-            this.kittenPaintLine()
+            this.kittenPaintSafe()
         ];
 
         ctx.save();

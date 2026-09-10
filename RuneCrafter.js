@@ -1,8 +1,3 @@
-/**
- * RuneCrafter. Crafts runes at 2004 altars except Nature.
- *
- * Load URL: https://benzymee.github.io/RS2B2TScripts/RuneCrafter.js
- */
 // packages/rs2b0t-api/index.js
 var SUPPORTED_API_VERSION = 1;
 var abi = globalThis.__rs2b0t;
@@ -196,7 +191,7 @@ var SCRIPT_NAME = "Benzyme's Runecrafter";
 var OPTION_BEST = "Best";
 var CRAFT_RECIPES = [
   { label: "Law runes", rune: "Law rune", talisman: "Law talisman", level: 54, ruins: new Tile(2858, 3378, 0), bank: "Draynor", travel: "entrana" },
-  { label: "Chaos runes", rune: "Chaos rune", talisman: "Chaos talisman", level: 35, ruins: new Tile(3060, 3585, 0), bank: "Edgeville", travel: "wildy" },
+  { label: "Chaos runes", rune: "Chaos rune", talisman: "Chaos talisman", level: 35, ruins: new Tile(3060, 3585, 0), altar: new Tile(2270, 4841, 0), bank: "Edgeville", travel: "wildy" },
   { label: "Cosmic runes", rune: "Cosmic rune", talisman: "Cosmic talisman", level: 27, ruins: new Tile(3173, 9501, 0), bank: "Zanaris", travel: "zanaris" },
   { label: "Body runes", rune: "Body rune", talisman: "Body talisman", level: 20, ruins: new Tile(3050, 3442, 0), bank: "Edgeville", travel: "walk" },
   { label: "Fire runes", rune: "Fire rune", talisman: "Fire talisman", level: 14, ruins: new Tile(3310, 3252, 0), bank: "Duel Arena", travel: "walk" },
@@ -205,6 +200,146 @@ var CRAFT_RECIPES = [
   { label: "Mind runes", rune: "Mind rune", talisman: "Mind talisman", level: 2, ruins: new Tile(2980, 3511, 0), bank: "Edgeville", travel: "walk" },
   { label: "Air runes", rune: "Air rune", talisman: "Air talisman", level: 1, ruins: new Tile(2983, 3288, 0), bank: "Falador East", travel: "walk" }
 ];
+function chaosPath(level, pts) {
+  return pts.map(([x, z]) => new Tile(x, z, level));
+}
+var CHAOS_DOWN = [
+  {
+    level: 3,
+    dest: new Tile(2255, 4830, 3),
+    op: "Climb-down",
+    path: chaosPath(3, [
+      [2275, 4847],
+      [2274, 4847],
+      [2274, 4852],
+      [2273, 4852],
+      [2273, 4854],
+      [2272, 4854],
+      [2272, 4855],
+      [2266, 4855],
+      [2266, 4858],
+      [2265, 4858],
+      [2265, 4859],
+      [2260, 4859],
+      [2260, 4858],
+      [2255, 4858],
+      [2255, 4848],
+      [2256, 4848],
+      [2256, 4847],
+      [2260, 4847],
+      [2260, 4842],
+      [2259, 4842],
+      [2259, 4841],
+      [2254, 4841],
+      [2254, 4831],
+      [2255, 4831],
+      [2255, 4830]
+    ])
+  },
+  {
+    level: 2,
+    dest: new Tile(2275, 4835, 2),
+    op: "Climb-down",
+    path: chaosPath(2, [
+      [2255, 4829],
+      [2260, 4829],
+      [2260, 4828],
+      [2265, 4828],
+      [2265, 4830],
+      [2266, 4830],
+      [2266, 4833],
+      [2267, 4833],
+      [2267, 4838],
+      [2266, 4838],
+      [2266, 4839],
+      [2264, 4839],
+      [2264, 4841],
+      [2263, 4841],
+      [2263, 4842],
+      [2259, 4842],
+      [2259, 4848],
+      [2260, 4848],
+      [2260, 4852],
+      [2267, 4852],
+      [2267, 4848],
+      [2268, 4848],
+      [2268, 4847],
+      [2271, 4847],
+      [2271, 4845],
+      [2272, 4845],
+      [2272, 4844],
+      [2275, 4844],
+      [2275, 4841],
+      [2274, 4841],
+      [2274, 4840],
+      [2271, 4840],
+      [2271, 4835],
+      [2275, 4835]
+    ])
+  },
+  {
+    level: 1,
+    dest: new Tile(2259, 4846, 1),
+    op: "Climb-down",
+    path: chaosPath(1, [
+      [2275, 4834],
+      [2280, 4834],
+      [2280, 4831],
+      [2279, 4831],
+      [2279, 4827],
+      [2265, 4827],
+      [2265, 4826],
+      [2262, 4826],
+      [2262, 4825],
+      [2258, 4825],
+      [2258, 4829],
+      [2259, 4829],
+      [2259, 4833],
+      [2262, 4833],
+      [2262, 4837],
+      [2261, 4837],
+      [2261, 4838],
+      [2256, 4838],
+      [2256, 4841],
+      [2255, 4841],
+      [2255, 4842],
+      [2253, 4842],
+      [2253, 4845],
+      [2258, 4845],
+      [2258, 4846],
+      [2259, 4846]
+    ])
+  },
+  {
+    level: 0,
+    dest: new Tile(2268, 4841, 0),
+    path: chaosPath(0, [
+      [2259, 4846],
+      [2260, 4846],
+      [2264, 4842],
+      [2266, 4842],
+      [2267, 4841],
+      [2268, 4841]
+    ])
+  }
+];
+var CHAOS_PORTAL = new Tile(2281, 4837, 0);
+var CHAOS_PORTAL_PATH = chaosPath(0, [
+  [2268, 4841],
+  [2274, 4841],
+  [2274, 4840],
+  [2277, 4840],
+  [2277, 4838],
+  [2278, 4838],
+  [2278, 4837],
+  [2281, 4837]
+]);
+function nextChaosHop(tile) {
+  if (tile === null) {
+    return null;
+  }
+  return CHAOS_DOWN.find((hop) => hop.level === tile.level) ?? null;
+}
 var RUNE_CHOICES = [OPTION_BEST, ...[...CRAFT_RECIPES].reverse().map((r) => r.label)];
 var BY_LABEL = new Map(CRAFT_RECIPES.map((r) => [r.label, r]));
 var SHED_OUTSIDE = new Tile(3201, 3169, 0);
@@ -260,6 +395,13 @@ var SETTINGS = {
     label: "Trade essence to (IGN)",
     help: "the Mule Recipient this runner delivers essence to",
     showIf: { key: "mode", anyOf: ["Runner"] }
+  },
+  skipChaos: {
+    type: "boolean",
+    default: false,
+    label: "Best: Skip Chaos Runes",
+    help: "When Rune is Best, never pick Chaos even if you have the level and a Chaos talisman. Explicit Chaos runes still crafts them.",
+    showIf: { key: "rune", anyOf: [OPTION_BEST] }
   }
 };
 function recipeByLabel(label) {
@@ -284,6 +426,9 @@ function namesHaveTalisman(names, recipe) {
 }
 function recipeUnlocked(recipe, opts) {
   if (opts.level < recipe.level) {
+    return false;
+  }
+  if (opts.skipChaos && recipe.label === "Chaos runes") {
     return false;
   }
   if (recipe.travel === "zanaris" && !opts.lostCity) {
@@ -408,6 +553,143 @@ function shedDoor(within, near = null) {
 function altarLoc() {
   return Locs.query().name(ALTAR.name).action(ALTAR.op).nearest();
 }
+function portalLoc() {
+  return Locs.query().name(PORTAL.name).action(PORTAL.op).nearest();
+}
+async function climbTowardAltar(bot) {
+  const here = Game.tile();
+  const level = here?.level ?? 0;
+  const down = Locs.query().name("Ladder").action("Climb-down").within(3).nearest();
+  if (!down) {
+    return;
+  }
+  bot.setStatus("climbing down the maze");
+  bot.log("climbing down toward the altar");
+  await down.interact("Climb-down");
+  await Execution.delayUntil(() => (Game.tile()?.level ?? level) < level, 8000);
+}
+async function clickWalk(dest, radius, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  let lastClick = 0;
+  let stuck = 0;
+  let last = Game.tile();
+  while (Date.now() < deadline) {
+    const here = Game.tile();
+    if (here && dest.distanceTo(here) <= radius) {
+      return true;
+    }
+    if (Date.now() - lastClick > 1800) {
+      await DirectNavigator.walk(dest);
+      lastClick = Date.now();
+      if (last && here && last.x === here.x && last.z === here.z && last.level === here.level) {
+        stuck++;
+      } else {
+        stuck = 0;
+      }
+      last = here;
+      if (stuck >= 4) {
+        return dest.distanceTo(Game.tile() ?? dest) <= radius;
+      }
+    }
+    await Execution.delayTicks(2);
+  }
+  return dest.distanceTo(Game.tile() ?? dest) <= radius;
+}
+async function walkWaypoints(path, dest, radius) {
+  const here = Game.tile();
+  if (here && dest.distanceTo(here) <= radius) {
+    return true;
+  }
+  let start = 0;
+  if (here) {
+    let best = Number.POSITIVE_INFINITY;
+    for (let i = 0;i < path.length; i++) {
+      const step = path[i];
+      if (!step) {
+        continue;
+      }
+      const d = step.distanceTo(here);
+      if (d < best) {
+        best = d;
+        start = i;
+      }
+    }
+  }
+  for (let i = start;i < path.length; i++) {
+    const step = path[i];
+    if (!step) {
+      continue;
+    }
+    const last = i === path.length - 1;
+    if (!await clickWalk(step, last ? radius : 1, last ? 25000 : 12000)) {
+      return dest.distanceTo(Game.tile() ?? dest) <= radius;
+    }
+  }
+  return dest.distanceTo(Game.tile() ?? dest) <= radius;
+}
+async function sceneWalkTo(dest, radius) {
+  const here = Game.tile();
+  const hop = nextChaosHop(here);
+  if (hop && dest.distanceTo(hop.dest) <= 2) {
+    return walkWaypoints(hop.path, dest, radius);
+  }
+  if (dest.distanceTo(CHAOS_PORTAL) <= 2) {
+    return walkWaypoints(CHAOS_PORTAL_PATH, dest, radius);
+  }
+  return clickWalk(dest, radius, 45000);
+}
+async function followChaosMaze(bot) {
+  for (let guard = 0;guard < 8; guard++) {
+    const here = Game.tile();
+    const hop = nextChaosHop(here);
+    if (!hop || !here) {
+      return;
+    }
+    if (hop.dest.distanceTo(here) <= 2 && !hop.op) {
+      return;
+    }
+    const floor = 4 - hop.level;
+    bot.setStatus(`chaos maze floor ${floor}`);
+    const nearLadder = hop.op ? Locs.query().name("Ladder").action(hop.op).within(3).nearest() : null;
+    if (!nearLadder) {
+      bot.log(`chaos maze floor ${floor}: walking to ${hop.dest.x},${hop.dest.z}`);
+      await bot.walkTo(hop.dest, 2);
+    }
+    if (!hop.op) {
+      return;
+    }
+    const ladder = nearLadder ?? Locs.query().name("Ladder").action(hop.op).within(5).nearest();
+    if (!ladder) {
+      await climbTowardAltar(bot);
+      continue;
+    }
+    bot.log(`${hop.op} the maze ladder`);
+    const level = Game.tile()?.level ?? hop.level;
+    await ladder.interact(hop.op);
+    if (!await Execution.delayUntil(() => (Game.tile()?.level ?? level) < level, 8000)) {
+      await climbTowardAltar(bot);
+    }
+  }
+}
+async function approachAltar(bot) {
+  const close = altarLoc();
+  if (close && close.distance() <= 2) {
+    return close;
+  }
+  if (bot.altarTile()) {
+    await followChaosMaze(bot);
+  }
+  let found = altarLoc();
+  if (!found) {
+    await climbTowardAltar(bot);
+    found = altarLoc();
+  }
+  if (found && found.distance() > 2) {
+    await bot.walkTo(found.tile(), 1);
+    found = altarLoc();
+  }
+  return found;
+}
 function runnerLoaded(bot) {
   const talisman = bot.talismanName();
   if (!talisman) {
@@ -524,6 +806,7 @@ class RuneCrafter extends TaskBot {
   loopDelay = 600;
   recipeState = null;
   choice = OPTION_BEST;
+  skipChaos = false;
   mode = "Solo";
   partner = "";
   lastRequester = null;
@@ -538,6 +821,7 @@ class RuneCrafter extends TaskBot {
   async onStart() {
     await Execution.delayUntil(() => Game.ingame() && Game.tile() !== null, 0);
     this.choice = this.settings.str("rune", OPTION_BEST);
+    this.skipChaos = this.settings.bool("skipChaos", false);
     this.mode = this.settings.str("mode", "Solo");
     this.partner = this.settings.str("partner", "").trim();
     this.startedAt = Date.now();
@@ -601,7 +885,7 @@ class RuneCrafter extends TaskBot {
   pickFromNames(names) {
     const level = Skills.level("runecraft");
     const lostCity = canAttemptZanaris();
-    return pickBestRecipe(level, (recipe) => recipeUnlocked(recipe, { level, lostCity }) && namesHaveTalisman(names, recipe));
+    return pickBestRecipe(level, (recipe) => recipeUnlocked(recipe, { level, lostCity, skipChaos: this.skipChaos }) && namesHaveTalisman(names, recipe));
   }
   resolveAtBank() {
     if (this.choice !== OPTION_BEST) {
@@ -672,6 +956,9 @@ class RuneCrafter extends TaskBot {
   ruinsTile() {
     return this.recipeState?.ruins ?? SHED_OUTSIDE;
   }
+  altarTile() {
+    return this.recipeState?.altar ?? null;
+  }
   bankName() {
     if (this.recipeState) {
       return this.recipeState.bank;
@@ -711,7 +998,10 @@ class RuneCrafter extends TaskBot {
       return;
     }
     if (inAltarInterior(here)) {
-      await Traversal.walkResilient(dest, { radius, attempts: 6, timeoutMs: 240000, log: (m) => this.log(`  ${m}`) });
+      if (await sceneWalkTo(dest, radius)) {
+        return;
+      }
+      this.log(`scene walk did not reach ${dest.x},${dest.z} in the temple`);
       return;
     }
     const wantZanaris = inZanaris(dest);
@@ -832,7 +1122,7 @@ class Craft {
     return inTemple() && essCount() > 0;
   }
   async execute() {
-    const altar = altarLoc();
+    const altar = await approachAltar(this.bot);
     if (!altar) {
       await Execution.delayTicks(2);
       return;
@@ -858,9 +1148,11 @@ class Craft {
         await ChatDialog.continue();
         continue;
       }
-      const portal = Locs.query().name(PORTAL.name).action(PORTAL.op).nearest();
+      const portal = portalLoc();
       if (portal) {
         await portal.interact(PORTAL.op);
+      } else if (this.bot.altarTile()) {
+        await approachAltar(this.bot);
       }
       await Execution.delayTicks(1);
     }
@@ -879,7 +1171,16 @@ class Exit {
     return inTemple() && essCount() === 0;
   }
   async execute() {
-    const portal = Locs.query().name(PORTAL.name).action(PORTAL.op).nearest();
+    let portal = portalLoc();
+    if (!portal && this.bot.altarTile()) {
+      const here = Game.tile();
+      if (here && here.level === 0) {
+        await this.bot.walkTo(CHAOS_PORTAL, 2);
+      } else {
+        await approachAltar(this.bot);
+      }
+      portal = portalLoc();
+    }
     if (!portal) {
       await Execution.delayTicks(2);
       return;
@@ -1048,7 +1349,7 @@ class RunnerDeliver {
     const master = playerNamed(partner, TEMPLE_RANGE);
     if (!master) {
       this.bot.setStatus(`looking for ${partner} at the altar`);
-      const altar = altarLoc();
+      const altar = await approachAltar(this.bot);
       if (altar) {
         await DirectNavigator.walkTo(altar.tile(), ALTAR_PARK + 1, 1e4);
       }
@@ -1279,7 +1580,7 @@ class MuleWait {
     return inTemple() && essCount() === 0;
   }
   async execute() {
-    const altar = altarLoc();
+    const altar = await approachAltar(this.bot);
     if (altar && altar.distance() > ALTAR_PARK) {
       this.bot.setStatus("parking at the altar");
       this.bot.log("taking up station next to the altar");

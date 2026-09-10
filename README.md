@@ -87,6 +87,18 @@ https://benzymee.github.io/RS2B2TScripts/EdgevilleYewFletcher.js
 
 https://benzymee.github.io/RS2B2TScripts/FaladorTreeFletcher.js
 
+**FishingGuildHost** (`FishingGuildHost.js`). Stands at the Fishing Guild bank and accepts incoming shark, tuna, and swordfish trades. Never offers items.
+
+https://benzymee.github.io/RS2B2TScripts/FishingGuildHost.js
+
+**FishingGuildLobstersSwordfish** (`FishingGuildLobstersSwordfish.js`). Cage lobsters or harpoon swordfish and tuna at the Fishing Guild. Optional cook and mule.
+
+https://benzymee.github.io/RS2B2TScripts/FishingGuildLobstersSwordfish.js
+
+**FishingGuildSharks** (`FishingGuildSharks.js`). Harpoons sharks at the Fishing Guild. Optional cook and mule. Needs Fishing 76.
+
+https://benzymee.github.io/RS2B2TScripts/FishingGuildSharks.js
+
 **InventoryAlcher** (`InventoryAlcher.js`). High Level Alchemy from the inventory. Named item list, or ALCH INVENTORY for the rest of the pack. Optional Raise a kitten: keep raw fish and a Ball of wool, feed and play. Needs Magic 55.
 
 https://benzymee.github.io/RS2B2TScripts/InventoryAlcher.js

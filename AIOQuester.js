@@ -73623,6 +73623,8 @@ var LEVER_OPEN = 35;
 var PEN_GATE = 37;
 var RAT_GATE = 39;
 var FOOD_TROUGH = 40;
+var RAT_GATE_OP = "Go-through";
+var RAT_GATE_REFUSED = /does not seem to be openable/i;
 var SECRET_WALL = 1586;
 var COLOURS = ["blue", "black", "white", "red"];
 var FETCH_ORDER = ["black", "red", "blue", "white"];
@@ -73854,41 +73856,27 @@ async function leavePen(log) {
   }
   return Execution.delayUntil(outside2, 6000);
 }
-function ratGateOp(gate) {
-  const ops = gate.actions();
-  return ops.find((op) => /^go-through$/i.test(op)) ?? ops.find((op) => /^open$/i.test(op)) ?? null;
-}
-function findRatGate() {
-  const byId3 = locById3(RAT_GATE, 6);
-  if (byId3 && ratGateOp(byId3)) {
-    return byId3;
-  }
-  return Locs.query().name("Gate").where((gate) => ratGateOp(gate) !== null).within(6).nearest();
-}
 function ratsInCage() {
   return Npcs.all().filter((npc) => /rat/i.test(npc.name ?? "") && inPen(npc.tile())).length;
 }
+function inWhiteCogRoom() {
+  const t = Game.tile();
+  return t !== null && inWhiteRoom(t);
+}
 async function crossRatGate(log) {
-  if (!await Traversal.walkResilient(RAT_GATE_STAND, { radius: 0, attempts: 3, timeoutMs: 60000, log })) {
-    return false;
+  if (inWhiteCogRoom()) {
+    return true;
   }
-  const gate = findRatGate();
-  if (!gate) {
-    log(`clocktower: no rat-room gate at (${RAT_GATE_STAND.x},${RAT_GATE_STAND.z})`);
-    return false;
-  }
-  const op = ratGateOp(gate);
-  if (!op || !await gate.interact(op)) {
-    return false;
-  }
-  const crossed = await Execution.delayUntil(() => {
-    const t = Game.tile();
-    return t !== null && inWhiteRoom(t);
-  }, 8000);
-  if (crossed) {
-    await settleScene();
-  }
-  return crossed;
+  return promptLoc({
+    name: "Gate",
+    op: RAT_GATE_OP,
+    near: RAT_GATE_STAND,
+    id: RAT_GATE,
+    within: 6,
+    expect: inWhiteCogRoom,
+    expectMs: 20000,
+    refused: RAT_GATE_REFUSED
+  }, log);
 }
 async function waitForPoisonedRats(log) {
   log("clocktower: waiting for the rats to eat the poison");
@@ -73956,6 +73944,10 @@ async function enterWhiteRoom(log) {
       ratsPoisoned = true;
       if (GameMessages.sawSince(mark, POURED_POISON) || GameMessages.sawSince(mark, RATS_DYING)) {
         log("clocktower: the poison reached the trough");
+      }
+      log("clocktower: trying the west gate after the poison");
+      if (await crossRatGate(log)) {
+        return true;
       }
       await waitForPoisonedRats(log);
       if (await keepTryingRatGate(log, 8)) {

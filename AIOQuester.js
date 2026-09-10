@@ -73656,6 +73656,15 @@ var PEN_GATE_OUTSIDE = new Tile(2596, 9657, 0);
 var PEN_GATE_INSIDE = new Tile(2595, 9657, 0);
 var TROUGH_STAND2 = new Tile(2585, 9654, 0);
 var RAT_GATE_STAND = new Tile(2579, 9656, 0);
+var POURED_POISON = /pour.*(?:rat )?poison|poison.*trough|feeding trough/i;
+var RATS_DYING = /rats? (?:are |is )?(?:eating|dying|becoming weak)|some have collapsed|bent (?:and twist|the bars)/i;
+var ratsPoisoned = false;
+function resetClockTowerRats() {
+  ratsPoisoned = false;
+}
+function needsRatPoison(holdingPoison, alreadyPoured) {
+  return !holdingPoison && !alreadyPoured;
+}
 var SECRET_WALL_STAND = new Tile(2576, 9631, 0);
 var WELL_STAND2 = new Tile(2611, 3254, 0);
 var BUCKET_SPAWN = new Tile(2616, 3255, 0);
@@ -73711,7 +73720,7 @@ async function readClockTowerProgress() {
   return progress;
 }
 function inWhiteRoom(t) {
-  return isUnderground(t) && t.x >= 2574 && t.x <= 2578 && t.z >= 9655 && t.z <= 9658;
+  return isUnderground(t) && t.x >= 2574 && t.x <= 2578 && t.z >= 9654 && t.z <= 9659;
 }
 function inPen(t) {
   return isUnderground(t) && t.x >= 2579 && t.x <= 2595 && t.z >= 9652 && t.z <= 9660;
@@ -73845,26 +73854,68 @@ async function leavePen(log) {
   }
   return Execution.delayUntil(outside2, 6000);
 }
+function ratGateOp(gate) {
+  const ops = gate.actions();
+  return ops.find((op) => /^go-through$/i.test(op)) ?? ops.find((op) => /^open$/i.test(op)) ?? null;
+}
+function findRatGate() {
+  const byId3 = locById3(RAT_GATE, 6);
+  if (byId3 && ratGateOp(byId3)) {
+    return byId3;
+  }
+  return Locs.query().name("Gate").where((gate) => ratGateOp(gate) !== null).within(6).nearest();
+}
+function ratsInCage() {
+  return Npcs.all().filter((npc) => /rat/i.test(npc.name ?? "") && inPen(npc.tile())).length;
+}
 async function crossRatGate(log) {
   if (!await Traversal.walkResilient(RAT_GATE_STAND, { radius: 0, attempts: 3, timeoutMs: 60000, log })) {
     return false;
   }
-  const gate = locById3(RAT_GATE, 4);
+  const gate = findRatGate();
   if (!gate) {
     log(`clocktower: no rat-room gate at (${RAT_GATE_STAND.x},${RAT_GATE_STAND.z})`);
     return false;
   }
-  if (!await gate.interact("Go-through")) {
+  const op = ratGateOp(gate);
+  if (!op || !await gate.interact(op)) {
     return false;
   }
   const crossed = await Execution.delayUntil(() => {
     const t = Game.tile();
     return t !== null && inWhiteRoom(t);
-  }, 6000);
+  }, 8000);
   if (crossed) {
     await settleScene();
   }
   return crossed;
+}
+async function waitForPoisonedRats(log) {
+  log("clocktower: waiting for the rats to eat the poison");
+  const started = performance.now();
+  while (performance.now() - started < 25000) {
+    if (EventSignal.pending()) {
+      return;
+    }
+    if (ratsInCage() === 0) {
+      log("clocktower: the rats collapsed, trying the west gate");
+      await Execution.delayTicks(2);
+      return;
+    }
+    await Execution.delayTicks(2);
+  }
+}
+async function keepTryingRatGate(log, tries) {
+  for (let i2 = 0;i2 < tries; i2++) {
+    if (EventSignal.pending()) {
+      return false;
+    }
+    if (await crossRatGate(log)) {
+      return true;
+    }
+    await Execution.delayTicks(3);
+  }
+  return false;
 }
 async function takePoison(log) {
   if (heldId(RAT_POISON_OBJ) > 0) {
@@ -73888,7 +73939,7 @@ async function enterWhiteRoom(log) {
   if (here4 && inWhiteRoom(here4)) {
     return true;
   }
-  if (!(here4 && inPen(here4)) && !await takePoison(log)) {
+  if (!(here4 && inPen(here4)) && needsRatPoison(heldId(RAT_POISON_OBJ) > 0, ratsPoisoned) && !await takePoison(log)) {
     return false;
   }
   if (!await enterPen(log)) {
@@ -73897,18 +73948,30 @@ async function enterWhiteRoom(log) {
   if (await crossRatGate(log)) {
     return true;
   }
-  if (heldId(RAT_POISON_OBJ) === 0) {
-    log("clocktower: the rat gate is still shut and the pack holds no poison — leaving to fetch some");
-    await leavePen(log);
-    await Execution.delayTicks(2);
-    return false;
+  if (heldId(RAT_POISON_OBJ) > 0) {
+    log("clocktower: poisoning the rats at the food trough");
+    const mark = GameMessages.mark();
+    const poured = await useOnLoc(RAT_POISON_OBJ, { name: "Food trough", near: TROUGH_STAND2, id: FOOD_TROUGH }, [], () => heldId(RAT_POISON_OBJ) === 0, log);
+    if (poured) {
+      ratsPoisoned = true;
+      if (GameMessages.sawSince(mark, POURED_POISON) || GameMessages.sawSince(mark, RATS_DYING)) {
+        log("clocktower: the poison reached the trough");
+      }
+      await waitForPoisonedRats(log);
+      if (await keepTryingRatGate(log, 8)) {
+        return true;
+      }
+    }
   }
-  log("clocktower: poisoning the rats at the food trough");
-  const poured = await useOnLoc(RAT_POISON_OBJ, { name: "Food trough", near: TROUGH_STAND2, id: FOOD_TROUGH }, [], () => heldId(RAT_POISON_OBJ) === 0, log);
-  if (!poured) {
-    return false;
+  if (ratsPoisoned) {
+    log("clocktower: the west gate is still shut after the poison — waiting in the cage");
+    await waitForPoisonedRats(log);
+    return keepTryingRatGate(log, 6);
   }
-  return crossRatGate(log);
+  log("clocktower: the rat gate is still shut and the pack holds no poison — leaving to fetch some");
+  await leavePen(log);
+  await Execution.delayTicks(2);
+  return false;
 }
 async function enterBlueRoom(log) {
   const here4 = Game.tile();
@@ -73994,12 +74057,14 @@ function gatherWater(snap) {
 }
 function decide40(snap) {
   if (snap.journal === "complete") {
+    resetClockTowerRats();
     return { kind: "done" };
   }
   if (snap.journal === "unknown") {
     return { kind: "wait", reason: "quest journal not loaded" };
   }
   if (snap.journal === "notStarted") {
+    resetClockTowerRats();
     return { kind: "talk", stop: KOJO };
   }
   const progress = snap.progress;

@@ -34750,6 +34750,14 @@ async function walkOpening(dest, radius, obstacles, log) {
 
 // src/bot/api/bank/Banking.ts
 var NEARBY_BANK_RADIUS = 14;
+var BANK_SCAN_RADIUS = 80;
+function tileWithinBankScan(here, radius = BANK_SCAN_RADIUS) {
+  if (!here) {
+    return false;
+  }
+  const nearest = nearestBank(here);
+  return nearest !== null && bankDistance(here, nearest.tile) <= radius;
+}
 function openAccess(dest, fallback, log) {
   if (dest?.npcAccess) {
     return Bank.openNpcAccess(dest.npcAccess, log);
@@ -47874,17 +47882,8 @@ function coinFloatWithdraw(inv, bank, float) {
 function isAcquireStep(step) {
   return step.kind === "buy" || step.kind === "grabGround" || step.kind === "pickLoc" || step.kind === "mineRock";
 }
-function isWalkStep(step) {
-  return isAcquireStep(step) || step.kind === "talk" || step.kind === "interactLoc" || step.kind === "useOn" || step.kind === "equip";
-}
-function shouldScanBankFirst(bankKnown, step, teleportsOn) {
-  if (bankKnown) {
-    return false;
-  }
-  if (isAcquireStep(step)) {
-    return true;
-  }
-  return teleportsOn && isWalkStep(step);
+function shouldScanBankFirst(bankKnown, nearBank) {
+  return !bankKnown && nearBank;
 }
 function acquireNeed(step, inv) {
   const name = step.item;
@@ -58905,6 +58904,65 @@ async function takeGarlic(log) {
   return Execution.delayUntil(() => Inventory.count(GARLIC) > before, 8000);
 }
 
+// src/bot/api/ai/quests/engine/navTeleportKit.ts
+var NAV_TELE_RUNES = [
+  { id: 563, name: "Law rune", qty: 15 },
+  { id: 556, name: "Air rune", qty: 50 },
+  { id: 554, name: "Fire rune", qty: 10 },
+  { id: 555, name: "Water rune", qty: 15 },
+  { id: 557, name: "Earth rune", qty: 10 }
+];
+var NAV_TELE_RUNE_NAMES = NAV_TELE_RUNES.map((r) => r.name.toLowerCase());
+var NAV_TELE_MAGIC_FLOOR = 25;
+var NAV_TELE_RESERVE_SLOTS = 6;
+function low(qty2) {
+  return Math.ceil(qty2 / 3);
+}
+function navTeleportWithdraw(snap, need) {
+  if (!need.teleportsOn || !snap.bankKnown || need.magic < NAV_TELE_MAGIC_FLOOR) {
+    return [];
+  }
+  const wanted = [];
+  for (const rune of NAV_TELE_RUNES) {
+    const have2 = heldId4(snap, rune.id);
+    if (have2 >= low(rune.qty)) {
+      continue;
+    }
+    const banked7 = bankedId3(snap, rune.id);
+    const take = Math.min(rune.qty - have2, banked7);
+    if (take <= 0) {
+      continue;
+    }
+    wanted.push({ name: rune.name, qty: take, id: rune.id, held: have2 });
+  }
+  if (wanted.length === 0) {
+    return [];
+  }
+  const newTypes = wanted.filter((r) => r.held === 0).length;
+  const free = need.freeSlots;
+  if (free - newTypes < NAV_TELE_RESERVE_SLOTS) {
+    const topUp = wanted.filter((r) => r.held > 0);
+    return topUp.map(({ name, qty: qty2, id }) => ({ name, qty: qty2, id }));
+  }
+  return wanted.map(({ name, qty: qty2, id }) => ({ name, qty: qty2, id }));
+}
+function mergeWithdraw(step, extras) {
+  if (step.kind !== "withdraw" || extras.length === 0) {
+    return step;
+  }
+  const items = step.items.map((item) => ({ ...item }));
+  for (const extra of extras) {
+    const i2 = items.findIndex((item) => item.id !== undefined && extra.id !== undefined && item.id === extra.id || item.name.toLowerCase() === extra.name.toLowerCase());
+    if (i2 >= 0) {
+      const cur = items[i2];
+      items[i2] = { ...cur, qty: Math.max(cur.qty, extra.qty), id: cur.id ?? extra.id };
+    } else {
+      items.push(extra);
+    }
+  }
+  return { ...step, items };
+}
+
 // src/bot/api/ai/quests/defs/vampireslayer.ts
 var VAMPIRE_SLAYER_STAGE = {
   NOT_STARTED: 0,
@@ -59026,11 +59084,18 @@ function exactKeep() {
     ITEM3.HAMMER.toLowerCase(),
     ITEM3.STAKE.toLowerCase(),
     ...SAFE_WEAPONS.map((name) => name.toLowerCase()),
-    ...foodNames().map((name) => name.toLowerCase())
+    ...foodNames().map((name) => name.toLowerCase()),
+    ...NAV_TELE_RUNE_NAMES
   ];
 }
 function scanBank8() {
-  return { kind: "scanBank", bank: DRAYNOR_BANK5 };
+  return { kind: "scanBank" };
+}
+function scanOrNormalize(snap) {
+  if (!snap.bankKnown) {
+    return tileWithinBankScan(snap.tile) ? scanBank8() : null;
+  }
+  return normalizePack(snap);
 }
 function withdraw6(items) {
   return { kind: "withdraw", items, bank: DRAYNOR_BANK5 };
@@ -59252,11 +59317,9 @@ function stageTwo3(snap, area) {
   }
   if (area === "unknown")
     return { kind: "wait", reason: "return to the mainland to resume Vampire Slayer" };
-  if (!snap.bankKnown)
-    return scanBank8();
-  const normalize9 = normalizePack(snap);
-  if (normalize9)
-    return normalize9;
+  const bankStep2 = scanOrNormalize(snap);
+  if (bankStep2)
+    return bankStep2;
   if (!held13(snap, ITEM3.STAKE)) {
     if (banked7(snap, ITEM3.STAKE) > 0) {
       return makeSpace2(snap, 1) ?? withdraw6([{ name: ITEM3.STAKE, qty: 1 }]);
@@ -59319,11 +59382,9 @@ function decide26(snap) {
   }
   if (area === "unknown")
     return { kind: "wait", reason: "return to the mainland to resume Vampire Slayer" };
-  if (!snap.bankKnown)
-    return scanBank8();
-  const normalize9 = normalizePack(snap);
-  if (normalize9)
-    return normalize9;
+  const bankStep2 = scanOrNormalize(snap);
+  if (bankStep2)
+    return bankStep2;
   if (snap.stage === VAMPIRE_SLAYER_STAGE.NOT_STARTED)
     return { kind: "talk", stop: MORGAN };
   if (snap.stage === VAMPIRE_SLAYER_STAGE.STARTED) {
@@ -100261,65 +100322,6 @@ function defById(id) {
   return QUEST_DEFS.find((d) => d.record.id === id);
 }
 
-// src/bot/api/ai/quests/engine/navTeleportKit.ts
-var NAV_TELE_RUNES = [
-  { id: 563, name: "Law rune", qty: 15 },
-  { id: 556, name: "Air rune", qty: 50 },
-  { id: 554, name: "Fire rune", qty: 10 },
-  { id: 555, name: "Water rune", qty: 15 },
-  { id: 557, name: "Earth rune", qty: 10 }
-];
-var NAV_TELE_RUNE_NAMES = NAV_TELE_RUNES.map((r) => r.name.toLowerCase());
-var NAV_TELE_MAGIC_FLOOR = 25;
-var NAV_TELE_RESERVE_SLOTS = 6;
-function low(qty2) {
-  return Math.ceil(qty2 / 3);
-}
-function navTeleportWithdraw(snap, need) {
-  if (!need.teleportsOn || !snap.bankKnown || need.magic < NAV_TELE_MAGIC_FLOOR) {
-    return [];
-  }
-  const wanted = [];
-  for (const rune of NAV_TELE_RUNES) {
-    const have2 = heldId4(snap, rune.id);
-    if (have2 >= low(rune.qty)) {
-      continue;
-    }
-    const banked24 = bankedId3(snap, rune.id);
-    const take3 = Math.min(rune.qty - have2, banked24);
-    if (take3 <= 0) {
-      continue;
-    }
-    wanted.push({ name: rune.name, qty: take3, id: rune.id, held: have2 });
-  }
-  if (wanted.length === 0) {
-    return [];
-  }
-  const newTypes = wanted.filter((r) => r.held === 0).length;
-  const free = need.freeSlots;
-  if (free - newTypes < NAV_TELE_RESERVE_SLOTS) {
-    const topUp = wanted.filter((r) => r.held > 0);
-    return topUp.map(({ name, qty: qty2, id }) => ({ name, qty: qty2, id }));
-  }
-  return wanted.map(({ name, qty: qty2, id }) => ({ name, qty: qty2, id }));
-}
-function mergeWithdraw(step3, extras) {
-  if (step3.kind !== "withdraw" || extras.length === 0) {
-    return step3;
-  }
-  const items = step3.items.map((item2) => ({ ...item2 }));
-  for (const extra of extras) {
-    const i2 = items.findIndex((item2) => item2.id !== undefined && extra.id !== undefined && item2.id === extra.id || item2.name.toLowerCase() === extra.name.toLowerCase());
-    if (i2 >= 0) {
-      const cur = items[i2];
-      items[i2] = { ...cur, qty: Math.max(cur.qty, extra.qty), id: cur.id ?? extra.id };
-    } else {
-      items.push(extra);
-    }
-  }
-  return { ...step3, items };
-}
-
 // src/bot/api/ai/quests/engine/queue.ts
 function nextQuest(order, picked, elig, parked) {
   const ready = order.filter((id) => picked.has(id) && elig.get(id)?.status === "READY");
@@ -100449,7 +100451,6 @@ class QuestEngine {
   lastBankCounts = new Map;
   lastBankIdCounts = new Map;
   bankKnown = false;
-  startupBankScanTried = false;
   runningId = null;
   waitKey = "";
   waitCount = 0;
@@ -100892,27 +100893,25 @@ class QuestEngine {
   nameOf(id, elig) {
     return elig.get(id)?.name ?? id;
   }
-  standingNearBank() {
+  standingNearBank(radius = NEARBY_BANK_RADIUS) {
     const here11 = Game.tile();
     if (!here11) {
       return false;
     }
-    const booth = Locs.query().name("Bank booth").where((loc) => loc.actions().length > 0 && loc.distance() <= NEARBY_BANK_RADIUS).nearest();
+    const booth = Locs.query().name("Bank booth").where((loc) => loc.actions().length > 0 && loc.distance() <= radius).nearest();
     if (booth) {
       return true;
     }
-    if (Npcs.query().name("Banker").within(NEARBY_BANK_RADIUS).nearest()) {
+    if (Npcs.query().name("Banker").within(radius).nearest()) {
       return true;
     }
-    const nearest = nearestBank(here11);
-    return nearest !== null && bankDistance(here11, nearest.tile) <= NEARBY_BANK_RADIUS;
+    return tileWithinBankScan(here11, radius);
   }
   async scanNearbyBankOnStart() {
-    if (this.bankKnown || this.startupBankScanTried || !this.standingNearBank()) {
+    if (this.bankKnown || !this.standingNearBank(BANK_SCAN_RADIUS)) {
       return false;
     }
-    this.startupBankScanTried = true;
-    this.host.log("starting next to a bank — scanning it before the queue");
+    this.host.log("a bank is within 80 tiles — scanning it before the next step");
     const here11 = Game.tile();
     const stand = here11 ? nearestBank(here11)?.tile : undefined;
     const opened = await executeStep({ kind: "scanBank", bank: stand }, [], (m) => this.host.log(`  ${m}`));
@@ -100923,7 +100922,8 @@ class QuestEngine {
   }
   applySessionBank(step3, snap, module) {
     const teleportsOn = Traversal.teleportsEnabled();
-    if (shouldScanBankFirst(this.bankKnown, step3, teleportsOn)) {
+    const nearBank = this.standingNearBank(BANK_SCAN_RADIUS);
+    if (shouldScanBankFirst(this.bankKnown, nearBank)) {
       return { kind: "scanBank", bank: bankFor(module) };
     }
     const boxed = preferBankWithdraw(step3, snap);

@@ -74092,6 +74092,8 @@ var clocktower = {
   bank: BANK2,
   hops: HOPS3,
   food: 6,
+  bankReady: (snap) => snap.tile === undefined || snap.tile === null || !isUnderground(snap.tile),
+  foodReady: (snap) => snap.tile === undefined || snap.tile === null || !isUnderground(snap.tile),
   tools: ["cog", "rat poison", "bucket", "bucket of water"],
   readProgress: readClockTowerProgress,
   decide: decide40
@@ -83171,11 +83173,20 @@ var NARNODE = {
   leash: 6,
   prefer: ["You seem worried, what's up?", "I'd be happy to help!", ...NARNODE_TRANSLATION]
 };
+var NARNODE_AFTER_DEMON = [
+  "Glough sent a demon",
+  "demon to attack",
+  "what happened",
+  "Black Demon",
+  "Glough tried to kill",
+  "I was attacked"
+];
 var NARNODE_UNDER = {
   npc: "King Narnode Shareen",
   anchor: GT_TILE.narnodeUnder,
   leash: 8,
-  prefer: []
+  prefer: NARNODE_AFTER_DEMON,
+  gapMs: 8000
 };
 var HAZELMERE = {
   npc: "Hazelmere",
@@ -83230,6 +83241,64 @@ function inKaramja(t) {
 }
 function inStronghold2(t) {
   return t !== null && t !== undefined && t.x >= 2370 && t.x <= 2540 && t.z >= 3384 && t.z <= 3540;
+}
+
+// src/bot/api/ai/quests/defs/grandtree/journal.ts
+var QUEST7 = "The Grand Tree";
+function normalize34(lines) {
+  return (typeof lines === "string" ? lines : lines.join(" ")).replace(/@[a-z0-9]{3}@/gi, " ").replace(/[|\s]+/g, " ").trim().toLowerCase();
+}
+var NEEDLES2 = [
+  [GT_STAGE.COMPLETE, "quest complete!"],
+  [GT_STAGE.SEARCHING_DACONIA, "king narnode has seen the light"],
+  [GT_STAGE.DEFEATED_BLACK_DEMON, "he should be in these caves somewhere"],
+  [GT_STAGE.UNLOCKED_TRAPDOOR, "i should investigate what's behind the"],
+  [GT_STAGE.GIVEN_TWIGS, "isn't convinced but gave me some"],
+  [GT_STAGE.FOUND_INVASION_PLANS, "i should talk to the king and see what he says"],
+  [GT_STAGE.CLUE_CHARLIE, "has suggested i ask"],
+  [GT_STAGE.OBTAINED_LUMBER_ORDER, "i have an invoice that the foreman had"],
+  [GT_STAGE.RELEASED_PRISON, "has told me to use the"],
+  [GT_STAGE.FOUND_JOURNAL, "i should go speak to him again"],
+  [GT_STAGE.SPOKEN_PRISONER, "and agreed to search glough's house"],
+  [GT_STAGE.FOUND_PRISONER, "said i can speak to"],
+  [GT_STAGE.SPOKEN_GLOUGH, "maybe i should have a chat with"],
+  [GT_STAGE.RELAYED_MESSAGE, "the king wants me to tell"],
+  [GT_STAGE.SPOKEN_HAZELMERE, "i then need to give the message"],
+  [GT_STAGE.STARTED, "he has asked me to take a"],
+  [GT_STAGE.NOT_STARTED, "i can start this quest at the"]
+];
+function parseGrandTreeJournal(lines) {
+  const text = normalize34(lines);
+  for (const [stage, needle] of NEEDLES2) {
+    if (text.includes(needle)) {
+      return stage;
+    }
+  }
+  return;
+}
+var lastStage2;
+async function readGrandTreeStage() {
+  const status = Quests.status(QUEST7);
+  if (status === "complete") {
+    lastStage2 = GT_STAGE.COMPLETE;
+    return lastStage2;
+  }
+  if (status === "notStarted") {
+    lastStage2 = GT_STAGE.NOT_STARTED;
+    return lastStage2;
+  }
+  if (status !== "inProgress") {
+    return;
+  }
+  const parsed = parseGrandTreeJournal(await Quests.journal(QUEST7));
+  if (reader.modals().main !== -1) {
+    actions.closeModal();
+    await Execution.delayTicks(1);
+  }
+  if (parsed !== undefined && (lastStage2 === undefined || parsed > lastStage2)) {
+    lastStage2 = parsed;
+  }
+  return parsed ?? lastStage2;
 }
 
 // src/bot/api/ai/quests/defs/grandtree/legs.ts
@@ -83455,6 +83524,36 @@ async function searchNextRoot(log) {
   log(`root ${index + 1}/${GT_ROOTS.length} at (${root.sw.x},${root.sw.z}): ${found ? "the Daconia rock" : "nothing"}`);
   return true;
 }
+async function tellKingAboutDemon(log) {
+  const stop = { ...NARNODE_UNDER, prefer: NARNODE_AFTER_DEMON, gapMs: 8000 };
+  if (!await gotoNpc(stop, GT_HOPS, log)) {
+    return false;
+  }
+  if (!await openDialogue(stop.npc, log)) {
+    return false;
+  }
+  let sawTalk = false;
+  let quiet = 0;
+  await driveUntil(() => {
+    if (ChatDialog.isOpen() || ChatDialog.canContinue()) {
+      sawTalk = true;
+      quiet = 0;
+      return false;
+    }
+    if (!sawTalk) {
+      return false;
+    }
+    quiet++;
+    return quiet >= 15;
+  }, stop.prefer, log, TALK_MS);
+  await Execution.delayTicks(2);
+  const stage = await readGrandTreeStage();
+  if (stage !== undefined && stage >= GT_STAGE.SEARCHING_DACONIA) {
+    return true;
+  }
+  log("King Narnode did not send us to search the roots — the cave talk is unfinished");
+  return false;
+}
 function giveRock(log) {
   return talkUntil2(NARNODE_UNDER, () => heldId(GT_OBJ.DACONIA) === 0, log, 60000);
 }
@@ -83529,64 +83628,6 @@ async function fightBlackDemon(log) {
   await Traversal.walkResilient(new Tile(at2.x, at2.z, at2.level), { radius: 2, attempts: 2, timeoutMs: 20000, log });
   const result = await runFight2({ what: "Black Demon", npcId: GT_NPC.BLACK_DEMON, guard: DEMON_GUARD }, log);
   return result === "won";
-}
-
-// src/bot/api/ai/quests/defs/grandtree/journal.ts
-var QUEST7 = "The Grand Tree";
-function normalize34(lines) {
-  return (typeof lines === "string" ? lines : lines.join(" ")).replace(/@[a-z0-9]{3}@/gi, " ").replace(/[|\s]+/g, " ").trim().toLowerCase();
-}
-var NEEDLES2 = [
-  [GT_STAGE.COMPLETE, "quest complete!"],
-  [GT_STAGE.SEARCHING_DACONIA, "king narnode has seen the light"],
-  [GT_STAGE.DEFEATED_BLACK_DEMON, "he should be in these caves somewhere"],
-  [GT_STAGE.UNLOCKED_TRAPDOOR, "i should investigate what's behind the"],
-  [GT_STAGE.GIVEN_TWIGS, "isn't convinced but gave me some"],
-  [GT_STAGE.FOUND_INVASION_PLANS, "i should talk to the king and see what he says"],
-  [GT_STAGE.CLUE_CHARLIE, "has suggested i ask"],
-  [GT_STAGE.OBTAINED_LUMBER_ORDER, "i have an invoice that the foreman had"],
-  [GT_STAGE.RELEASED_PRISON, "has told me to use the"],
-  [GT_STAGE.FOUND_JOURNAL, "i should go speak to him again"],
-  [GT_STAGE.SPOKEN_PRISONER, "and agreed to search glough's house"],
-  [GT_STAGE.FOUND_PRISONER, "said i can speak to"],
-  [GT_STAGE.SPOKEN_GLOUGH, "maybe i should have a chat with"],
-  [GT_STAGE.RELAYED_MESSAGE, "the king wants me to tell"],
-  [GT_STAGE.SPOKEN_HAZELMERE, "i then need to give the message"],
-  [GT_STAGE.STARTED, "he has asked me to take a"],
-  [GT_STAGE.NOT_STARTED, "i can start this quest at the"]
-];
-function parseGrandTreeJournal(lines) {
-  const text = normalize34(lines);
-  for (const [stage, needle] of NEEDLES2) {
-    if (text.includes(needle)) {
-      return stage;
-    }
-  }
-  return;
-}
-var lastStage2;
-async function readGrandTreeStage() {
-  const status = Quests.status(QUEST7);
-  if (status === "complete") {
-    lastStage2 = GT_STAGE.COMPLETE;
-    return lastStage2;
-  }
-  if (status === "notStarted") {
-    lastStage2 = GT_STAGE.NOT_STARTED;
-    return lastStage2;
-  }
-  if (status !== "inProgress") {
-    return;
-  }
-  const parsed = parseGrandTreeJournal(await Quests.journal(QUEST7));
-  if (reader.modals().main !== -1) {
-    actions.closeModal();
-    await Execution.delayTicks(1);
-  }
-  if (parsed !== undefined && (lastStage2 === undefined || parsed > lastStage2)) {
-    lastStage2 = parsed;
-  }
-  return parsed ?? lastStage2;
 }
 
 // src/bot/api/ai/quests/defs/grandtree/index.ts
@@ -83711,7 +83752,7 @@ function decide53(snap) {
     case GT_STAGE.UNLOCKED_TRAPDOOR:
       return custom22("take the trapdoor and kill the Black Demon", fightBlackDemon);
     case GT_STAGE.DEFEATED_BLACK_DEMON:
-      return { kind: "talk", stop: NARNODE_UNDER };
+      return custom22("tell the King Glough sent the demon", tellKingAboutDemon);
     case GT_STAGE.SEARCHING_DACONIA:
       return held33(snap, GT_OBJ.DACONIA) > 0 ? custom22("give the King the Daconia rock", giveRock) : custom22("search the roots for the Daconia rock", searchNextRoot);
     default:
@@ -100505,7 +100546,7 @@ class QuestEngine {
       return;
     }
     let step3;
-    if (!this.deposited.has(id)) {
+    if (!this.deposited.has(id) && (module.bankReady?.(snap) ?? true)) {
       const foodName3 = this.host.foodItem()?.toLowerCase();
       const keep = [
         ...module.record.items.map((i2) => i2.name.toLowerCase()),
@@ -100554,7 +100595,7 @@ class QuestEngine {
           potionFloat = { name: PRAYER_POTION, qty: potionPlan.qty };
         }
       }
-      const extras = [coinFloat, foodFloat, potionFloat].filter((w) => w !== null);
+      const extras = module.bankReady?.(snap) ?? true ? [coinFloat, foodFloat, potionFloat].filter((w) => w !== null) : [];
       for (let i2 = plan2.blocked.length - 1;i2 >= 0; i2--) {
         const b = plan2.blocked[i2];
         const m = b.match(/^(.*?)(?:\s+x\d+)?$/);

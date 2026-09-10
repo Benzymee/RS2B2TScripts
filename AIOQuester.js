@@ -40472,7 +40472,7 @@ var QUESTS = [
     id: "doric",
     name: "Doric's Quest",
     questPoints: 1,
-    requirements: {},
+    requirements: { skills: [{ skill: "mining", level: 15 }] },
     items: [
       { name: "Clay", qty: 6, kind: "acquirable" },
       { name: "Copper ore", qty: 4, kind: "acquirable" },
@@ -40726,7 +40726,8 @@ var QUESTS = [
       minQuestPoints: 32,
       skills: [
         { skill: "mining", level: 30 },
-        { skill: "smithing", level: 34 }
+        { skill: "smithing", level: 34 },
+        { skill: "crafting", level: 8 }
       ]
     },
     items: [
@@ -42022,7 +42023,7 @@ function materialWithdrawals(snap) {
 function allMaterialsHeld(snap) {
   return MATERIALS.every((item) => heldCount(snap, item) >= item.qty);
 }
-function stageTen(snap, miningLevel, miningXp) {
+function stageTen(snap, miningLevel) {
   if (allMaterialsHeld(snap)) {
     return {
       kind: "custom",
@@ -42074,9 +42075,8 @@ function stageTen(snap, miningLevel, miningXp) {
   }
   if (missing.includes(DORIC_ITEM.IRON) && miningLevel < 15) {
     return {
-      kind: "custom",
-      name: `train Mining ${miningLevel}/15 on Copper (${Math.floor(miningXp)} XP)`,
-      run: (log) => mineOne("Copper", DORIC_ITEM.COPPER, log)
+      kind: "wait",
+      reason: `Iron ore is Mining 15 (have ${miningLevel}); Drogo stocks none`
     };
   }
   if (missing.includes(DORIC_ITEM.IRON)) {
@@ -42084,7 +42084,7 @@ function stageTen(snap, miningLevel, miningXp) {
   }
   return { kind: "wait", reason: "Doric material state could not be resolved" };
 }
-function decideForMiningLevel(snap, miningLevel, miningXp = 0) {
+function decideForMiningLevel(snap, miningLevel) {
   if (snap.journal === "complete" || (snap.stage ?? 0) >= DORIC_STAGE.COMPLETE)
     return { kind: "done" };
   if (snap.journal === "unknown")
@@ -42095,13 +42095,13 @@ function decideForMiningLevel(snap, miningLevel, miningXp = 0) {
     case DORIC_STAGE.NOT_STARTED:
       return talkAtStage(0, "ask Doric to use his anvils and accept the materials job");
     case DORIC_STAGE.STARTED:
-      return stageTen(snap, miningLevel, miningXp);
+      return stageTen(snap, miningLevel);
     default:
       return { kind: "wait", reason: `unrecognized Doric's Quest stage ${snap.stage}` };
   }
 }
 function decide2(snap) {
-  return decideForMiningLevel(snap, Skills.level("mining"), Skills.xp("mining"));
+  return decideForMiningLevel(snap, Skills.level("mining"));
 }
 var doric = {
   record: QUESTS.find((record) => record.id === "doric"),

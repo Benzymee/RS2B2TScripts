@@ -35263,8 +35263,28 @@ var SPECIAL_CROSSINGS = [
     },
     label: "Mort Myre gate (Ulizius)"
   },
-  { x: 2598, z: 3477, level: 0, locName: "Log balance", action: "Walk-across", requiresSkill: { name: "agility", level: 20 }, label: "Coal trucks log balance" },
-  { x: 2603, z: 3477, level: 0, locName: "Log balance", action: "Walk-across", requiresSkill: { name: "agility", level: 20 }, label: "Coal trucks log balance" },
+  {
+    x: 2598,
+    z: 3477,
+    level: 0,
+    locName: "Log balance",
+    action: "Walk-across",
+    requiresSkill: { name: "agility", level: 20 },
+    toTile: { x: 2603, z: 3477, level: 0 },
+    arrivalRadius: 0,
+    label: "Coal trucks log balance"
+  },
+  {
+    x: 2603,
+    z: 3477,
+    level: 0,
+    locName: "Log balance",
+    action: "Walk-across",
+    requiresSkill: { name: "agility", level: 20 },
+    toTile: { x: 2598, z: 3477, level: 0 },
+    arrivalRadius: 0,
+    label: "Coal trucks log balance"
+  },
   {
     x: 2580,
     z: 9520,
@@ -52588,7 +52608,7 @@ function warnDwarfCannonReadiness() {
 }
 var dwarfcannon = {
   record: QUESTS.find((r) => r.id === "mcannon"),
-  bank: FALADOR_WEST_BANK2,
+  bank: "nearest",
   hops: [...CAVE_HOPS],
   food: MC_FOOD_TARGET,
   coinFloat: 0,

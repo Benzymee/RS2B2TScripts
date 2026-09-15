@@ -39990,6 +39990,7 @@ var ANCHORS = {
   GERRANT_FISHING: { npc: "Gerrant", anchor: new Tile(3013, 3225, 0) },
   ARDOUGNE_BAKER: { npc: "Baker", anchor: new Tile(2669, 3310, 0) },
   AEMAD: { npc: "Aemad", anchor: new Tile(2613, 3294, 0) },
+  ROMMIK: { npc: "Rommik", anchor: new Tile(2949, 3205, 0) },
   SPADE_DRAYNOR_MANOR: new Tile(3122, 3359, 0),
   SPADE_FALADOR: new Tile(2981, 3370, 0),
   SHEARS_FRED_FARM: new Tile(3152, 3306, 0),
@@ -40225,8 +40226,22 @@ var UNIVERSAL_GATHERERS = {
     kind: "buy",
     item: "Rope",
     qty,
-    shop: ANCHORS.FALADOR_GEN_STORE,
+    shop: ANCHORS.AEMAD,
     estGp: 25 * qty
+  }),
+  thread: (_snap, qty) => ({
+    kind: "buy",
+    item: "Thread",
+    qty,
+    shop: ANCHORS.ROMMIK,
+    estGp: 5 * qty
+  }),
+  needle: (_snap, qty) => ({
+    kind: "buy",
+    item: "Needle",
+    qty,
+    shop: ANCHORS.ROMMIK,
+    estGp: 5 * qty
   })
 };
 function getUniversalGatherStep(name, snap, need) {
@@ -40570,7 +40585,9 @@ var QUESTS = [
       { skill: "mining", level: 40 },
       { skill: "crafting", level: 40 },
       { skill: "smithing", level: 40 },
-      { skill: "magic", level: 59 }
+      { skill: "magic", level: 59 },
+      { skill: "fishing", level: 50 },
+      { skill: "cooking", level: 45 }
     ] },
     items: [
       { name: "Tuna", qty: 1, kind: "acquirable" },
@@ -62917,6 +62934,8 @@ function scanBank11() {
   return { kind: "scanBank", bank: SEERS_BANK };
 }
 var AEMAD = { npc: "Aemad", anchor: new Tile(2613, 3294, 0) };
+var ROMMIK = { npc: "Rommik", anchor: new Tile(2949, 3205, 0) };
+var FLYNN = { npc: "Flynn", anchor: new Tile(2958, 3367, 0) };
 var COAL_TRUCKS = new Tile(2582, 3481, 0);
 function withdraw7(items) {
   return { kind: "withdraw", items, bank: SEERS_BANK };
@@ -63071,10 +63090,10 @@ function surfaceLoadout(snap, needBellowsFix, needSmelt) {
     return hasPickaxe(snap) ? { kind: "mineRock", rock: "Coal", item: EW_ITEM.COAL.name, qty: short, anchor: COAL_TRUCKS } : { kind: "buy", item: "Bronze pickaxe", qty: 1, shop: AEMAD, estGp: 60 };
   }
   if (needBellowsFix && held16(snap, EW_ITEM.THREAD.id) < THREAD_NEED && banked10(snap, EW_ITEM.THREAD.id) === 0) {
-    return { kind: "wait", reason: "need Thread in the bank to fix the bellows" };
+    return { kind: "buy", item: EW_ITEM.THREAD.name, qty: 1, shop: ROMMIK, estGp: 5 };
   }
   if (needSmelt && !hasWeapon(snap) && !bestBankWeapon(snap)) {
-    return { kind: "wait", reason: "need a melee weapon in the bank for the Earth elemental" };
+    return { kind: "buy", item: "Bronze mace", qty: 1, shop: FLYNN, estGp: 20 };
   }
   if (!hasHeldSlashTool(snap) && !hasSlashTool(snap) && banked10(snap, EW_ITEM.KNIFE.id) === 0 && !bestBankWeapon(snap)) {
     return null;
@@ -69495,6 +69514,409 @@ async function combineCrest(log) {
   return made;
 }
 
+// src/bot/api/ai/quests/defs/familycrest/supplies.ts
+var FC_OFFICIAL_SKILLS = {
+  mining: 40,
+  crafting: 40,
+  smithing: 40,
+  magic: 59
+};
+var FC_PROVEN_COMBAT_FLOOR = {
+  attack: 99,
+  strength: 99,
+  defence: 99,
+  hitpoints: 99
+};
+var FC_FOODS = ["Shark", "Lobster", "Trout", "Herring"];
+var FOOD_WITHDRAW2 = 10;
+var RUNE_BUY = {
+  air: 600,
+  water: 200,
+  earth: 200,
+  fire: 250,
+  death: 60
+};
+var RUNE_GP = 25000;
+var MOULD_GP = 1000;
+var RUBY_GP = 12000;
+var ANTIPOISON_GP = 2000;
+var CALEB_FISH = [
+  { id: FC_ID.SWORDFISH, name: FC_ITEM.SWORDFISH },
+  { id: FC_ID.BASS, name: FC_ITEM.BASS },
+  { id: FC_ID.TUNA, name: FC_ITEM.TUNA },
+  { id: FC_ID.SALMON, name: FC_ITEM.SALMON },
+  { id: FC_ID.SHRIMP, name: FC_ITEM.SHRIMP }
+];
+var BLAST_RUNES = [
+  { item: { id: FC_ID.AIR_RUNE, name: FC_ITEM.AIR_RUNE }, qty: RUNE_BUY.air },
+  { item: { id: FC_ID.WATER_RUNE, name: FC_ITEM.WATER_RUNE }, qty: RUNE_BUY.water },
+  { item: { id: FC_ID.EARTH_RUNE, name: FC_ITEM.EARTH_RUNE }, qty: RUNE_BUY.earth },
+  { item: { id: FC_ID.FIRE_RUNE, name: FC_ITEM.FIRE_RUNE }, qty: RUNE_BUY.fire },
+  { item: { id: FC_ID.DEATH_RUNE, name: FC_ITEM.DEATH_RUNE }, qty: RUNE_BUY.death }
+];
+var BLAST_MINIMUM = [
+  { item: { id: FC_ID.AIR_RUNE, name: FC_ITEM.AIR_RUNE }, qty: 13 },
+  { item: { id: FC_ID.WATER_RUNE, name: FC_ITEM.WATER_RUNE }, qty: 3 },
+  { item: { id: FC_ID.EARTH_RUNE, name: FC_ITEM.EARTH_RUNE }, qty: 4 },
+  { item: { id: FC_ID.FIRE_RUNE, name: FC_ITEM.FIRE_RUNE }, qty: 5 },
+  { item: { id: FC_ID.DEATH_RUNE, name: FC_ITEM.DEATH_RUNE }, qty: 4 }
+];
+function held21(snap, id) {
+  return snap.invIds?.get(id) ?? 0;
+}
+function banked13(snap, id) {
+  return snap.bankIds?.get(id) ?? 0;
+}
+function worn10(snap, id) {
+  return snap.wornIds?.has(id) ?? false;
+}
+function heldName3(snap, name) {
+  return snap.inv.get(name.toLowerCase()) ?? 0;
+}
+function bankedName2(snap, name) {
+  return snap.bank?.get(name.toLowerCase()) ?? 0;
+}
+function heldAntipoison(snap) {
+  return ANTIPOISON_IDS.reduce((sum, id) => sum + held21(snap, id), 0);
+}
+function bankedAntipoison(snap) {
+  for (const id of ANTIPOISON_IDS) {
+    if (banked13(snap, id) > 0) {
+      return { id, name: `Antipoison(${id === FC_ID.ANTIPOISON_4 ? 4 : id === FC_ID.ANTIPOISON_3 ? 3 : id === FC_ID.ANTIPOISON_2 ? 2 : 1})` };
+    }
+  }
+  return null;
+}
+function hasPickaxe2(snap) {
+  return PICKAXES4.some((p) => held21(snap, p.id) > 0 || worn10(snap, p.id));
+}
+function bestBankPickaxe2(snap) {
+  return PICKAXES4.find((p) => banked13(snap, p.id) > 0) ?? null;
+}
+function hasWeapon2(snap) {
+  return bestHeld(snap) !== null;
+}
+function bestBankWeapon2(snap) {
+  return bestBanked(snap);
+}
+function wieldWeapon2(snap, bank) {
+  if (wieldedWeapon(snap)) {
+    return null;
+  }
+  const inPack = packWeapon(snap);
+  if (inPack) {
+    return { kind: "equip", item: inPack.name };
+  }
+  if (!snap.bankKnown) {
+    return scanBank15(bank);
+  }
+  const fromTheBank = bestBankWeapon2(snap);
+  return fromTheBank ? fromBank4(snap, fromTheBank, 1, bank) : null;
+}
+var TELEPORT_KIT = [
+  { item: { id: FC_ID.LAW_RUNE, name: FC_ITEM.LAW_RUNE }, qty: 30 },
+  { item: { id: FC_ID.AIR_RUNE, name: FC_ITEM.AIR_RUNE }, qty: 150 },
+  { item: { id: FC_ID.FIRE_RUNE, name: FC_ITEM.FIRE_RUNE }, qty: 30 },
+  { item: { id: FC_ID.WATER_RUNE, name: FC_ITEM.WATER_RUNE }, qty: 30 }
+];
+var AUBURY_STOCKS = new Set([FC_ID.AIR_RUNE, FC_ID.FIRE_RUNE, FC_ID.WATER_RUNE]);
+var navTeleportsOn = () => Traversal.teleportsEnabled();
+function heldDuelRing(snap) {
+  return DUEL_RING_IDS.reduce((sum, id) => sum + held21(snap, id), 0);
+}
+function teleportKitTopUp(snap, bank) {
+  return navTeleportsOn() ? teleportKitPlan(snap, bank) : null;
+}
+function teleportKitPlan(snap, bank) {
+  const runesShort = TELEPORT_KIT.some((want) => held21(snap, want.item.id) < Math.ceil(want.qty / 3));
+  const ringShort = heldDuelRing(snap) === 0;
+  if (!runesShort && !ringShort) {
+    return null;
+  }
+  if (!snap.bankKnown) {
+    return scanBank15(bank);
+  }
+  if (runesShort && banked13(snap, TELEPORT_KIT[0].item.id) > 0) {
+    for (const want of TELEPORT_KIT) {
+      const step2 = fromBank4(snap, want.item, want.qty, bank);
+      if (step2) {
+        return step2;
+      }
+      if (held21(snap, want.item.id) < Math.ceil(want.qty / 3) && AUBURY_STOCKS.has(want.item.id)) {
+        return { kind: "buy", item: want.item.name, qty: want.qty, shop: FC_SHOP.AUBURY, estGp: RUNE_GP };
+      }
+    }
+  }
+  if (ringShort) {
+    const ring = DUEL_RING_IDS.find((id) => banked13(snap, id) > 0);
+    if (ring !== undefined) {
+      return withdraw10([{ name: "Ring of dueling", id: ring, qty: 1 }], bank);
+    }
+  }
+  return null;
+}
+function bestBankFood(snap) {
+  return FC_FOODS.find((f) => bankedName2(snap, f) > 0) ?? null;
+}
+function heldFood(snap) {
+  return FC_FOODS.reduce((sum, f) => sum + heldName3(snap, f), 0);
+}
+function scanBank15(bank) {
+  return { kind: "scanBank", bank };
+}
+function withdraw10(items, bank) {
+  return { kind: "withdraw", items, bank };
+}
+function fromBank4(snap, item2, qty2 = 1, bank) {
+  const short = qty2 - held21(snap, item2.id);
+  if (short <= 0) {
+    return null;
+  }
+  if (!snap.bankKnown) {
+    return scanBank15(bank);
+  }
+  const inBank = banked13(snap, item2.id);
+  return inBank > 0 ? withdraw10([{ name: item2.name, id: item2.id, qty: Math.min(short, inBank) }], bank) : null;
+}
+var CREST_KEEP_IDS = [
+  FC_ID.CREST_FROM_CALEB,
+  FC_ID.CREST_FROM_AVAN,
+  FC_ID.CREST_FROM_CHRONOZON,
+  FC_ID.FAMILY_CREST
+];
+function deposit(keep, bank) {
+  return { kind: "deposit", keep, keepIds: CREST_KEEP_IDS, bank };
+}
+var COIN_CARRY = 1e5;
+function coinTopUp(snap, want = COIN_CARRY, bank) {
+  const have2 = heldName3(snap, FC_ITEM.COINS);
+  if (have2 >= want / 2) {
+    return null;
+  }
+  if (!snap.bankKnown) {
+    return scanBank15(bank);
+  }
+  const inBank = bankedName2(snap, FC_ITEM.COINS);
+  if (inBank <= 0) {
+    return null;
+  }
+  return withdraw10([{ name: FC_ITEM.COINS, id: FC_ID.COINS, qty: Math.min(want - have2, inBank) }], bank);
+}
+function foodTopUp(snap, want = FOOD_WITHDRAW2, bank) {
+  if (heldFood(snap) >= Math.ceil(want / 2)) {
+    return null;
+  }
+  if (!snap.bankKnown) {
+    return scanBank15(bank);
+  }
+  const food = bestBankFood(snap);
+  if (!food) {
+    return null;
+  }
+  const take = Math.min(want - heldFood(snap), bankedName2(snap, food));
+  return take > 0 ? withdraw10([{ name: food, qty: take }], bank) : null;
+}
+var LEG_BANK = {
+  start: FC_BANK.VARROCK_EAST,
+  caleb: FC_BANK.CATHERBY,
+  alkharid: FC_BANK.AL_KHARID,
+  gold: FC_BANK.AL_KHARID,
+  mine: FC_BANK.ARDOUGNE_EAST,
+  boot: FC_BANK.FALADOR_EAST,
+  chronozon: FC_BANK.VARROCK_EAST
+};
+var SHOP = FC_SHOP;
+function warnFamilyCrestReadiness() {
+  const have2 = {
+    mining: Skills.level("mining"),
+    crafting: Skills.level("crafting"),
+    smithing: Skills.level("smithing"),
+    magic: Skills.level("magic"),
+    attack: Skills.level("attack"),
+    strength: Skills.level("strength"),
+    defence: Skills.level("defence"),
+    hitpoints: Skills.level("hitpoints")
+  };
+  const missing = [];
+  for (const [skill, need] of Object.entries(FC_OFFICIAL_SKILLS)) {
+    const n = have2[skill] ?? 1;
+    if (n < need) {
+      missing.push(`${skill} ${n}/${need}`);
+    }
+  }
+  if (missing.length > 0) {
+    return `official skill reqs not met (${missing.join(", ")}) — Fire Blast and the perfect-gold jewellery will both refuse`;
+  }
+  const floor = FC_PROVEN_COMBAT_FLOOR;
+  const short = ["attack", "strength", "defence", "hitpoints"].filter((s) => have2[s] < floor[s]).map((s) => `${s} ${have2[s]}/${floor[s]}`);
+  if (short.length === 0) {
+    return null;
+  }
+  return `combat below the only proven profile (${short.join(", ")}; headed PASS at max). ` + "Hellhounds guard the gold rocks and Chronozon is a lvl-170 wilderness demon — expect death risk.";
+}
+
+// src/bot/api/ai/quests/defs/familycrest/fish.ts
+var HARRY = { npc: "Harry", anchor: new Tile(2833, 3443, 0) };
+var GERRANT2 = { npc: "Gerrant", anchor: new Tile(3013, 3225, 0) };
+var CATHERBY_RANGE = new Tile(2817, 3443, 0);
+var DRAYNOR_NET = new Tile(3086, 3231, 0);
+var SEERS_LURE = new Tile(2716, 3532, 0);
+var CATHERBY_SHORE = new Tile(2845, 3431, 0);
+var TOOL = {
+  NET: { id: 303, name: "Small fishing net" },
+  BIG_NET: { id: 305, name: "Big fishing net" },
+  HARPOON: { id: 311, name: "Harpoon" },
+  FLY_ROD: { id: 309, name: "Fly fishing rod" },
+  FEATHER: { id: 314, name: "Feather" }
+};
+var RAW = {
+  SHRIMP: { id: 317, name: "Raw shrimps" },
+  SALMON: { id: 331, name: "Raw salmon" },
+  TUNA: { id: 359, name: "Raw tuna" },
+  BASS: { id: 363, name: "Raw bass" },
+  SWORDFISH: { id: 371, name: "Raw swordfish" }
+};
+var CATCH = [
+  {
+    cooked: { id: FC_ID.SWORDFISH, name: FC_ITEM.SWORDFISH },
+    raw: RAW.SWORDFISH,
+    tool: TOOL.HARPOON,
+    shop: HARRY,
+    estGp: 40,
+    spot: CATHERBY_SHORE,
+    action: "Harpoon"
+  },
+  {
+    cooked: { id: FC_ID.BASS, name: FC_ITEM.BASS },
+    raw: RAW.BASS,
+    tool: TOOL.BIG_NET,
+    shop: HARRY,
+    estGp: 40,
+    spot: CATHERBY_SHORE,
+    action: "Net"
+  },
+  {
+    cooked: { id: FC_ID.TUNA, name: FC_ITEM.TUNA },
+    raw: RAW.TUNA,
+    tool: TOOL.HARPOON,
+    shop: HARRY,
+    estGp: 40,
+    spot: CATHERBY_SHORE,
+    action: "Harpoon"
+  },
+  {
+    cooked: { id: FC_ID.SALMON, name: FC_ITEM.SALMON },
+    raw: RAW.SALMON,
+    tool: TOOL.FLY_ROD,
+    extra: { ...TOOL.FEATHER, qty: 20 },
+    shop: GERRANT2,
+    estGp: 80,
+    spot: SEERS_LURE,
+    action: "Lure"
+  },
+  {
+    cooked: { id: FC_ID.SHRIMP, name: FC_ITEM.SHRIMP },
+    raw: RAW.SHRIMP,
+    tool: TOOL.NET,
+    shop: HARRY,
+    estGp: 20,
+    spot: DRAYNOR_NET,
+    action: "Net"
+  }
+];
+var live2 = (id) => Inventory.items().filter((i2) => i2.id === id).reduce((n, i2) => n + i2.count, 0);
+async function catchOne(plan, log) {
+  const before = live2(plan.raw.id);
+  if (!await Traversal.walkResilient(plan.spot, { radius: 3, attempts: 3, timeoutMs: 180000, log })) {
+    return false;
+  }
+  const deadline = performance.now() + 90000;
+  while (performance.now() < deadline && live2(plan.raw.id) <= before) {
+    if (EventSignal.pending()) {
+      log(`fish ${plan.raw.name}: yielding to a random event`);
+      return false;
+    }
+    if (plan.extra && live2(plan.extra.id) === 0) {
+      log(`out of ${plan.extra.name}`);
+      return false;
+    }
+    const spot = Npcs.query().name("Fishing spot").action(plan.action).within(10).nearest();
+    if (!spot) {
+      log(`no ${plan.action} Fishing spot near (${plan.spot.x},${plan.spot.z})`);
+      await Execution.delayTicks(5);
+      continue;
+    }
+    await spot.interact(plan.action);
+    await Execution.delayUntil(() => live2(plan.raw.id) > before, 20000);
+  }
+  return live2(plan.raw.id) > before;
+}
+async function cookRaw(rawId, cookedId, log) {
+  const before = live2(cookedId);
+  if (live2(rawId) === 0) {
+    log("no raw fish to cook");
+    return false;
+  }
+  if (!await Traversal.walkResilient(CATHERBY_RANGE, { radius: 2, attempts: 3, timeoutMs: 180000, log })) {
+    return false;
+  }
+  const raw2 = Inventory.items().find((i2) => i2.id === rawId);
+  const range = Locs.query().name("Range").within(8).nearest();
+  if (!raw2 || !range) {
+    log("no raw fish in the pack, or no Range in the Catherby bank house");
+    return false;
+  }
+  if (!await raw2.useOn(range)) {
+    return false;
+  }
+  return Execution.delayUntil(() => live2(rawId) === 0 || live2(cookedId) > before, 60000);
+}
+function sourceCalebFish(snap) {
+  for (const fish of CALEB_FISH) {
+    if (held21(snap, fish.id) > 0) {
+      continue;
+    }
+    const fromTheBank = fromBank4(snap, fish, 1, LEG_BANK.caleb);
+    if (fromTheBank) {
+      return fromTheBank;
+    }
+  }
+  for (const fish of CALEB_FISH) {
+    if (held21(snap, fish.id) > 0) {
+      continue;
+    }
+    const plan = CATCH.find((c) => c.cooked.id === fish.id);
+    if (!plan) {
+      continue;
+    }
+    if (held21(snap, plan.raw.id) > 0) {
+      return {
+        kind: "custom",
+        name: `cook ${plan.raw.name} at the Catherby range`,
+        run: (log) => cookRaw(plan.raw.id, plan.cooked.id, log)
+      };
+    }
+    if (held21(snap, plan.tool.id) === 0) {
+      return { kind: "buy", item: plan.tool.name, qty: 1, shop: plan.shop, estGp: plan.estGp };
+    }
+    if (plan.extra && held21(snap, plan.extra.id) < 5) {
+      return {
+        kind: "buy",
+        item: plan.extra.name,
+        qty: plan.extra.qty,
+        shop: plan.shop,
+        estGp: plan.extra.qty * 4
+      };
+    }
+    return {
+      kind: "custom",
+      name: `${plan.action.toLowerCase()} ${plan.raw.name}`,
+      run: (log) => catchOne(plan, log)
+    };
+  }
+  return null;
+}
+
 // src/bot/api/ai/quests/defs/familycrest/journal.ts
 function normalize17(lines) {
   return (typeof lines === "string" ? lines : lines.join(" ")).replace(/@[a-z0-9]{3}@/gi, " ").replace(/[|\s]+/g, " ").trim().toLowerCase();
@@ -69910,247 +70332,6 @@ async function craftPerfectJewellery(log) {
   return heldId(FC_ID.PERFECT_RUBY_RING) > 0 && heldId(FC_ID.PERFECT_RUBY_NECKLACE) > 0;
 }
 
-// src/bot/api/ai/quests/defs/familycrest/supplies.ts
-var FC_OFFICIAL_SKILLS = {
-  mining: 40,
-  crafting: 40,
-  smithing: 40,
-  magic: 59
-};
-var FC_PROVEN_COMBAT_FLOOR = {
-  attack: 99,
-  strength: 99,
-  defence: 99,
-  hitpoints: 99
-};
-var FC_FOODS = ["Shark", "Lobster", "Trout", "Herring"];
-var FOOD_WITHDRAW2 = 10;
-var RUNE_BUY = {
-  air: 600,
-  water: 200,
-  earth: 200,
-  fire: 250,
-  death: 60
-};
-var RUNE_GP = 25000;
-var MOULD_GP = 1000;
-var RUBY_GP = 12000;
-var ANTIPOISON_GP = 2000;
-var CALEB_FISH = [
-  { id: FC_ID.SWORDFISH, name: FC_ITEM.SWORDFISH },
-  { id: FC_ID.BASS, name: FC_ITEM.BASS },
-  { id: FC_ID.TUNA, name: FC_ITEM.TUNA },
-  { id: FC_ID.SALMON, name: FC_ITEM.SALMON },
-  { id: FC_ID.SHRIMP, name: FC_ITEM.SHRIMP }
-];
-var BLAST_RUNES = [
-  { item: { id: FC_ID.AIR_RUNE, name: FC_ITEM.AIR_RUNE }, qty: RUNE_BUY.air },
-  { item: { id: FC_ID.WATER_RUNE, name: FC_ITEM.WATER_RUNE }, qty: RUNE_BUY.water },
-  { item: { id: FC_ID.EARTH_RUNE, name: FC_ITEM.EARTH_RUNE }, qty: RUNE_BUY.earth },
-  { item: { id: FC_ID.FIRE_RUNE, name: FC_ITEM.FIRE_RUNE }, qty: RUNE_BUY.fire },
-  { item: { id: FC_ID.DEATH_RUNE, name: FC_ITEM.DEATH_RUNE }, qty: RUNE_BUY.death }
-];
-var BLAST_MINIMUM = [
-  { item: { id: FC_ID.AIR_RUNE, name: FC_ITEM.AIR_RUNE }, qty: 13 },
-  { item: { id: FC_ID.WATER_RUNE, name: FC_ITEM.WATER_RUNE }, qty: 3 },
-  { item: { id: FC_ID.EARTH_RUNE, name: FC_ITEM.EARTH_RUNE }, qty: 4 },
-  { item: { id: FC_ID.FIRE_RUNE, name: FC_ITEM.FIRE_RUNE }, qty: 5 },
-  { item: { id: FC_ID.DEATH_RUNE, name: FC_ITEM.DEATH_RUNE }, qty: 4 }
-];
-function held21(snap, id) {
-  return snap.invIds?.get(id) ?? 0;
-}
-function banked13(snap, id) {
-  return snap.bankIds?.get(id) ?? 0;
-}
-function worn10(snap, id) {
-  return snap.wornIds?.has(id) ?? false;
-}
-function heldName3(snap, name) {
-  return snap.inv.get(name.toLowerCase()) ?? 0;
-}
-function bankedName2(snap, name) {
-  return snap.bank?.get(name.toLowerCase()) ?? 0;
-}
-function heldAntipoison(snap) {
-  return ANTIPOISON_IDS.reduce((sum, id) => sum + held21(snap, id), 0);
-}
-function bankedAntipoison(snap) {
-  for (const id of ANTIPOISON_IDS) {
-    if (banked13(snap, id) > 0) {
-      return { id, name: `Antipoison(${id === FC_ID.ANTIPOISON_4 ? 4 : id === FC_ID.ANTIPOISON_3 ? 3 : id === FC_ID.ANTIPOISON_2 ? 2 : 1})` };
-    }
-  }
-  return null;
-}
-function hasPickaxe2(snap) {
-  return PICKAXES4.some((p) => held21(snap, p.id) > 0 || worn10(snap, p.id));
-}
-function bestBankPickaxe2(snap) {
-  return PICKAXES4.find((p) => banked13(snap, p.id) > 0) ?? null;
-}
-function hasWeapon2(snap) {
-  return bestHeld(snap) !== null;
-}
-function bestBankWeapon2(snap) {
-  return bestBanked(snap);
-}
-function wieldWeapon2(snap, bank) {
-  if (wieldedWeapon(snap)) {
-    return null;
-  }
-  const inPack = packWeapon(snap);
-  if (inPack) {
-    return { kind: "equip", item: inPack.name };
-  }
-  if (!snap.bankKnown) {
-    return scanBank15(bank);
-  }
-  const fromTheBank = bestBankWeapon2(snap);
-  return fromTheBank ? fromBank4(snap, fromTheBank, 1, bank) : null;
-}
-var TELEPORT_KIT = [
-  { item: { id: FC_ID.LAW_RUNE, name: FC_ITEM.LAW_RUNE }, qty: 30 },
-  { item: { id: FC_ID.AIR_RUNE, name: FC_ITEM.AIR_RUNE }, qty: 150 },
-  { item: { id: FC_ID.FIRE_RUNE, name: FC_ITEM.FIRE_RUNE }, qty: 30 },
-  { item: { id: FC_ID.WATER_RUNE, name: FC_ITEM.WATER_RUNE }, qty: 30 }
-];
-var AUBURY_STOCKS = new Set([FC_ID.AIR_RUNE, FC_ID.FIRE_RUNE, FC_ID.WATER_RUNE]);
-var navTeleportsOn = () => Traversal.teleportsEnabled();
-function heldDuelRing(snap) {
-  return DUEL_RING_IDS.reduce((sum, id) => sum + held21(snap, id), 0);
-}
-function teleportKitTopUp(snap, bank) {
-  return navTeleportsOn() ? teleportKitPlan(snap, bank) : null;
-}
-function teleportKitPlan(snap, bank) {
-  const runesShort = TELEPORT_KIT.some((want) => held21(snap, want.item.id) < Math.ceil(want.qty / 3));
-  const ringShort = heldDuelRing(snap) === 0;
-  if (!runesShort && !ringShort) {
-    return null;
-  }
-  if (!snap.bankKnown) {
-    return scanBank15(bank);
-  }
-  if (runesShort && banked13(snap, TELEPORT_KIT[0].item.id) > 0) {
-    for (const want of TELEPORT_KIT) {
-      const step2 = fromBank4(snap, want.item, want.qty, bank);
-      if (step2) {
-        return step2;
-      }
-      if (held21(snap, want.item.id) < Math.ceil(want.qty / 3) && AUBURY_STOCKS.has(want.item.id)) {
-        return { kind: "buy", item: want.item.name, qty: want.qty, shop: FC_SHOP.AUBURY, estGp: RUNE_GP };
-      }
-    }
-  }
-  if (ringShort) {
-    const ring = DUEL_RING_IDS.find((id) => banked13(snap, id) > 0);
-    if (ring !== undefined) {
-      return withdraw10([{ name: "Ring of dueling", id: ring, qty: 1 }], bank);
-    }
-  }
-  return null;
-}
-function bestBankFood(snap) {
-  return FC_FOODS.find((f) => bankedName2(snap, f) > 0) ?? null;
-}
-function heldFood(snap) {
-  return FC_FOODS.reduce((sum, f) => sum + heldName3(snap, f), 0);
-}
-function scanBank15(bank) {
-  return { kind: "scanBank", bank };
-}
-function withdraw10(items, bank) {
-  return { kind: "withdraw", items, bank };
-}
-function fromBank4(snap, item2, qty2 = 1, bank) {
-  const short = qty2 - held21(snap, item2.id);
-  if (short <= 0) {
-    return null;
-  }
-  if (!snap.bankKnown) {
-    return scanBank15(bank);
-  }
-  const inBank = banked13(snap, item2.id);
-  return inBank > 0 ? withdraw10([{ name: item2.name, id: item2.id, qty: Math.min(short, inBank) }], bank) : null;
-}
-var CREST_KEEP_IDS = [
-  FC_ID.CREST_FROM_CALEB,
-  FC_ID.CREST_FROM_AVAN,
-  FC_ID.CREST_FROM_CHRONOZON,
-  FC_ID.FAMILY_CREST
-];
-function deposit(keep, bank) {
-  return { kind: "deposit", keep, keepIds: CREST_KEEP_IDS, bank };
-}
-var COIN_CARRY = 1e5;
-function coinTopUp(snap, want = COIN_CARRY, bank) {
-  const have2 = heldName3(snap, FC_ITEM.COINS);
-  if (have2 >= want / 2) {
-    return null;
-  }
-  if (!snap.bankKnown) {
-    return scanBank15(bank);
-  }
-  const inBank = bankedName2(snap, FC_ITEM.COINS);
-  if (inBank <= 0) {
-    return null;
-  }
-  return withdraw10([{ name: FC_ITEM.COINS, id: FC_ID.COINS, qty: Math.min(want - have2, inBank) }], bank);
-}
-function foodTopUp(snap, want = FOOD_WITHDRAW2, bank) {
-  if (heldFood(snap) >= Math.ceil(want / 2)) {
-    return null;
-  }
-  if (!snap.bankKnown) {
-    return scanBank15(bank);
-  }
-  const food = bestBankFood(snap);
-  if (!food) {
-    return null;
-  }
-  const take = Math.min(want - heldFood(snap), bankedName2(snap, food));
-  return take > 0 ? withdraw10([{ name: food, qty: take }], bank) : null;
-}
-var LEG_BANK = {
-  start: FC_BANK.VARROCK_EAST,
-  caleb: FC_BANK.CATHERBY,
-  alkharid: FC_BANK.AL_KHARID,
-  gold: FC_BANK.AL_KHARID,
-  mine: FC_BANK.ARDOUGNE_EAST,
-  boot: FC_BANK.FALADOR_EAST,
-  chronozon: FC_BANK.VARROCK_EAST
-};
-var SHOP = FC_SHOP;
-function warnFamilyCrestReadiness() {
-  const have2 = {
-    mining: Skills.level("mining"),
-    crafting: Skills.level("crafting"),
-    smithing: Skills.level("smithing"),
-    magic: Skills.level("magic"),
-    attack: Skills.level("attack"),
-    strength: Skills.level("strength"),
-    defence: Skills.level("defence"),
-    hitpoints: Skills.level("hitpoints")
-  };
-  const missing = [];
-  for (const [skill, need] of Object.entries(FC_OFFICIAL_SKILLS)) {
-    const n = have2[skill] ?? 1;
-    if (n < need) {
-      missing.push(`${skill} ${n}/${need}`);
-    }
-  }
-  if (missing.length > 0) {
-    return `official skill reqs not met (${missing.join(", ")}) — Fire Blast and the perfect-gold jewellery will both refuse`;
-  }
-  const floor = FC_PROVEN_COMBAT_FLOOR;
-  const short = ["attack", "strength", "defence", "hitpoints"].filter((s) => have2[s] < floor[s]).map((s) => `${s} ${have2[s]}/${floor[s]}`);
-  if (short.length === 0) {
-    return null;
-  }
-  return `combat below the only proven profile (${short.join(", ")}; headed PASS at max). ` + "Hellhounds guard the gold rocks and Chronozon is a lvl-170 wilderness demon — expect death risk.";
-}
-
 // src/bot/api/ai/quests/defs/familycrest/index.ts
 function custom12(name, run2) {
   return { kind: "custom", name, run: run2 };
@@ -70368,22 +70549,25 @@ function decide36(snap) {
     if (stage === FC_STAGE.SPOKEN_CALEB) {
       const short = missingFish(snap);
       if (short.length > 0) {
-        const tidy2 = tidyFor(snap, short.length + 2, CALEB_FISH.map((f) => f.name.toLowerCase()), LEG_BANK.caleb);
+        const tidy2 = tidyFor(snap, short.length + 4, [
+          ...CALEB_FISH.map((f) => f.name.toLowerCase()),
+          "harpoon",
+          "small fishing net",
+          "big fishing net",
+          "fly fishing rod",
+          "feather",
+          "raw shrimps",
+          "raw salmon",
+          "raw tuna",
+          "raw bass",
+          "raw swordfish"
+        ], LEG_BANK.caleb);
         if (tidy2) {
           return tidy2;
         }
-        for (const fish of short) {
-          const step2 = fromBank4(snap, fish, 1, LEG_BANK.caleb);
-          if (step2) {
-            return step2;
-          }
-        }
-        if (!snap.bankKnown) {
-          return { kind: "scanBank", bank: LEG_BANK.caleb };
-        }
-        return {
+        return sourceCalebFish(snap) ?? {
           kind: "wait",
-          reason: `Caleb needs cooked ${short.map((f) => f.name).join(", ")} — none in the bank`
+          reason: `Caleb needs cooked ${short.map((f) => f.name).join(", ")}`
         };
       }
     }
@@ -72733,7 +72917,7 @@ var CB_TILE = {
   YANILLE_BANK: new Tile(2612, 3092, 0)
 };
 var BOB_AXES3 = { npc: "Bob", anchor: new Tile(3232, 3203, 0) };
-var GERRANT2 = { npc: "Gerrant", anchor: new Tile(3013, 3225, 0) };
+var GERRANT3 = { npc: "Gerrant", anchor: new Tile(3013, 3225, 0) };
 var RANTZ = {
   npc: CB_NPC.RANTZ,
   anchor: CB_TILE.RANTZ,
@@ -72925,7 +73109,7 @@ function feathersStep(snap, want) {
   if (fromBank6 > 0) {
     return withdraw12([{ name: CB_NAME.FEATHER, qty: fromBank6, id: CB_ID.FEATHER }]);
   }
-  return { kind: "buy", item: CB_NAME.FEATHER, qty: short, shop: GERRANT2, estGp: short * 4 };
+  return { kind: "buy", item: CB_NAME.FEATHER, qty: short, shop: GERRANT3, estGp: short * 4 };
 }
 
 // src/bot/api/ai/quests/defs/chompybird/arrows.ts
@@ -76307,7 +76491,7 @@ var VELRAK = {
   leash: 4,
   prefer: ["know anywhere good to explore", "yes please"]
 };
-var GERRANT3 = {
+var GERRANT4 = {
   npc: "Gerrant",
   anchor: HERO_TILE.GERRANT,
   leash: 8,
@@ -77235,7 +77419,7 @@ async function cookLavaEel(log) {
   return Execution.delayUntil(() => Inventory.countById(HERO_ID.LAVA_EEL) > 0, RANGE_MS);
 }
 function askGerrantForSlime(log) {
-  return talkUntil(GERRANT3, GERRANT3.prefer, () => Inventory.countById(HERO_ID.SLIME) > 0, log, 60000);
+  return talkUntil(GERRANT4, GERRANT4.prefer, () => Inventory.countById(HERO_ID.SLIME) > 0, log, 60000);
 }
 function keyStep(snap) {
   if (heldId19(snap, HERO_ID.DUSTY_KEY) > 0) {
@@ -82275,8 +82459,8 @@ async function huntShade(log) {
       await Execution.delayTicks(1);
       continue;
     }
-    const live2 = Npcs.all().find((n) => n.index === index);
-    if (live2 && await live2.interact("Attack")) {
+    const live3 = Npcs.all().find((n) => n.index === index);
+    if (live3 && await live3.interact("Attack")) {
       swings++;
     }
     await Execution.delayTicks(1);
@@ -84142,7 +84326,7 @@ async function killJailer2(log) {
     return false;
   }
   const index = jailer.index;
-  const live2 = () => Npcs.all().find((npc) => npc.index === index && npc.name === JAILER_NPC) ?? null;
+  const live3 = () => Npcs.all().find((npc) => npc.index === index && npc.name === JAILER_NPC) ?? null;
   if (!await jailer.interact("Attack")) {
     return false;
   }
@@ -84153,7 +84337,7 @@ async function killJailer2(log) {
     if (heldId(SC_ID.JAIL_KEY) > 0) {
       return true;
     }
-    if (!live2()) {
+    if (!live3()) {
       return takeJailKey(log);
     }
     await Execution.delayTicks(1);
@@ -86725,7 +86909,7 @@ async function takeRoot(log) {
 }
 async function killHobgoblin(target4, log) {
   const index = target4.index;
-  const live2 = () => Npcs.all().find((n) => n.index === index) ?? null;
+  const live3 = () => Npcs.all().find((n) => n.index === index) ?? null;
   Game.setAutoRetaliate(true);
   if (target4.distance() > 8 && !await Traversal.walkResilient(target4.tile(), { radius: 2, attempts: 2, timeoutMs: 90000, log })) {
     return false;
@@ -86739,7 +86923,7 @@ async function killHobgoblin(target4, log) {
       return false;
     }
     await Sustain.run();
-    if (!live2()) {
+    if (!live3()) {
       return true;
     }
     if (starving()) {
@@ -88253,7 +88437,7 @@ var COOKING_SURFACE_LOCS = [
 
 // src/bot/data/cookingRanges.ts
 var COOKING_RANGE_LOCS = COOKING_SURFACE_LOCS.filter((surface) => surface.name === "Range").map(({ x: x2, z, level: level2 }) => ({ x: x2, z, level: level2 }));
-var CATHERBY_RANGE = {
+var CATHERBY_RANGE2 = {
   stand: new Tile(2817, 3443, 0),
   loc: new Tile(2817, 3444, 0),
   locName: "Range",
@@ -88263,8 +88447,8 @@ var CATHERBY_RANGE = {
 };
 var FISH_CAMP_COOK_PLANS = {
   Catherby: {
-    pier: CATHERBY_RANGE,
-    bank: CATHERBY_RANGE
+    pier: CATHERBY_RANGE2,
+    bank: CATHERBY_RANGE2
   },
   "Seers (fly fishing)": {
     pier: {
@@ -88409,8 +88593,8 @@ var OBS_TILE = {
   SEAWEED_SPAWN: new Tile(2708, 3728, 0),
   MINE: new Tile(2631, 3146, 0),
   FURNACE: new Tile(2600, 3310, 0),
-  RANGE_LOC: CATHERBY_RANGE.loc,
-  RANGE_STAND: CATHERBY_RANGE.stand,
+  RANGE_LOC: CATHERBY_RANGE2.loc,
+  RANGE_STAND: CATHERBY_RANGE2.stand,
   BANK: new Tile(2655, 3283, 0)
 };
 var PROFESSOR = {

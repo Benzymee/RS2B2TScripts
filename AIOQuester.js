@@ -37013,12 +37013,16 @@ async function explainUnreachable(probe, state) {
 }
 
 // src/bot/event/webwalk/routeRecovery.ts
+var RECOVERY_MAX_CHEBYSHEV = 12;
+var RECOVERY_MIN_CHEBYSHEV = 3;
 function findForwardRecoveryIndex(tiles, me, fromIdx, isClickable, opts) {
   if (tiles.length === 0) {
     return -1;
   }
   const corridor = opts?.corridor ?? 3;
   const window2 = opts?.window ?? 40;
+  const maxCheb = opts?.maxChebyshev ?? RECOVERY_MAX_CHEBYSHEV;
+  const minCheb = opts?.minChebyshev ?? RECOVERY_MIN_CHEBYSHEV;
   const limitIdx = Math.min(opts?.limitIdx ?? tiles.length - 1, tiles.length - 1);
   const hi = Math.min(fromIdx + window2, limitIdx);
   let bestClickable = -1;
@@ -37031,10 +37035,14 @@ function findForwardRecoveryIndex(tiles, me, fromIdx, isClickable, opts) {
     if (t.x === me.x && t.z === me.z) {
       continue;
     }
-    if (chebyshev(me, t) <= corridor) {
+    const dist = chebyshev(me, t);
+    if (dist > maxCheb) {
+      continue;
+    }
+    if (dist <= corridor) {
       bestOnCorridor = i2;
     }
-    if (isClickable(t)) {
+    if (isClickable(t) && dist >= minCheb) {
       bestClickable = i2;
     }
   }
@@ -37958,6 +37966,7 @@ function postQuestTalkFor(locX, locZ, level) {
 
 // src/bot/event/webwalk/WalkExecutor.ts
 var TARGET_STEPS = 20;
+var TARGET_STEPS_NEAR_BANK = 8;
 var TARGET_JITTER = 4;
 var ARRIVE_RADIUS = 4;
 var PROGRESS_WINDOW = 26;
@@ -38063,6 +38072,12 @@ class WalkExecutorImpl {
     RouteState.reset();
     if (outer) {
       log(`nav tele=${this.walkUseTeleports} policy=${JSON.stringify(this.walkPolicy ?? { useTeleports: this.walkUseTeleports })}`);
+    }
+    if (Bank.isOpen()) {
+      log("closing bank before walking");
+      await Bank.close().catch(() => {
+        return;
+      });
     }
     try {
       const settleBudget = { left: CANDIDATE_SETTLE_TRIES };
@@ -38538,6 +38553,16 @@ ${formatHops(hops)}`);
         return "repath";
       }
       await Sustain.run();
+      if (Bank.isOpen()) {
+        log("bank still open — closing so movement can leave this zone");
+        await Bank.close().catch(() => {
+          return;
+        });
+        lastMoveTick = BotHost.tickCount;
+        if (Bank.isOpen()) {
+          log("bank would not close — continuing the walk");
+        }
+      }
       const me = reader.worldTile();
       if (!me) {
         return "failed";
@@ -38578,6 +38603,7 @@ ${formatHops(hops)}`);
       const moved = !lastTile || me.x !== lastTile.x || me.z !== lastTile.z || me.level !== lastTile.level;
       if (moved) {
         lastMoveTick = BotHost.tickCount;
+        stallRetries = 0;
       }
       lastTile = me;
       const idleTicks = BotHost.tickCount - lastMoveTick;
@@ -38717,7 +38743,10 @@ ${formatHops(hops)}`);
       const needClick = clickIdx === -1 || clickIdx <= pathIdx || chebyshev(me, tiles[clickIdx]) <= ARRIVE_RADIUS;
       if (needClick) {
         const limit = nextCrossingIdx !== -1 ? nextCrossingIdx - 1 : tiles.length - 1;
-        const steps = TARGET_STEPS + Math.floor(Math.random() * (2 * TARGET_JITTER + 1)) - TARGET_JITTER;
+        const atBooth = Locs.query().where((l) => /bank booth|bank chest/i.test(l.name ?? "")).within(4).count() > 0;
+        const baseSteps = atBooth ? TARGET_STEPS_NEAR_BANK : TARGET_STEPS;
+        const jitter = atBooth ? 0 : Math.floor(Math.random() * (2 * TARGET_JITTER + 1)) - TARGET_JITTER;
+        const steps = baseSteps + jitter;
         const tryWalkAt = (i2) => {
           const t = tiles[i2];
           if (t.x === me.x && t.z === me.z) {
@@ -39016,25 +39045,12 @@ var Traversal = {
     }
   },
   walkTo(dest, opts) {
-    const hostTrav = globalThis.__rs2b0t?.Traversal;
-    if (hostTrav && hostTrav !== Traversal && typeof hostTrav.walkTo === "function") {
-      return hostTrav.walkTo(dest, opts);
-    }
     return WalkExecutor.walkTo(dest, opts);
   },
   requestRepath(reason) {
-    const hostTrav = globalThis.__rs2b0t?.Traversal;
-    if (hostTrav && hostTrav !== Traversal && typeof hostTrav.requestRepath === "function") {
-      hostTrav.requestRepath(reason);
-      return;
-    }
     WalkExecutor.requestRepath(reason);
   },
   async walkResilient(dest, opts) {
-    const hostTrav = globalThis.__rs2b0t?.Traversal;
-    if (hostTrav && hostTrav !== Traversal && typeof hostTrav.walkResilient === "function") {
-      return hostTrav.walkResilient(dest, opts);
-    }
     const log = opts.log ?? (() => {});
     const radius = opts.radius;
     const sceneRadius = opts.sceneRadius ?? radius + 1;

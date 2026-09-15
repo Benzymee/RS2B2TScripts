@@ -10295,8 +10295,12 @@ var packetListener = null;
 var adapterLoginGeneration = -1;
 var bankInventorySession = null;
 var previousBankGeneration = new Map;
+function invUpdateMap() {
+  const map = raw?.invUpdateState;
+  return map && typeof map.get === "function" ? map : undefined;
+}
 function invState(comId) {
-  return raw?.invUpdateState.get(comId) ?? { generation: 0, fullGeneration: 0, transmitting: false };
+  return invUpdateMap()?.get(comId) ?? { generation: 0, fullGeneration: 0, transmitting: false };
 }
 function noteModalPacket(ptype) {
   if (!raw) {
@@ -10979,8 +10983,14 @@ var localReader = {
   },
   inventorySnapshotReady() {
     const comId = findTabInvComponent(3);
-    const state = comId === -1 ? null : invState(comId);
-    return state !== null && state.transmitting && state.fullGeneration > 0;
+    if (comId === -1) {
+      return false;
+    }
+    if (!invUpdateMap()) {
+      return true;
+    }
+    const state = invState(comId);
+    return state.transmitting && state.fullGeneration > 0;
   },
   equipment() {
     const comId = findTabInvComponent(4);
@@ -11014,8 +11024,14 @@ var localReader = {
   },
   bankSnapshotReady() {
     const session = bankInventorySession;
-    const state = session === null ? null : invState(session.mainComId);
-    return session !== null && reader.bankComId() === session.mainComId && state !== null && state.transmitting && state.fullGeneration > session.mainOpenedAt;
+    if (session === null || reader.bankComId() !== session.mainComId) {
+      return false;
+    }
+    if (!invUpdateMap()) {
+      return true;
+    }
+    const state = invState(session.mainComId);
+    return state.transmitting && state.fullGeneration > session.mainOpenedAt;
   },
   bankSideSnapshotReady() {
     const session = bankInventorySession;
@@ -11023,8 +11039,14 @@ var localReader = {
       return false;
     }
     const sideComId = findInvComponentIn(raw.sideModalId, (com) => (com.iop?.[0] ?? "").toLowerCase().includes("deposit"));
+    if (sideComId !== session.sideComId) {
+      return false;
+    }
+    if (!invUpdateMap()) {
+      return true;
+    }
     const state = invState(session.sideComId);
-    return sideComId === session.sideComId && state.transmitting && state.fullGeneration > session.sideOpenedAt;
+    return state.transmitting && state.fullGeneration > session.sideOpenedAt;
   },
   bankSnapshotGeneration() {
     const session = bankInventorySession;
@@ -12978,542 +13000,6 @@ var Inventory = {
   free() {
     const size = backpackCapacity();
     return size > 0 ? Math.max(0, size - Inventory.used()) : 0;
-  }
-};
-
-// src/bot/paint/paintLogic.ts
-var CHATBOX = { x: 8, y: 345, w: 506, h: 150 };
-var TOPLEFT = { x: 6, y: 6, w: 320, h: 150 };
-function resolveDock(dock) {
-  if (dock === "chatbox") {
-    return { ...CHATBOX };
-  }
-  if (dock === "topleft") {
-    return { ...TOPLEFT };
-  }
-  return { ...dock };
-}
-var inRect = (r, x, y) => x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h;
-function cycleOption(options, current, delta) {
-  if (options.length === 0) {
-    return current;
-  }
-  const at = options.findIndex((o) => o.toLowerCase() === current.toLowerCase());
-  const from = at >= 0 ? at : 0;
-  const step = Math.trunc(delta) || 1;
-  const n = options.length;
-  const next = ((from + step) % n + n) % n;
-  return options[next];
-}
-function hitRegion(regions, x, y) {
-  let hit = null;
-  for (const region of regions) {
-    if (!inRect(region, x, y)) {
-      continue;
-    }
-    if (!hit || hit.kind !== "widget" && region.kind === "widget" || hit.kind === "panel" && region.kind === "scroll") {
-      hit = region;
-    }
-  }
-  return hit;
-}
-
-class PaintState {
-  regions = [];
-  clicks = new Set;
-  hover = null;
-  store = new Map;
-  wheels = new Map;
-  publishRegions(regions) {
-    this.regions = regions;
-  }
-  pointerDown(x, y) {
-    const hit = hitRegion(this.regions, x, y);
-    if (!hit) {
-      return false;
-    }
-    if (hit.kind === "widget") {
-      this.clicks.add(hit.id);
-    }
-    return true;
-  }
-  pointerMove(x, y) {
-    this.hover = { x, y };
-    return hitRegion(this.regions, x, y) !== null;
-  }
-  pointerIsInside(x, y) {
-    return hitRegion(this.regions, x, y) !== null;
-  }
-  consumeClick(id) {
-    return this.clicks.delete(id);
-  }
-  wheel(x, y, delta) {
-    const hit = hitRegion(this.regions, x, y);
-    if (!hit || hit.kind !== "scroll") {
-      return false;
-    }
-    this.wheels.set(hit.id, (this.wheels.get(hit.id) ?? 0) + delta);
-    return true;
-  }
-  consumeWheel(id) {
-    const n = this.wheels.get(id) ?? 0;
-    this.wheels.delete(id);
-    return n;
-  }
-  isHovered(rect) {
-    return this.hover !== null && inRect(rect, this.hover.x, this.hover.y);
-  }
-  get(key, fallback) {
-    return this.store.get(key) ?? fallback;
-  }
-  set(key, value) {
-    this.store.set(key, value);
-  }
-  reset() {
-    this.regions = [];
-    this.clicks.clear();
-    this.hover = null;
-    this.store.clear();
-  }
-}
-var _localPaintState = new PaintState;
-function _hostPaint() {
-  const g = globalThis;
-  const host = g?.rs2b0t?.paint;
-  return host && typeof host.publishRegions === "function" ? host : null;
-}
-var paintState = new Proxy(_localPaintState, {
-  get(local, prop, receiver) {
-    const host = _hostPaint();
-    const target = host ?? local;
-    const val = Reflect.get(target, prop, target);
-    return typeof val === "function" ? val.bind(target) : val;
-  }
-});
-function paintCols(w, pad, charW) {
-  if (charW <= 0) {
-    return 0;
-  }
-  return Math.max(0, Math.floor((w - pad * 2) / charW));
-}
-function wrapText(text, cols, indent = 0) {
-  if (cols <= 0) {
-    return [];
-  }
-  const words = text.split(/\s+/).filter((w) => w.length > 0);
-  const pad = " ".repeat(Math.max(0, Math.min(indent, cols - 1)));
-  const lines = [];
-  let line = "";
-  const room = () => lines.length === 0 ? cols : cols - pad.length;
-  const flush = () => {
-    if (line.length > 0) {
-      lines.push(lines.length === 0 ? line : pad + line);
-      line = "";
-    }
-  };
-  for (let word of words) {
-    while (word.length > room()) {
-      flush();
-      const take = room();
-      lines.push(lines.length === 0 ? word.slice(0, take) : pad + word.slice(0, take));
-      word = word.slice(take);
-    }
-    if (line.length === 0) {
-      line = word;
-    } else if (line.length + 1 + word.length <= room()) {
-      line += ` ${word}`;
-    } else {
-      flush();
-      line = word;
-    }
-  }
-  flush();
-  return lines;
-}
-function cellWidths(total, weights) {
-  const sum = weights.reduce((a, b) => a + Math.max(0, b), 0);
-  if (sum <= 0) {
-    return weights.map(() => 0);
-  }
-  return weights.map((w) => Math.max(0, w) / sum * total);
-}
-function gridRows(len, columns) {
-  if (columns <= 0 || len <= 0) {
-    return 0;
-  }
-  return Math.ceil(len / columns);
-}
-var WHEEL_ROWS = 3;
-function listScroll(len, rows, state, wheel, focus) {
-  const max = Math.max(0, len - rows);
-  const clamp = (n) => Math.min(max, Math.max(0, n));
-  let manual = state.manual;
-  if (focus !== state.focus) {
-    manual = false;
-  }
-  let offset = clamp(Number.isFinite(state.offset) ? Math.trunc(state.offset) : 0);
-  if (wheel !== 0) {
-    manual = true;
-    offset = clamp(offset + Math.trunc(wheel) * WHEEL_ROWS);
-  } else if (!manual && rows > 0 && focus >= 0 && focus < len) {
-    if (focus < offset) {
-      offset = clamp(focus);
-    } else if (focus >= offset + rows) {
-      offset = clamp(focus - rows + 1);
-    }
-  }
-  return { offset, manual, focus };
-}
-function fmtDuration(mins) {
-  const t = Math.max(0, Math.floor(mins * 60));
-  return `${Math.floor(t / 3600)}:${String(Math.floor(t % 3600 / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`;
-}
-function clipText(text, cols) {
-  if (cols <= 0) {
-    return "";
-  }
-  if (text.length <= cols) {
-    return text;
-  }
-  return `${text.slice(0, cols - 1)}…`;
-}
-
-// src/bot/paint/Paint.ts
-var entryOf = (line) => typeof line === "string" ? { text: line } : line;
-var FONT = "12px monospace";
-var FONT_BOLD = "bold 12px monospace";
-var PAD = 8;
-var LINE = 16;
-var TITLE_H = 20;
-var TAB_H = 18;
-var BUTTON_H = 16;
-var BG = "rgba(12, 12, 14, 0.88)";
-var BG_TITLE = "rgba(28, 28, 34, 0.95)";
-var BG_WIDGET = "rgba(50, 50, 58, 0.9)";
-var BG_WIDGET_HOT = "rgba(72, 72, 84, 0.95)";
-var FG = "#cdd3da";
-var FG_DIM = "#8a919a";
-var BORDER = "rgba(90, 90, 100, 0.8)";
-
-class PaintFrame {
-  ctx;
-  regions = [];
-  cursorY;
-  accent;
-  panel;
-  collapsed = false;
-  charW;
-  constructor(ctx, opts) {
-    this.ctx = ctx;
-    this.panel = resolveDock(opts.dock ?? "chatbox");
-    this.accent = opts.accent ?? "#7ad0ff";
-    this.cursorY = this.panel.y;
-    this.ctx.font = FONT;
-    this.ctx.textBaseline = "middle";
-    this.charW = this.ctx.measureText("0").width || 7;
-  }
-  title(text) {
-    const { x, w } = this.panel;
-    const r = { x, y: this.cursorY, w, h: TITLE_H };
-    this.collapsed = paintState.get("paint:collapsed", "0") === "1";
-    this.ctx.fillStyle = BG_TITLE;
-    this.ctx.fillRect(r.x, r.y, r.w, r.h);
-    this.ctx.strokeStyle = BORDER;
-    this.ctx.strokeRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1);
-    this.ctx.font = FONT_BOLD;
-    this.ctx.fillStyle = this.accent;
-    this.ctx.fillText(text, r.x + PAD, r.y + r.h / 2 + 1);
-    this.ctx.font = FONT;
-    const toggle = { x: r.x + r.w - TITLE_H, y: r.y, w: TITLE_H, h: TITLE_H };
-    this.ctx.fillStyle = paintState.isHovered(toggle) ? FG : FG_DIM;
-    this.ctx.fillText(this.collapsed ? "+" : "–", toggle.x + 7, toggle.y + r.h / 2 + 1);
-    this.regions.push({ id: "paint:toggle", ...toggle, kind: "widget" });
-    if (paintState.consumeClick("paint:toggle")) {
-      this.collapsed = !this.collapsed;
-      paintState.set("paint:collapsed", this.collapsed ? "1" : "0");
-    }
-    this.cursorY = r.y + r.h;
-    if (!this.collapsed) {
-      this.regions.push({ id: "paint:panel", ...this.panel, kind: "panel" });
-      this.ctx.fillStyle = BG;
-      this.ctx.fillRect(this.panel.x, this.cursorY, this.panel.w, this.panel.y + this.panel.h - this.cursorY);
-      this.ctx.strokeStyle = BORDER;
-      this.ctx.strokeRect(this.panel.x + 0.5, this.cursorY + 0.5, this.panel.w - 1, this.panel.y + this.panel.h - this.cursorY - 1);
-    } else {
-      this.regions.push({ id: "paint:panel", x: this.panel.x, y: this.panel.y, w: this.panel.w, h: TITLE_H, kind: "panel" });
-    }
-  }
-  tabs(id, names) {
-    if (this.collapsed || names.length === 0) {
-      return paintState.get(`tabs:${id}`, names[0] ?? "");
-    }
-    let active = paintState.get(`tabs:${id}`, names[0]);
-    if (!names.includes(active)) {
-      active = names[0];
-    }
-    let tx = this.panel.x + 4;
-    const ty = this.cursorY + 3;
-    for (const name of names) {
-      const tw = this.ctx.measureText(name).width + 14;
-      const r = { x: tx, y: ty, w: tw, h: TAB_H };
-      const isActive = name === active;
-      this.ctx.fillStyle = isActive ? BG_WIDGET_HOT : paintState.isHovered(r) ? BG_WIDGET : "transparent";
-      this.ctx.fillRect(r.x, r.y, r.w, r.h);
-      if (isActive) {
-        this.ctx.fillStyle = this.accent;
-        this.ctx.fillRect(r.x, r.y + r.h - 2, r.w, 2);
-      }
-      this.ctx.fillStyle = isActive ? "#fff" : FG_DIM;
-      this.ctx.fillText(name, r.x + 7, r.y + r.h / 2 + 1);
-      const regionId = `tab:${id}:${name}`;
-      this.regions.push({ id: regionId, ...r, kind: "widget" });
-      if (paintState.consumeClick(regionId)) {
-        active = name;
-        paintState.set(`tabs:${id}`, name);
-      }
-      tx += tw + 2;
-    }
-    this.cursorY = ty + TAB_H + 2;
-    return active;
-  }
-  cols() {
-    return paintCols(this.panel.w, PAD, this.charW);
-  }
-  text(line, color) {
-    if (this.collapsed) {
-      return;
-    }
-    this.ctx.fillStyle = color ?? FG;
-    this.ctx.fillText(clipText(line, this.cols()), this.panel.x + PAD, this.cursorY + LINE / 2 + 1);
-    this.cursorY += LINE;
-  }
-  row(...cols) {
-    this.cells(cols.map((text) => ({ text })));
-  }
-  cells(cells) {
-    if (this.collapsed || cells.length === 0) {
-      return;
-    }
-    const widths = cellWidths(this.panel.w - PAD * 2, cells.map((c) => c.weight ?? 1));
-    let x = this.panel.x + PAD;
-    cells.forEach((cell, i) => {
-      const w = widths[i] ?? 0;
-      const room = Math.max(0, Math.floor(w / this.charW) - (i < cells.length - 1 ? 1 : 0));
-      this.ctx.fillStyle = cell.color ?? FG;
-      this.ctx.fillText(clipText(cell.text, room), x, this.cursorY + LINE / 2 + 1);
-      x += w;
-    });
-    this.cursorY += LINE;
-  }
-  wrap(text, color, indent = 2) {
-    if (this.collapsed) {
-      return;
-    }
-    for (const line of wrapText(text, this.cols(), indent)) {
-      this.ctx.fillStyle = color ?? FG;
-      this.ctx.fillText(line, this.panel.x + PAD, this.cursorY + LINE / 2 + 1);
-      this.cursorY += LINE;
-    }
-  }
-  list(id, lines, rows, opts = {}) {
-    if (this.collapsed) {
-      return 0;
-    }
-    const o = typeof opts === "string" ? { color: opts } : opts;
-    const key = `list:${id}`;
-    const scroll = this.scrollFor(key, lines.length, rows, o.focus ?? -1);
-    const top = this.cursorY;
-    this.regions.push({ id: key, x: this.panel.x, y: top, w: this.panel.w, h: rows * LINE, kind: "scroll" });
-    if (lines.length === 0) {
-      this.text("nothing yet", FG_DIM);
-      this.chrome(top, rows * LINE, 0, 0, 0, 0, o.footer);
-      return 0;
-    }
-    const maxOffset = Math.max(0, lines.length - rows);
-    const room = this.cols() - (maxOffset > 0 ? 1 : 0);
-    for (const line of lines.slice(scroll.offset, scroll.offset + rows)) {
-      const entry = entryOf(line);
-      this.ctx.fillStyle = entry.color ?? o.color ?? FG;
-      this.ctx.fillText(clipText(entry.text, room), this.panel.x + PAD, this.cursorY + LINE / 2 + 1);
-      this.cursorY += LINE;
-    }
-    this.chrome(top, rows * LINE, rows / lines.length, scroll.offset / Math.max(1, maxOffset), maxOffset > 0 ? scroll.offset + 1 : 0, maxOffset > 0 ? Math.min(lines.length, scroll.offset + rows) : 0, o.footer, lines.length);
-    return scroll.offset;
-  }
-  fill(id, lines, opts = {}) {
-    if (this.collapsed) {
-      return 0;
-    }
-    return this.list(id, lines, this.rowsLeft(lines.length, opts), opts);
-  }
-  grid(id, lines, columns, opts = {}) {
-    if (this.collapsed) {
-      return 0;
-    }
-    const cols = Math.max(1, Math.trunc(columns));
-    const total = gridRows(lines.length, cols);
-    const rows = this.rowsLeft(total, opts);
-    const key = `list:${id}`;
-    const focus = opts.focus !== undefined && opts.focus >= 0 ? Math.floor(opts.focus / cols) : -1;
-    const scroll = this.scrollFor(key, total, rows, focus);
-    const top = this.cursorY;
-    this.regions.push({ id: key, x: this.panel.x, y: top, w: this.panel.w, h: rows * LINE, kind: "scroll" });
-    if (lines.length === 0) {
-      this.text("nothing yet", FG_DIM);
-      this.chrome(top, rows * LINE, 0, 0, 0, 0, opts.footer);
-      return 0;
-    }
-    const maxOffset = Math.max(0, total - rows);
-    for (let r = scroll.offset;r < Math.min(total, scroll.offset + rows); r++) {
-      const slice = lines.slice(r * cols, r * cols + cols);
-      while (slice.length < cols) {
-        slice.push("");
-      }
-      this.cells(slice.map((line) => {
-        const entry = entryOf(line);
-        return { text: entry.text, color: entry.color ?? opts.color };
-      }));
-    }
-    this.chrome(top, rows * LINE, rows / total, scroll.offset / Math.max(1, maxOffset), maxOffset > 0 ? scroll.offset * cols + 1 : 0, maxOffset > 0 ? Math.min(lines.length, (scroll.offset + rows) * cols) : 0, opts.footer, lines.length);
-    return scroll.offset;
-  }
-  rowsLeft(total, opts) {
-    const bottom = this.panel.y + this.panel.h - (opts.reserve ?? 0);
-    const avail = Math.floor((bottom - this.cursorY) / LINE);
-    return Math.max(1, total > avail || opts.footer ? avail - 1 : avail);
-  }
-  scrollFor(key, total, rows, focus) {
-    const stored = Number(paintState.get(key, "0"));
-    const scroll = listScroll(total, rows, {
-      offset: Number.isFinite(stored) ? stored : 0,
-      manual: paintState.get(`${key}:manual`, "0") === "1",
-      focus: Number(paintState.get(`${key}:focus`, "-1"))
-    }, paintState.consumeWheel(key), focus);
-    paintState.set(key, String(scroll.offset));
-    paintState.set(`${key}:manual`, scroll.manual ? "1" : "0");
-    paintState.set(`${key}:focus`, String(scroll.focus));
-    return scroll;
-  }
-  chrome(top, h, shown, progress, from, to, footer, total = 0) {
-    if (from > 0) {
-      const thumbH = Math.max(6, shown * h);
-      this.ctx.fillStyle = BG_WIDGET;
-      this.ctx.fillRect(this.panel.x + this.panel.w - 5, top, 3, h);
-      this.ctx.fillStyle = this.accent;
-      this.ctx.fillRect(this.panel.x + this.panel.w - 5, top + progress * (h - thumbH), 3, thumbH);
-    }
-    const counter = from > 0 ? `${from}–${to} of ${total}` : "";
-    const text = [counter, footer].filter(Boolean).join(" · ");
-    if (text.length > 0) {
-      this.ctx.fillStyle = FG_DIM;
-      this.ctx.fillText(clipText(text, this.cols()), this.panel.x + PAD, this.cursorY + LINE / 2 + 1);
-      this.cursorY += LINE;
-    }
-  }
-  bar(label, fraction, color) {
-    if (this.collapsed) {
-      return;
-    }
-    const f = Math.max(0, Math.min(1, fraction));
-    const labelW = 48;
-    const barX = this.panel.x + PAD + labelW;
-    const barW = this.panel.w - PAD * 2 - labelW - 42;
-    const barY = this.cursorY + 3;
-    this.ctx.fillStyle = FG;
-    this.ctx.fillText(label, this.panel.x + PAD, this.cursorY + LINE / 2 + 1);
-    this.ctx.fillStyle = "rgba(255,255,255,0.12)";
-    this.ctx.fillRect(barX, barY, barW, LINE - 6);
-    this.ctx.fillStyle = color ?? (f < 0.35 ? "#e05b5b" : f < 0.65 ? "#e8c35b" : "#69c86b");
-    this.ctx.fillRect(barX, barY, barW * f, LINE - 6);
-    this.ctx.fillStyle = FG_DIM;
-    this.ctx.fillText(`${Math.round(f * 100)}%`, barX + barW + 6, this.cursorY + LINE / 2 + 1);
-    this.cursorY += LINE;
-  }
-  buttons(items) {
-    if (this.collapsed || items.length === 0) {
-      return null;
-    }
-    let bx = this.panel.x + PAD;
-    let clicked = null;
-    for (const item of items) {
-      const w = this.ctx.measureText(item.label).width + 18;
-      const r = { x: bx, y: this.cursorY + 2, w, h: BUTTON_H };
-      this.drawButton(r, item.label);
-      this.regions.push({ id: `btn:${item.id}`, ...r, kind: "widget" });
-      if (paintState.consumeClick(`btn:${item.id}`)) {
-        clicked = item.id;
-      }
-      bx += w + 6;
-    }
-    this.cursorY += BUTTON_H + 4;
-    return clicked;
-  }
-  select(id, label, options, current) {
-    if (this.collapsed || options.length === 0) {
-      return null;
-    }
-    const text = `${label}: ${current} ▸`;
-    const w = this.ctx.measureText(text).width + 14;
-    const r = { x: this.panel.x + PAD, y: this.cursorY + 2, w, h: BUTTON_H };
-    this.drawButton(r, text);
-    this.regions.push({ id: `sel:${id}`, ...r, kind: "widget" });
-    this.cursorY += BUTTON_H + 4;
-    if (paintState.consumeClick(`sel:${id}`)) {
-      return cycleOption(options, current, 1);
-    }
-    return null;
-  }
-  stepper(id, label, options, current) {
-    if (this.collapsed || options.length === 0) {
-      return null;
-    }
-    const y = this.cursorY + 2;
-    let x = this.panel.x + PAD;
-    let picked = null;
-    const prevW = this.ctx.measureText("◀").width + 14;
-    const prevR = { x, y, w: prevW, h: BUTTON_H };
-    this.drawButton(prevR, "◀");
-    this.regions.push({ id: `step:${id}:prev`, ...prevR, kind: "widget" });
-    if (paintState.consumeClick(`step:${id}:prev`)) {
-      picked = cycleOption(options, current, -1);
-    }
-    x += prevW + 4;
-    const mid = `${label}: ${current}`;
-    const midW = Math.min(this.ctx.measureText(mid).width + 14, this.panel.w - PAD * 2 - prevW - 40);
-    const midR = { x, y, w: Math.max(midW, 40), h: BUTTON_H };
-    this.drawButton(midR, mid);
-    this.regions.push({ id: `step:${id}:mid`, ...midR, kind: "widget" });
-    x += midR.w + 4;
-    const nextW = this.ctx.measureText("▶").width + 14;
-    const nextR = { x, y, w: nextW, h: BUTTON_H };
-    this.drawButton(nextR, "▶");
-    this.regions.push({ id: `step:${id}:next`, ...nextR, kind: "widget" });
-    if (paintState.consumeClick(`step:${id}:next`)) {
-      picked = cycleOption(options, current, 1);
-    }
-    this.cursorY += BUTTON_H + 4;
-    return picked;
-  }
-  gap(px = 6) {
-    if (!this.collapsed) {
-      this.cursorY += px;
-    }
-  }
-  end() {
-    paintState.publishRegions(this.regions);
-  }
-  drawButton(r, label) {
-    this.ctx.fillStyle = paintState.isHovered(r) ? BG_WIDGET_HOT : BG_WIDGET;
-    this.ctx.fillRect(r.x, r.y, r.w, r.h);
-    this.ctx.strokeStyle = BORDER;
-    this.ctx.strokeRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1);
-    this.ctx.fillStyle = FG;
-    this.ctx.fillText(label, r.x + 7, r.y + r.h / 2 + 1);
-  }
-}
-var Paint = {
-  begin(ctx, opts = {}) {
-    return new PaintFrame(ctx, opts);
   }
 };
 
@@ -39746,6 +39232,9 @@ var Bank = {
     }
     return Bank.ready();
   },
+  async waitSettled(timeoutMs = 2500, log) {
+    return Bank.waitReady(timeoutMs, log);
+  },
   snapshotReady() {
     return reader.bankSnapshotReady();
   },
@@ -48088,7 +47577,7 @@ async function executeStep(step, hops, log) {
       if (!await openBankLeg("scanBank: no known bank", step.bank, log)) {
         return false;
       }
-      await Execution.delayUntil(() => Bank.loaded(), 3000);
+      await Execution.delayUntil(() => Bank.ready() || !Bank.isOpen(), 2500);
       return Bank.isOpen();
     }
     case "withdraw": {
@@ -71937,23 +71426,23 @@ var FA_AREA = {
   ARENA: { minX: 2583, maxX: 2606, minZ: 3152, maxZ: 3170 },
   BUILDING: { minX: 2585, maxX: 2619, minZ: 3139, maxZ: 3171 }
 };
-function inRect2(tile, rect) {
+function inRect(tile, rect) {
   return tile.x >= rect.minX && tile.x <= rect.maxX && tile.z >= rect.minZ && tile.z <= rect.maxZ;
 }
 function pocketOf(tile) {
   if (!tile || tile.level !== 0) {
     return "outside";
   }
-  if (inRect2(tile, FA_AREA.JEREMY_CELL)) {
+  if (inRect(tile, FA_AREA.JEREMY_CELL)) {
     return "jeremyCell";
   }
-  if (inRect2(tile, FA_AREA.PRISON_CELL)) {
+  if (inRect(tile, FA_AREA.PRISON_CELL)) {
     return "prisonCell";
   }
-  if (inRect2(tile, FA_AREA.ARENA)) {
+  if (inRect(tile, FA_AREA.ARENA)) {
     return "arena";
   }
-  if (inRect2(tile, FA_AREA.BUILDING)) {
+  if (inRect(tile, FA_AREA.BUILDING)) {
     return "building";
   }
   return "outside";
@@ -100471,6 +99960,8 @@ class QuestEngine {
   lastBankCounts = new Map;
   lastBankIdCounts = new Map;
   bankKnown = false;
+  bankCloseFails = 0;
+  bankUiStuck = false;
   runningId = null;
   waitKey = "";
   waitCount = 0;
@@ -100496,9 +99987,20 @@ class QuestEngine {
       await Execution.delayTicks(1);
       return;
     }
-    if (!skipEarly && Bank.isOpen()) {
+    if (!skipEarly && Bank.isOpen() && !this.bankUiStuck) {
       await this.captureOpenBank();
-      return;
+      if (Bank.isOpen()) {
+        this.bankCloseFails++;
+        if (this.bankCloseFails >= 2) {
+          this.bankUiStuck = true;
+          this.host.log("bank: interface stayed open — continuing the quest");
+        }
+      } else {
+        this.bankCloseFails = 0;
+      }
+      if (!this.bankUiStuck) {
+        return;
+      }
     }
     if (!skipEarly && await this.scanNearbyBankOnStart()) {
       return;
@@ -100606,9 +100108,7 @@ class QuestEngine {
         if (banked24) {
           this.deposited.add(id);
         }
-        await Execution.delayUntil(() => Bank.loaded(), 3000);
-        this.refreshBankCounts(true);
-        await Modals.closeIfOpen();
+        await this.settleAndCloseBank();
         return;
       }
     }
@@ -100825,10 +100325,14 @@ class QuestEngine {
     }
     if (!emptied && tries >= FRESH_GIVE_UP) {
       this.host.log(`${module.record.name}: no bank reachable after ${FRESH_GIVE_UP} tries — starting on the pack as it stands`);
+      this.deposited.add(id);
     }
-    await Execution.delayUntil(() => Bank.loaded(), 3000);
-    this.refreshBankCounts(true);
-    await Modals.closeIfOpen();
+    await this.settleAndCloseBank();
+    const leftover = Inventory.used();
+    if (this.freshened.has(id) && leftover > 0) {
+      this.deposited.add(id);
+      this.host.log(`${module.record.name}: pack still has ${leftover} slot(s) after deposit — starting anyway`);
+    }
     return true;
   }
   async retreatToBank(module, id, rows) {
@@ -100935,9 +100439,7 @@ class QuestEngine {
     const here11 = Game.tile();
     const stand = here11 ? nearestBank(here11)?.tile : undefined;
     const opened = await executeStep({ kind: "scanBank", bank: stand }, [], (m) => this.host.log(`  ${m}`));
-    await Execution.delayUntil(() => Bank.loaded(), 3000);
-    this.refreshBankCounts(true);
-    await Modals.closeIfOpen();
+    await this.settleAndCloseBank();
     return opened || this.bankKnown;
   }
   applySessionBank(step3, snap, module) {
@@ -100966,13 +100468,15 @@ class QuestEngine {
     }
     return { kind: "withdraw", items: kit7, bank: bankFor(module) };
   }
-  async captureOpenBank() {
-    if (!Bank.isOpen()) {
-      return;
+  async settleAndCloseBank() {
+    if (Bank.isOpen()) {
+      await Bank.waitSettled(2500, (m) => this.host.log(`  ${m}`));
+      this.refreshBankCounts(true);
     }
-    await Execution.delayUntil(() => Bank.loaded(), 3000);
-    this.refreshBankCounts(true);
-    await Modals.close();
+    await Modals.closeIfOpen();
+  }
+  async captureOpenBank() {
+    await this.settleAndCloseBank();
   }
   async readQuestLog(module) {
     const progress = await module.readProgress?.();
@@ -109670,6 +109174,212 @@ class RandomEventsImpl {
 var RandomEvents = new RandomEventsImpl;
 EventSignal.setProvider(() => RandomEvents.pending());
 
+// src/bot/paint/paintLogic.ts
+var CHATBOX = { x: 8, y: 345, w: 506, h: 150 };
+var TOPLEFT = { x: 6, y: 6, w: 320, h: 150 };
+var GAME_VIEW = { x: 4, y: 4, w: 512, h: 334 };
+function dockWorldBottomRight(w, h, inset = 4) {
+  return {
+    x: GAME_VIEW.x + GAME_VIEW.w - w - inset,
+    y: GAME_VIEW.y + GAME_VIEW.h - h - inset,
+    w,
+    h
+  };
+}
+function resolveDock(dock) {
+  if (dock === "chatbox") {
+    return { ...CHATBOX };
+  }
+  if (dock === "topleft") {
+    return { ...TOPLEFT };
+  }
+  return { ...dock };
+}
+var inRect2 = (r, x2, y) => x2 >= r.x && x2 < r.x + r.w && y >= r.y && y < r.y + r.h;
+function cycleOption(options, current, delta) {
+  if (options.length === 0) {
+    return current;
+  }
+  const at2 = options.findIndex((o) => o.toLowerCase() === current.toLowerCase());
+  const from = at2 >= 0 ? at2 : 0;
+  const step3 = Math.trunc(delta) || 1;
+  const n = options.length;
+  const next2 = ((from + step3) % n + n) % n;
+  return options[next2];
+}
+function hitRegion(regions, x2, y) {
+  let hit = null;
+  for (const region2 of regions) {
+    if (!inRect2(region2, x2, y)) {
+      continue;
+    }
+    if (!hit || hit.kind !== "widget" && region2.kind === "widget" || hit.kind === "panel" && region2.kind === "scroll") {
+      hit = region2;
+    }
+  }
+  return hit;
+}
+
+class PaintState {
+  regions = [];
+  clicks = new Set;
+  hover = null;
+  store = new Map;
+  wheels = new Map;
+  publishRegions(regions) {
+    this.regions = regions;
+  }
+  pointerDown(x2, y) {
+    const hit = hitRegion(this.regions, x2, y);
+    if (!hit) {
+      return false;
+    }
+    if (hit.kind === "widget") {
+      this.clicks.add(hit.id);
+    }
+    return true;
+  }
+  pointerMove(x2, y) {
+    this.hover = { x: x2, y };
+    return hitRegion(this.regions, x2, y) !== null;
+  }
+  pointerIsInside(x2, y) {
+    return hitRegion(this.regions, x2, y) !== null;
+  }
+  consumeClick(id) {
+    return this.clicks.delete(id);
+  }
+  wheel(x2, y, delta) {
+    const hit = hitRegion(this.regions, x2, y);
+    if (!hit || hit.kind !== "scroll") {
+      return false;
+    }
+    this.wheels.set(hit.id, (this.wheels.get(hit.id) ?? 0) + delta);
+    return true;
+  }
+  consumeWheel(id) {
+    const n = this.wheels.get(id) ?? 0;
+    this.wheels.delete(id);
+    return n;
+  }
+  isHovered(rect) {
+    return this.hover !== null && inRect2(rect, this.hover.x, this.hover.y);
+  }
+  get(key3, fallback) {
+    return this.store.get(key3) ?? fallback;
+  }
+  set(key3, value) {
+    this.store.set(key3, value);
+  }
+  reset() {
+    this.regions = [];
+    this.clicks.clear();
+    this.hover = null;
+    this.store.clear();
+  }
+}
+var _localPaintState = new PaintState;
+function _hostPaint() {
+  const g = globalThis;
+  const host2 = g?.rs2b0t?.paint;
+  return host2 && typeof host2.publishRegions === "function" ? host2 : null;
+}
+var paintState = new Proxy(_localPaintState, {
+  get(local, prop, receiver) {
+    const host2 = _hostPaint();
+    const target5 = host2 ?? local;
+    const val = Reflect.get(target5, prop, target5);
+    return typeof val === "function" ? val.bind(target5) : val;
+  }
+});
+function paintCols(w, pad, charW) {
+  if (charW <= 0) {
+    return 0;
+  }
+  return Math.max(0, Math.floor((w - pad * 2) / charW));
+}
+function wrapText(text, cols, indent = 0) {
+  if (cols <= 0) {
+    return [];
+  }
+  const words = text.split(/\s+/).filter((w) => w.length > 0);
+  const pad = " ".repeat(Math.max(0, Math.min(indent, cols - 1)));
+  const lines = [];
+  let line = "";
+  const room = () => lines.length === 0 ? cols : cols - pad.length;
+  const flush = () => {
+    if (line.length > 0) {
+      lines.push(lines.length === 0 ? line : pad + line);
+      line = "";
+    }
+  };
+  for (let word of words) {
+    while (word.length > room()) {
+      flush();
+      const take3 = room();
+      lines.push(lines.length === 0 ? word.slice(0, take3) : pad + word.slice(0, take3));
+      word = word.slice(take3);
+    }
+    if (line.length === 0) {
+      line = word;
+    } else if (line.length + 1 + word.length <= room()) {
+      line += ` ${word}`;
+    } else {
+      flush();
+      line = word;
+    }
+  }
+  flush();
+  return lines;
+}
+function cellWidths(total, weights) {
+  const sum = weights.reduce((a, b) => a + Math.max(0, b), 0);
+  if (sum <= 0) {
+    return weights.map(() => 0);
+  }
+  return weights.map((w) => Math.max(0, w) / sum * total);
+}
+function gridRows(len, columns) {
+  if (columns <= 0 || len <= 0) {
+    return 0;
+  }
+  return Math.ceil(len / columns);
+}
+var WHEEL_ROWS = 3;
+function listScroll(len, rows, state2, wheel, focus) {
+  const max2 = Math.max(0, len - rows);
+  const clamp2 = (n) => Math.min(max2, Math.max(0, n));
+  let manual = state2.manual;
+  if (focus !== state2.focus) {
+    manual = false;
+  }
+  let offset = clamp2(Number.isFinite(state2.offset) ? Math.trunc(state2.offset) : 0);
+  if (wheel !== 0) {
+    manual = true;
+    offset = clamp2(offset + Math.trunc(wheel) * WHEEL_ROWS);
+  } else if (!manual && rows > 0 && focus >= 0 && focus < len) {
+    if (focus < offset) {
+      offset = clamp2(focus);
+    } else if (focus >= offset + rows) {
+      offset = clamp2(focus - rows + 1);
+    }
+  }
+  return { offset, manual, focus };
+}
+function fmtDuration(mins) {
+  const t = Math.max(0, Math.floor(mins * 60));
+  return `${Math.floor(t / 3600)}:${String(Math.floor(t % 3600 / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`;
+}
+function clipText(text, cols) {
+  if (cols <= 0) {
+    return "";
+  }
+  if (text.length <= cols) {
+    return text;
+  }
+  return `${text.slice(0, cols - 1)}…`;
+}
+
 // src/bot/runtime/RecoveryHints.ts
 var RecoveryHints = {
   pendingRecovery: false,
@@ -110386,15 +110096,610 @@ function queueSummary(rows) {
 function questClockRestarts(prevId, nextId) {
   return nextId !== null && nextId !== prevId;
 }
+var QUEST_HUD_MAX = { w: 276, h: 196 };
+var QUEST_HUD_MIN = { w: 252, h: 66 };
+var QUEST_HUD_MAX_KEY = "questHud:max";
+function questJournalDock(maximized) {
+  const size = maximized ? QUEST_HUD_MAX : QUEST_HUD_MIN;
+  return dockWorldBottomRight(size.w, size.h);
+}
+function questStarPoints(cx, cy, outer, inner) {
+  const pts = [];
+  const spikes = 8;
+  for (let i2 = 0;i2 < spikes * 2; i2++) {
+    const r = i2 % 2 === 0 ? outer : inner;
+    const a = -Math.PI / 2 + i2 * Math.PI / spikes;
+    pts.push({ x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r });
+  }
+  return pts;
+}
+
+// src/bot/paint/Paint.ts
+var entryOf = (line) => typeof line === "string" ? { text: line } : line;
+var FONT = "12px monospace";
+var FONT_BOLD = "bold 12px monospace";
+var PAD = 8;
+var LINE = 16;
+var TITLE_H = 20;
+var TAB_H = 18;
+var BUTTON_H = 16;
+var BG = "rgba(12, 12, 14, 0.88)";
+var BG_TITLE = "rgba(28, 28, 34, 0.95)";
+var BG_WIDGET = "rgba(50, 50, 58, 0.9)";
+var BG_WIDGET_HOT = "rgba(72, 72, 84, 0.95)";
+var FG = "#cdd3da";
+var FG_DIM = "#8a919a";
+var BORDER = "rgba(90, 90, 100, 0.8)";
+
+class PaintFrame {
+  ctx;
+  regions = [];
+  cursorY;
+  accent;
+  panel;
+  collapsed = false;
+  charW;
+  bg;
+  bgTitle;
+  bgWidget;
+  bgWidgetHot;
+  fg;
+  fgDim;
+  border;
+  constructor(ctx, opts) {
+    this.ctx = ctx;
+    this.panel = resolveDock(opts.dock ?? "chatbox");
+    this.accent = opts.accent ?? "#7ad0ff";
+    this.cursorY = this.panel.y;
+    this.ctx.font = FONT;
+    this.ctx.textBaseline = "middle";
+    this.charW = this.ctx.measureText("0").width || 7;
+    this.bg = opts.palette?.bg ?? BG;
+    this.bgTitle = opts.palette?.bgTitle ?? BG_TITLE;
+    this.bgWidget = opts.palette?.bgWidget ?? BG_WIDGET;
+    this.bgWidgetHot = opts.palette?.bgWidgetHot ?? BG_WIDGET_HOT;
+    this.fg = opts.palette?.fg ?? FG;
+    this.fgDim = opts.palette?.fgDim ?? FG_DIM;
+    this.border = opts.palette?.border ?? BORDER;
+    if ((opts.header ?? "title") === "none") {
+      this.collapsed = false;
+      this.shell(opts.fill !== false);
+    }
+  }
+  shell(fill = true) {
+    this.regions.push({ id: "paint:panel", ...this.panel, kind: "panel" });
+    if (!fill) {
+      return;
+    }
+    this.ctx.fillStyle = this.bg;
+    this.ctx.fillRect(this.panel.x, this.cursorY, this.panel.w, this.panel.y + this.panel.h - this.cursorY);
+    this.ctx.strokeStyle = this.border;
+    this.ctx.strokeRect(this.panel.x + 0.5, this.cursorY + 0.5, this.panel.w - 1, this.panel.y + this.panel.h - this.cursorY - 1);
+  }
+  advance(px) {
+    this.cursorY += px;
+  }
+  clickable(id, r) {
+    this.regions.push({ id, ...r, kind: "widget" });
+    return paintState.consumeClick(id);
+  }
+  title(text) {
+    const { x: x2, w } = this.panel;
+    const r = { x: x2, y: this.cursorY, w, h: TITLE_H };
+    this.collapsed = paintState.get("paint:collapsed", "0") === "1";
+    this.ctx.fillStyle = this.bgTitle;
+    this.ctx.fillRect(r.x, r.y, r.w, r.h);
+    this.ctx.strokeStyle = this.border;
+    this.ctx.strokeRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1);
+    this.ctx.font = FONT_BOLD;
+    this.ctx.fillStyle = this.accent;
+    this.ctx.fillText(text, r.x + PAD, r.y + r.h / 2 + 1);
+    this.ctx.font = FONT;
+    const toggle = { x: r.x + r.w - TITLE_H, y: r.y, w: TITLE_H, h: TITLE_H };
+    this.ctx.fillStyle = paintState.isHovered(toggle) ? this.fg : this.fgDim;
+    this.ctx.fillText(this.collapsed ? "+" : "–", toggle.x + 7, toggle.y + r.h / 2 + 1);
+    this.regions.push({ id: "paint:toggle", ...toggle, kind: "widget" });
+    if (paintState.consumeClick("paint:toggle")) {
+      this.collapsed = !this.collapsed;
+      paintState.set("paint:collapsed", this.collapsed ? "1" : "0");
+    }
+    this.cursorY = r.y + r.h;
+    if (!this.collapsed) {
+      this.regions.push({ id: "paint:panel", ...this.panel, kind: "panel" });
+      this.ctx.fillStyle = this.bg;
+      this.ctx.fillRect(this.panel.x, this.cursorY, this.panel.w, this.panel.y + this.panel.h - this.cursorY);
+      this.ctx.strokeStyle = this.border;
+      this.ctx.strokeRect(this.panel.x + 0.5, this.cursorY + 0.5, this.panel.w - 1, this.panel.y + this.panel.h - this.cursorY - 1);
+    } else {
+      this.regions.push({ id: "paint:panel", x: this.panel.x, y: this.panel.y, w: this.panel.w, h: TITLE_H, kind: "panel" });
+    }
+  }
+  tabs(id, names) {
+    if (this.collapsed || names.length === 0) {
+      return paintState.get(`tabs:${id}`, names[0] ?? "");
+    }
+    let active2 = paintState.get(`tabs:${id}`, names[0]);
+    if (!names.includes(active2)) {
+      active2 = names[0];
+    }
+    let tx = this.panel.x + 4;
+    const ty = this.cursorY + 3;
+    for (const name of names) {
+      const tw = this.ctx.measureText(name).width + 14;
+      const r = { x: tx, y: ty, w: tw, h: TAB_H };
+      const isActive = name === active2;
+      this.ctx.fillStyle = isActive ? this.bgWidgetHot : paintState.isHovered(r) ? this.bgWidget : "transparent";
+      this.ctx.fillRect(r.x, r.y, r.w, r.h);
+      if (isActive) {
+        this.ctx.fillStyle = this.accent;
+        this.ctx.fillRect(r.x, r.y + r.h - 2, r.w, 2);
+      }
+      this.ctx.fillStyle = isActive ? "#fff" : this.fgDim;
+      this.ctx.fillText(name, r.x + 7, r.y + r.h / 2 + 1);
+      const regionId = `tab:${id}:${name}`;
+      this.regions.push({ id: regionId, ...r, kind: "widget" });
+      if (paintState.consumeClick(regionId)) {
+        active2 = name;
+        paintState.set(`tabs:${id}`, name);
+      }
+      tx += tw + 2;
+    }
+    this.cursorY = ty + TAB_H + 2;
+    return active2;
+  }
+  cols() {
+    return paintCols(this.panel.w, PAD, this.charW);
+  }
+  text(line, color) {
+    if (this.collapsed) {
+      return;
+    }
+    this.ctx.fillStyle = color ?? this.fg;
+    this.ctx.fillText(clipText(line, this.cols()), this.panel.x + PAD, this.cursorY + LINE / 2 + 1);
+    this.cursorY += LINE;
+  }
+  row(...cols) {
+    this.cells(cols.map((text) => ({ text })));
+  }
+  cells(cells) {
+    if (this.collapsed || cells.length === 0) {
+      return;
+    }
+    const widths = cellWidths(this.panel.w - PAD * 2, cells.map((c) => c.weight ?? 1));
+    let x2 = this.panel.x + PAD;
+    cells.forEach((cell, i2) => {
+      const w = widths[i2] ?? 0;
+      const room = Math.max(0, Math.floor(w / this.charW) - (i2 < cells.length - 1 ? 1 : 0));
+      this.ctx.fillStyle = cell.color ?? this.fg;
+      this.ctx.fillText(clipText(cell.text, room), x2, this.cursorY + LINE / 2 + 1);
+      x2 += w;
+    });
+    this.cursorY += LINE;
+  }
+  wrap(text, color, indent = 2) {
+    if (this.collapsed) {
+      return;
+    }
+    for (const line of wrapText(text, this.cols(), indent)) {
+      this.ctx.fillStyle = color ?? this.fg;
+      this.ctx.fillText(line, this.panel.x + PAD, this.cursorY + LINE / 2 + 1);
+      this.cursorY += LINE;
+    }
+  }
+  list(id, lines, rows, opts = {}) {
+    if (this.collapsed) {
+      return 0;
+    }
+    const o = typeof opts === "string" ? { color: opts } : opts;
+    const key3 = `list:${id}`;
+    const scroll = this.scrollFor(key3, lines.length, rows, o.focus ?? -1);
+    const top = this.cursorY;
+    this.regions.push({ id: key3, x: this.panel.x, y: top, w: this.panel.w, h: rows * LINE, kind: "scroll" });
+    if (lines.length === 0) {
+      this.text("nothing yet", this.fgDim);
+      this.chrome(top, rows * LINE, 0, 0, 0, 0, o.footer);
+      return 0;
+    }
+    const maxOffset = Math.max(0, lines.length - rows);
+    const room = this.cols() - (maxOffset > 0 ? 1 : 0);
+    for (const line of lines.slice(scroll.offset, scroll.offset + rows)) {
+      const entry = entryOf(line);
+      this.ctx.fillStyle = entry.color ?? o.color ?? this.fg;
+      this.ctx.fillText(clipText(entry.text, room), this.panel.x + PAD, this.cursorY + LINE / 2 + 1);
+      this.cursorY += LINE;
+    }
+    this.chrome(top, rows * LINE, rows / lines.length, scroll.offset / Math.max(1, maxOffset), maxOffset > 0 ? scroll.offset + 1 : 0, maxOffset > 0 ? Math.min(lines.length, scroll.offset + rows) : 0, o.footer, lines.length);
+    return scroll.offset;
+  }
+  fill(id, lines, opts = {}) {
+    if (this.collapsed) {
+      return 0;
+    }
+    return this.list(id, lines, this.rowsLeft(lines.length, opts), opts);
+  }
+  grid(id, lines, columns, opts = {}) {
+    if (this.collapsed) {
+      return 0;
+    }
+    const cols = Math.max(1, Math.trunc(columns));
+    const total = gridRows(lines.length, cols);
+    const rows = this.rowsLeft(total, opts);
+    const key3 = `list:${id}`;
+    const focus = opts.focus !== undefined && opts.focus >= 0 ? Math.floor(opts.focus / cols) : -1;
+    const scroll = this.scrollFor(key3, total, rows, focus);
+    const top = this.cursorY;
+    this.regions.push({ id: key3, x: this.panel.x, y: top, w: this.panel.w, h: rows * LINE, kind: "scroll" });
+    if (lines.length === 0) {
+      this.text("nothing yet", this.fgDim);
+      this.chrome(top, rows * LINE, 0, 0, 0, 0, opts.footer);
+      return 0;
+    }
+    const maxOffset = Math.max(0, total - rows);
+    for (let r = scroll.offset;r < Math.min(total, scroll.offset + rows); r++) {
+      const slice = lines.slice(r * cols, r * cols + cols);
+      while (slice.length < cols) {
+        slice.push("");
+      }
+      this.cells(slice.map((line) => {
+        const entry = entryOf(line);
+        return { text: entry.text, color: entry.color ?? opts.color };
+      }));
+    }
+    this.chrome(top, rows * LINE, rows / total, scroll.offset / Math.max(1, maxOffset), maxOffset > 0 ? scroll.offset * cols + 1 : 0, maxOffset > 0 ? Math.min(lines.length, (scroll.offset + rows) * cols) : 0, opts.footer, lines.length);
+    return scroll.offset;
+  }
+  rowsLeft(total, opts) {
+    const bottom = this.panel.y + this.panel.h - (opts.reserve ?? 0);
+    const avail = Math.floor((bottom - this.cursorY) / LINE);
+    return Math.max(1, total > avail || opts.footer ? avail - 1 : avail);
+  }
+  scrollFor(key3, total, rows, focus) {
+    const stored = Number(paintState.get(key3, "0"));
+    const scroll = listScroll(total, rows, {
+      offset: Number.isFinite(stored) ? stored : 0,
+      manual: paintState.get(`${key3}:manual`, "0") === "1",
+      focus: Number(paintState.get(`${key3}:focus`, "-1"))
+    }, paintState.consumeWheel(key3), focus);
+    paintState.set(key3, String(scroll.offset));
+    paintState.set(`${key3}:manual`, scroll.manual ? "1" : "0");
+    paintState.set(`${key3}:focus`, String(scroll.focus));
+    return scroll;
+  }
+  chrome(top, h, shown, progress, from, to, footer, total = 0) {
+    if (from > 0) {
+      const thumbH = Math.max(6, shown * h);
+      this.ctx.fillStyle = this.bgWidget;
+      this.ctx.fillRect(this.panel.x + this.panel.w - 5, top, 3, h);
+      this.ctx.fillStyle = this.accent;
+      this.ctx.fillRect(this.panel.x + this.panel.w - 5, top + progress * (h - thumbH), 3, thumbH);
+    }
+    const counter = from > 0 ? `${from}–${to} of ${total}` : "";
+    const text = [counter, footer].filter(Boolean).join(" · ");
+    if (text.length > 0) {
+      this.ctx.fillStyle = this.fgDim;
+      this.ctx.fillText(clipText(text, this.cols()), this.panel.x + PAD, this.cursorY + LINE / 2 + 1);
+      this.cursorY += LINE;
+    }
+  }
+  bar(label, fraction, color) {
+    if (this.collapsed) {
+      return;
+    }
+    const f = Math.max(0, Math.min(1, fraction));
+    const labelW = 48;
+    const barX = this.panel.x + PAD + labelW;
+    const barW = this.panel.w - PAD * 2 - labelW - 42;
+    const barY = this.cursorY + 3;
+    this.ctx.fillStyle = this.fg;
+    this.ctx.fillText(label, this.panel.x + PAD, this.cursorY + LINE / 2 + 1);
+    this.ctx.fillStyle = "rgba(255,255,255,0.12)";
+    this.ctx.fillRect(barX, barY, barW, LINE - 6);
+    this.ctx.fillStyle = color ?? (f < 0.35 ? "#e05b5b" : f < 0.65 ? "#e8c35b" : "#69c86b");
+    this.ctx.fillRect(barX, barY, barW * f, LINE - 6);
+    this.ctx.fillStyle = this.fgDim;
+    this.ctx.fillText(`${Math.round(f * 100)}%`, barX + barW + 6, this.cursorY + LINE / 2 + 1);
+    this.cursorY += LINE;
+  }
+  buttons(items) {
+    if (this.collapsed || items.length === 0) {
+      return null;
+    }
+    let bx = this.panel.x + PAD;
+    let clicked = null;
+    for (const item2 of items) {
+      const w = this.ctx.measureText(item2.label).width + 18;
+      const r = { x: bx, y: this.cursorY + 2, w, h: BUTTON_H };
+      this.drawButton(r, item2.label);
+      this.regions.push({ id: `btn:${item2.id}`, ...r, kind: "widget" });
+      if (paintState.consumeClick(`btn:${item2.id}`)) {
+        clicked = item2.id;
+      }
+      bx += w + 6;
+    }
+    this.cursorY += BUTTON_H + 4;
+    return clicked;
+  }
+  select(id, label, options, current) {
+    if (this.collapsed || options.length === 0) {
+      return null;
+    }
+    const text = `${label}: ${current} ▸`;
+    const w = this.ctx.measureText(text).width + 14;
+    const r = { x: this.panel.x + PAD, y: this.cursorY + 2, w, h: BUTTON_H };
+    this.drawButton(r, text);
+    this.regions.push({ id: `sel:${id}`, ...r, kind: "widget" });
+    this.cursorY += BUTTON_H + 4;
+    if (paintState.consumeClick(`sel:${id}`)) {
+      return cycleOption(options, current, 1);
+    }
+    return null;
+  }
+  stepper(id, label, options, current) {
+    if (this.collapsed || options.length === 0) {
+      return null;
+    }
+    const y = this.cursorY + 2;
+    let x2 = this.panel.x + PAD;
+    let picked = null;
+    const prevW = this.ctx.measureText("◀").width + 14;
+    const prevR = { x: x2, y, w: prevW, h: BUTTON_H };
+    this.drawButton(prevR, "◀");
+    this.regions.push({ id: `step:${id}:prev`, ...prevR, kind: "widget" });
+    if (paintState.consumeClick(`step:${id}:prev`)) {
+      picked = cycleOption(options, current, -1);
+    }
+    x2 += prevW + 4;
+    const mid = `${label}: ${current}`;
+    const midW = Math.min(this.ctx.measureText(mid).width + 14, this.panel.w - PAD * 2 - prevW - 40);
+    const midR = { x: x2, y, w: Math.max(midW, 40), h: BUTTON_H };
+    this.drawButton(midR, mid);
+    this.regions.push({ id: `step:${id}:mid`, ...midR, kind: "widget" });
+    x2 += midR.w + 4;
+    const nextW = this.ctx.measureText("▶").width + 14;
+    const nextR = { x: x2, y, w: nextW, h: BUTTON_H };
+    this.drawButton(nextR, "▶");
+    this.regions.push({ id: `step:${id}:next`, ...nextR, kind: "widget" });
+    if (paintState.consumeClick(`step:${id}:next`)) {
+      picked = cycleOption(options, current, 1);
+    }
+    this.cursorY += BUTTON_H + 4;
+    return picked;
+  }
+  gap(px = 6) {
+    if (!this.collapsed) {
+      this.cursorY += px;
+    }
+  }
+  end() {
+    paintState.publishRegions(this.regions);
+  }
+  drawButton(r, label) {
+    this.ctx.fillStyle = paintState.isHovered(r) ? this.bgWidgetHot : this.bgWidget;
+    this.ctx.fillRect(r.x, r.y, r.w, r.h);
+    this.ctx.strokeStyle = this.border;
+    this.ctx.strokeRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1);
+    this.ctx.fillStyle = this.fg;
+    this.ctx.fillText(label, r.x + 7, r.y + r.h / 2 + 1);
+  }
+}
+var Paint = {
+  begin(ctx, opts = {}) {
+    return new PaintFrame(ctx, opts);
+  }
+};
+
+// src/bot/scripts/AIOQuester/QuestJournalHud.ts
+var HEADER_H = 22;
+var FOOTER_H = 26;
+var QUEUE_COLUMNS = 2;
+var DIM = "#6a5438";
+var INK = "#2c1c0c";
+var GOLD = "#e8c35b";
+var SEAL = "#2d4a8c";
+var JOURNAL_PALETTE = {
+  bg: "rgba(210, 186, 130, 0.0)",
+  bgWidget: "rgba(90, 58, 24, 0.92)",
+  bgWidgetHot: "rgba(128, 84, 32, 0.95)",
+  fg: INK,
+  fgDim: DIM,
+  border: "rgba(180, 140, 50, 0.0)"
+};
+function paintQuestJournal(ctx, model) {
+  const maxed = paintState.get(QUEST_HUD_MAX_KEY, "1") === "1";
+  const dock = questJournalDock(maxed);
+  drawParchment(ctx, dock);
+  const p = Paint.begin(ctx, {
+    dock,
+    accent: GOLD,
+    header: "none",
+    fill: false,
+    palette: JOURNAL_PALETTE
+  });
+  drawHeader(ctx, dock, model, maxed);
+  const toggle = { x: dock.x + dock.w - 20, y: dock.y + 3, w: 16, h: 16 };
+  if (p.clickable("questHud:toggle", toggle)) {
+    paintState.set(QUEST_HUD_MAX_KEY, maxed ? "0" : "1");
+  }
+  p.advance(HEADER_H);
+  if (!maxed) {
+    p.text(clipText(model.stepDesc || model.status, p.cols()), DIM);
+  } else {
+    paintMaximized(p, model);
+  }
+  p.gap(2);
+  const clicked = p.buttons([
+    { id: "pause", label: model.runnerState === "paused" ? "Resume" : "Pause" },
+    { id: "skip", label: "Skip quest" },
+    { id: "stop", label: "Stop" }
+  ]);
+  if (clicked === "pause") {
+    if (ScriptRunner.state === "paused") {
+      ScriptRunner.resume();
+    } else {
+      ScriptRunner.pause();
+    }
+  } else if (clicked === "skip") {
+    model.onSkip();
+  } else if (clicked === "stop") {
+    ScriptRunner.stop("Stop button (quest overlay)");
+  }
+  p.end();
+}
+function paintMaximized(p, model) {
+  const rows = model.rows;
+  const running = rows.find((r) => r.id === model.runningId);
+  const tab = p.tabs("aio", ["Queue", "Current", "Blocked", "Session"]);
+  if (tab === "Queue") {
+    const sum = queueSummary(rows);
+    const lines = rows.map((r) => {
+      const e = queueEntry(r);
+      return { text: `${e.icon} ${e.name}`, color: journalInk(e.colour, r.status) };
+    });
+    p.grid("aioqueue", lines, QUEUE_COLUMNS, {
+      reserve: FOOTER_H,
+      focus: focusRow(rows, model.runningId),
+      footer: `QP ${model.qp} · done ${sum.done}/${sum.total} · stuck ${sum.stuck}`
+    });
+    return;
+  }
+  if (tab === "Current") {
+    const stepMins = (Date.now() - model.stepSince) / 60000;
+    const questMins = (Date.now() - model.questSince) / 60000;
+    p.cells([
+      { text: `Quest: ${running?.name ?? "—"}`, weight: 2, color: running ? "#6b1d1d" : DIM },
+      { text: `On quest: ${fmtDuration(questMins)}`, weight: 1 }
+    ]);
+    p.cells([
+      { text: `On step: ${fmtDuration(stepMins)}`, weight: 1 },
+      { text: `Session: ${fmtDuration((Date.now() - model.startedAt) / 60000)}`, weight: 1 }
+    ]);
+    p.text("Step", DIM);
+    p.wrap(model.stepDesc);
+    p.gap(2);
+    p.cells([
+      { text: `No-progress: ${model.noProgress}`, weight: 1 },
+      { text: `Parked: ${model.parkedCount}`, weight: 1 },
+      { text: `Food: ${model.foodLabel}`, weight: 1.6 }
+    ]);
+    return;
+  }
+  if (tab === "Blocked") {
+    const lines = blockedLines(rows, p.cols()).map((l) => ({
+      text: l.text,
+      color: l.dim ? DIM : QUEUE_COLOUR.BLOCKED
+    }));
+    if (lines.length === 0) {
+      p.text("nothing blocked", DIM);
+    } else {
+      p.fill("aioblocked", lines, { reserve: FOOTER_H });
+    }
+    return;
+  }
+  const mins = (Date.now() - model.startedAt) / 60000;
+  p.cells([
+    { text: `Runtime: ${fmtDuration(mins)}`, weight: 1.4 },
+    { text: `Completed: ${model.completed}`, weight: 1.2 },
+    { text: `Deaths: ${model.deaths}`, weight: 1 }
+  ]);
+  p.cells([
+    { text: `QP: ${model.qp}`, weight: 1.4 },
+    { text: `QP gained: ${model.qpGained}`, weight: 1.2 },
+    { text: `Parked: ${model.parkedCount}`, weight: 1 }
+  ]);
+  p.cells([
+    { text: `State: ${model.runnerState}${model.skipRequested ? " (skip pending)" : ""}`, weight: 1.4 },
+    { text: `Loadout: ${model.loadout}`, weight: 1.6 }
+  ]);
+}
+function journalInk(colour, status) {
+  if (status === "RUNNING") {
+    return "#6b1d1d";
+  }
+  if (status === "READY") {
+    return INK;
+  }
+  return colour;
+}
+function drawParchment(ctx, dock) {
+  ctx.save();
+  ctx.fillStyle = "rgba(28, 18, 8, 0.55)";
+  ctx.fillRect(dock.x + 2, dock.y + 2, dock.w, dock.h);
+  ctx.fillStyle = "rgba(214, 190, 132, 0.94)";
+  ctx.fillRect(dock.x, dock.y, dock.w, dock.h);
+  ctx.strokeStyle = "#8a5a1e";
+  ctx.lineWidth = 2;
+  ctx.strokeRect(dock.x + 1, dock.y + 1, dock.w - 2, dock.h - 2);
+  ctx.strokeStyle = GOLD;
+  ctx.lineWidth = 1;
+  ctx.strokeRect(dock.x + 3.5, dock.y + 3.5, dock.w - 7, dock.h - 7);
+  ctx.fillStyle = "rgba(92, 58, 22, 0.92)";
+  ctx.fillRect(dock.x, dock.y, dock.w, HEADER_H);
+  ctx.strokeStyle = GOLD;
+  ctx.beginPath();
+  ctx.moveTo(dock.x + 4, dock.y + HEADER_H - 0.5);
+  ctx.lineTo(dock.x + dock.w - 4, dock.y + HEADER_H - 0.5);
+  ctx.stroke();
+  ctx.restore();
+}
+function drawHeader(ctx, dock, model, maxed) {
+  const cx = dock.x + 14;
+  const cy = dock.y + HEADER_H / 2;
+  drawQuestStar(ctx, cx, cy, 8);
+  ctx.save();
+  ctx.font = "bold 11px monospace";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = GOLD;
+  const running = model.rows.find((r) => r.id === model.runningId);
+  const title = maxed ? `Benny's Fixed Quester V2` : clipText(running?.name ?? model.status, 22);
+  const titleW = ctx.measureText(title).width;
+  ctx.fillText(title, dock.x + 26, cy + 1);
+  if (maxed) {
+    ctx.font = "11px monospace";
+    ctx.fillStyle = "#f0e0b0";
+    const sub = clipText(running?.name ?? model.status, 18);
+    const subX = dock.x + dock.w - 22 - ctx.measureText(sub).width;
+    if (subX > dock.x + 26 + titleW + 8) {
+      ctx.fillText(sub, subX, cy + 1);
+    }
+  }
+  ctx.font = "bold 12px monospace";
+  ctx.fillStyle = GOLD;
+  ctx.fillText(maxed ? "–" : "+", dock.x + dock.w - 16, cy + 1);
+  ctx.restore();
+}
+function drawQuestStar(ctx, cx, cy, outer) {
+  const pts = questStarPoints(cx, cy, outer, outer * 0.42);
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(cx, cy, outer + 2, 0, Math.PI * 2);
+  ctx.fillStyle = SEAL;
+  ctx.fill();
+  ctx.strokeStyle = GOLD;
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x, pts[0].y);
+  for (const pt of pts.slice(1)) {
+    ctx.lineTo(pt.x, pt.y);
+  }
+  ctx.closePath();
+  ctx.fillStyle = GOLD;
+  ctx.fill();
+  ctx.strokeStyle = "#6b4a12";
+  ctx.lineWidth = 0.75;
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(cx, cy, outer * 0.22, 0, Math.PI * 2);
+  ctx.fillStyle = "#f5e6a8";
+  ctx.fill();
+  ctx.restore();
+}
 
 // src/bot/scripts/AIOQuester/AIOQuester.ts
 var DEATH_RE = /oh dear.*you are dead/i;
 var QUEST_OPTION_LABELS = Object.fromEntries(QUEST_DEFS.map((def2) => [def2.record.id, def2.record.name]));
 var QUEST_OPTION_IDS = QUEST_DEFS.map((def2) => def2.record.id).sort((a, b) => QUEST_OPTION_LABELS[a].localeCompare(QUEST_OPTION_LABELS[b]));
 var FALLBACK_FOOD2 = "Lobster";
-var FOOTER_H = 26;
-var QUEUE_COLUMNS = 2;
-var DIM = "#8a919a";
 var AIO_SETTINGS = {
   quests: {
     type: "string[]",
@@ -110625,90 +110930,30 @@ class AIOQuester extends TaskBot {
     ScriptRunner.stop(reason);
   }
   onPaint(ctx) {
-    const rows = this.rows;
-    const running = rows.find((r) => r.id === this.runningId);
     const qp = Quests.points();
     if (this.qpAtStart === null && qp > 0) {
       this.qpAtStart = qp;
     }
-    const p = Paint.begin(ctx, { dock: "chatbox", accent: "#ff8a8a" });
-    p.title(`Benny's Fixed AIO Quester, ${this.status}`);
-    const tab = p.tabs("aio", ["Queue", "Current", "Blocked", "Session"]);
-    if (tab === "Queue") {
-      const sum = queueSummary(rows);
-      const lines = rows.map((r) => {
-        const e = queueEntry(r);
-        return { text: `${e.icon} ${e.name}`, color: e.colour };
-      });
-      p.grid("aioqueue", lines, QUEUE_COLUMNS, {
-        reserve: FOOTER_H,
-        focus: focusRow(rows, this.runningId),
-        footer: `QP ${qp} · done ${sum.done}/${sum.total} · stuck ${sum.stuck}`
-      });
-    } else if (tab === "Current") {
-      const stepMins = (Date.now() - this.stepSince) / 60000;
-      const questMins = (Date.now() - this.questSince) / 60000;
-      p.cells([
-        { text: `Quest: ${running?.name ?? ", "}`, weight: 2, color: running ? QUEUE_COLOUR.RUNNING : DIM },
-        { text: `On quest: ${fmtDuration(questMins)}`, weight: 1 }
-      ]);
-      p.cells([
-        { text: `On step: ${fmtDuration(stepMins)}`, weight: 1 },
-        { text: `Session: ${fmtDuration((Date.now() - this.startedAt) / 60000)}`, weight: 1 }
-      ]);
-      p.text("Step", DIM);
-      p.wrap(this.stepDesc);
-      p.gap(2);
-      p.cells([
-        { text: `No-progress: ${this.noProgress}`, weight: 1 },
-        { text: `Parked: ${this.parkedCount}`, weight: 1 },
-        { text: `Food: ${this.foodItem() ?? "none"} x${this.foodHeld()}`, weight: 1.6 }
-      ]);
-    } else if (tab === "Blocked") {
-      const lines = blockedLines(rows, p.cols()).map((l) => ({
-        text: l.text,
-        color: l.dim ? DIM : QUEUE_COLOUR.BLOCKED
-      }));
-      if (lines.length === 0) {
-        p.text("nothing blocked", DIM);
-      } else {
-        p.fill("aioblocked", lines, { reserve: FOOTER_H });
-      }
-    } else {
-      const mins = (Date.now() - this.startedAt) / 60000;
-      p.cells([
-        { text: `Runtime: ${fmtDuration(mins)}`, weight: 1.4 },
-        { text: `Completed: ${this.completed}`, weight: 1.2 },
-        { text: `Deaths: ${this.deaths}`, weight: 1 }
-      ]);
-      p.cells([
-        { text: `QP: ${qp}`, weight: 1.4 },
-        { text: `QP gained: ${this.qpAtStart === null ? 0 : qp - this.qpAtStart}`, weight: 1.2 },
-        { text: `Parked: ${this.parkedCount}`, weight: 1 }
-      ]);
-      p.cells([
-        { text: `State: ${ScriptRunner.state}${this.skipRequested ? " (skip pending)" : ""}`, weight: 1.4 },
-        { text: `Loadout: ${QuestLoadout.current?.name ?? "none"}`, weight: 1.6 }
-      ]);
-    }
-    p.gap();
-    const clicked = p.buttons([
-      { id: "pause", label: ScriptRunner.state === "paused" ? "Resume" : "Pause" },
-      { id: "skip", label: "Skip quest" },
-      { id: "stop", label: "Stop" }
-    ]);
-    if (clicked === "pause") {
-      if (ScriptRunner.state === "paused") {
-        ScriptRunner.resume();
-      } else {
-        ScriptRunner.pause();
-      }
-    } else if (clicked === "skip") {
-      this.requestSkip();
-    } else if (clicked === "stop") {
-      ScriptRunner.stop("Stop button (quest overlay)");
-    }
-    p.end();
+    paintQuestJournal(ctx, {
+      status: this.status,
+      rows: this.rows,
+      runningId: this.runningId,
+      stepDesc: this.stepDesc,
+      noProgress: this.noProgress,
+      parkedCount: this.parkedCount,
+      startedAt: this.startedAt,
+      stepSince: this.stepSince,
+      questSince: this.questSince,
+      completed: this.completed,
+      deaths: this.deaths,
+      qp,
+      qpGained: this.qpAtStart === null ? 0 : qp - this.qpAtStart,
+      skipRequested: this.skipRequested,
+      foodLabel: `${this.foodItem() ?? "none"} x${this.foodHeld()}`,
+      loadout: QuestLoadout.current?.name ?? "none",
+      runnerState: ScriptRunner.state,
+      onSkip: () => this.requestSkip()
+    });
   }
 }
 

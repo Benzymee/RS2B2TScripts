@@ -110096,12 +110096,33 @@ function queueSummary(rows) {
 function questClockRestarts(prevId, nextId) {
   return nextId !== null && nextId !== prevId;
 }
-var QUEST_HUD_MAX = { w: 276, h: 196 };
-var QUEST_HUD_MIN = { w: 252, h: 66 };
+var QUEST_HUD_MAX = { w: 328, h: 252 };
+var QUEST_HUD_MIN = { w: 272, h: 88 };
 var QUEST_HUD_MAX_KEY = "questHud:max";
+var QUEST_HUD_START_MAXIMIZED = false;
+var QUEST_HUD_TOGGLE_W = 64;
+var QUEST_HUD_TOGGLE_H = 18;
+var QUEST_HUD_HEADER_H = 24;
 function questJournalDock(maximized) {
   const size = maximized ? QUEST_HUD_MAX : QUEST_HUD_MIN;
   return dockWorldBottomRight(size.w, size.h);
+}
+function questHudToggleLabel(maximized) {
+  return maximized ? "Min –" : "Max +";
+}
+function questHudToggleRect(dock) {
+  return {
+    x: dock.x + dock.w - 6 - QUEST_HUD_TOGGLE_W,
+    y: dock.y + Math.floor((QUEST_HUD_HEADER_H - QUEST_HUD_TOGGLE_H) / 2),
+    w: QUEST_HUD_TOGGLE_W,
+    h: QUEST_HUD_TOGGLE_H
+  };
+}
+function isQuestHudMaximized(stored) {
+  if (stored === undefined) {
+    return QUEST_HUD_START_MAXIMIZED;
+  }
+  return stored === "1";
 }
 function questStarPoints(cx, cy, outer, inner) {
   const pts = [];
@@ -110145,6 +110166,7 @@ class PaintFrame {
   bgWidgetHot;
   fg;
   fgDim;
+  widgetFg;
   border;
   constructor(ctx, opts) {
     this.ctx = ctx;
@@ -110160,6 +110182,7 @@ class PaintFrame {
     this.bgWidgetHot = opts.palette?.bgWidgetHot ?? BG_WIDGET_HOT;
     this.fg = opts.palette?.fg ?? FG;
     this.fgDim = opts.palette?.fgDim ?? FG_DIM;
+    this.widgetFg = opts.palette?.widgetFg ?? opts.palette?.fg ?? FG;
     this.border = opts.palette?.border ?? BORDER;
     if ((opts.header ?? "title") === "none") {
       this.collapsed = false;
@@ -110478,7 +110501,7 @@ class PaintFrame {
     this.ctx.fillRect(r.x, r.y, r.w, r.h);
     this.ctx.strokeStyle = this.border;
     this.ctx.strokeRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1);
-    this.ctx.fillStyle = this.fg;
+    this.ctx.fillStyle = this.widgetFg;
     this.ctx.fillText(label, r.x + 7, r.y + r.h / 2 + 1);
   }
 }
@@ -110489,25 +110512,30 @@ var Paint = {
 };
 
 // src/bot/scripts/AIOQuester/QuestJournalHud.ts
-var HEADER_H = 22;
-var FOOTER_H = 26;
+var FOOTER_H = 28;
 var QUEUE_COLUMNS = 2;
-var DIM = "#6a5438";
+var DIM = "#5a4630";
 var INK = "#2c1c0c";
 var GOLD = "#e8c35b";
 var SEAL = "#2d4a8c";
+var PARCHMENT = "rgba(214, 190, 132, 0.96)";
+var HEADER_BG = "rgba(72, 42, 14, 0.96)";
+var BUTTON_FACE = "#f5ebd0";
 var JOURNAL_PALETTE = {
   bg: "rgba(210, 186, 130, 0.0)",
-  bgWidget: "rgba(90, 58, 24, 0.92)",
-  bgWidgetHot: "rgba(128, 84, 32, 0.95)",
+  bgWidget: "rgba(72, 42, 12, 0.95)",
+  bgWidgetHot: "rgba(140, 90, 28, 0.98)",
   fg: INK,
   fgDim: DIM,
-  border: "rgba(180, 140, 50, 0.0)"
+  widgetFg: BUTTON_FACE,
+  border: "rgba(180, 140, 50, 0.55)"
 };
 function paintQuestJournal(ctx, model) {
-  const maxed = paintState.get(QUEST_HUD_MAX_KEY, "1") === "1";
+  const maxed = isQuestHudMaximized(paintState.get(QUEST_HUD_MAX_KEY, QUEST_HUD_START_VALUE));
   const dock = questJournalDock(maxed);
+  const toggle = questHudToggleRect(dock);
   drawParchment(ctx, dock);
+  drawHeader(ctx, dock, model, maxed, toggle);
   const p = Paint.begin(ctx, {
     dock,
     accent: GOLD,
@@ -110515,18 +110543,16 @@ function paintQuestJournal(ctx, model) {
     fill: false,
     palette: JOURNAL_PALETTE
   });
-  drawHeader(ctx, dock, model, maxed);
-  const toggle = { x: dock.x + dock.w - 20, y: dock.y + 3, w: 16, h: 16 };
-  if (p.clickable("questHud:toggle", toggle)) {
+  if (p.clickable("btn:hudtoggle", toggle)) {
     paintState.set(QUEST_HUD_MAX_KEY, maxed ? "0" : "1");
   }
-  p.advance(HEADER_H);
+  p.advance(QUEST_HUD_HEADER_H);
   if (!maxed) {
-    p.text(clipText(model.stepDesc || model.status, p.cols()), DIM);
+    paintMinimized(p, model);
   } else {
     paintMaximized(p, model);
   }
-  p.gap(2);
+  p.gap(3);
   const clicked = p.buttons([
     { id: "pause", label: model.runnerState === "paused" ? "Resume" : "Pause" },
     { id: "skip", label: "Skip quest" },
@@ -110545,10 +110571,21 @@ function paintQuestJournal(ctx, model) {
   }
   p.end();
 }
+var QUEST_HUD_START_VALUE = "0";
+function paintMinimized(p, model) {
+  const running = model.rows.find((r) => r.id === model.runningId);
+  const questMins = (Date.now() - model.questSince) / 60000;
+  p.text(clipText(model.stepDesc || model.status, p.cols()), INK);
+  p.cells([
+    { text: `QP ${model.qp}`, weight: 1, color: DIM },
+    { text: fmtDuration(questMins), weight: 1, color: DIM },
+    { text: clipText(running?.name ?? "", 16), weight: 1.6, color: "#6b1d1d" }
+  ]);
+}
 function paintMaximized(p, model) {
   const rows = model.rows;
   const running = rows.find((r) => r.id === model.runningId);
-  const tab = p.tabs("aio", ["Queue", "Current", "Blocked", "Session"]);
+  const tab = p.tabs("aio", ["Current", "Queue", "Blocked", "Session"]);
   if (tab === "Queue") {
     const sum = queueSummary(rows);
     const lines = rows.map((r) => {
@@ -110574,7 +110611,9 @@ function paintMaximized(p, model) {
       { text: `Session: ${fmtDuration((Date.now() - model.startedAt) / 60000)}`, weight: 1 }
     ]);
     p.text("Step", DIM);
-    p.wrap(model.stepDesc);
+    for (const line of wrapText(model.stepDesc || "—", p.cols(), 2).slice(0, 5)) {
+      p.text(line, INK);
+    }
     p.gap(2);
     p.cells([
       { text: `No-progress: ${model.noProgress}`, weight: 1 },
@@ -110610,6 +110649,8 @@ function paintMaximized(p, model) {
     { text: `State: ${model.runnerState}${model.skipRequested ? " (skip pending)" : ""}`, weight: 1.4 },
     { text: `Loadout: ${model.loadout}`, weight: 1.6 }
   ]);
+  p.gap(4);
+  p.wrap(model.stepDesc || model.status, DIM);
 }
 function journalInk(colour, status) {
   if (status === "RUNNING") {
@@ -110624,7 +110665,7 @@ function drawParchment(ctx, dock) {
   ctx.save();
   ctx.fillStyle = "rgba(28, 18, 8, 0.55)";
   ctx.fillRect(dock.x + 2, dock.y + 2, dock.w, dock.h);
-  ctx.fillStyle = "rgba(214, 190, 132, 0.94)";
+  ctx.fillStyle = PARCHMENT;
   ctx.fillRect(dock.x, dock.y, dock.w, dock.h);
   ctx.strokeStyle = "#8a5a1e";
   ctx.lineWidth = 2;
@@ -110632,39 +110673,49 @@ function drawParchment(ctx, dock) {
   ctx.strokeStyle = GOLD;
   ctx.lineWidth = 1;
   ctx.strokeRect(dock.x + 3.5, dock.y + 3.5, dock.w - 7, dock.h - 7);
-  ctx.fillStyle = "rgba(92, 58, 22, 0.92)";
-  ctx.fillRect(dock.x, dock.y, dock.w, HEADER_H);
+  ctx.fillStyle = HEADER_BG;
+  ctx.fillRect(dock.x, dock.y, dock.w, QUEST_HUD_HEADER_H);
   ctx.strokeStyle = GOLD;
   ctx.beginPath();
-  ctx.moveTo(dock.x + 4, dock.y + HEADER_H - 0.5);
-  ctx.lineTo(dock.x + dock.w - 4, dock.y + HEADER_H - 0.5);
+  ctx.moveTo(dock.x + 4, dock.y + QUEST_HUD_HEADER_H - 0.5);
+  ctx.lineTo(dock.x + dock.w - 4, dock.y + QUEST_HUD_HEADER_H - 0.5);
   ctx.stroke();
   ctx.restore();
 }
-function drawHeader(ctx, dock, model, maxed) {
+function drawHeader(ctx, dock, model, maxed, toggle) {
   const cx = dock.x + 14;
-  const cy = dock.y + HEADER_H / 2;
+  const cy = dock.y + QUEST_HUD_HEADER_H / 2;
   drawQuestStar(ctx, cx, cy, 8);
   ctx.save();
   ctx.font = "bold 11px monospace";
   ctx.textBaseline = "middle";
   ctx.fillStyle = GOLD;
   const running = model.rows.find((r) => r.id === model.runningId);
-  const title = maxed ? `Benny's Fixed Quester V2` : clipText(running?.name ?? model.status, 22);
-  const titleW = ctx.measureText(title).width;
+  const title = maxed ? `Benny's Fixed Quester V2` : clipText(running?.name ?? model.status, 18);
   ctx.fillText(title, dock.x + 26, cy + 1);
+  drawToggleButton(ctx, toggle, maxed);
+  ctx.restore();
+}
+function drawToggleButton(ctx, r, maxed) {
+  const hovered = paintState.isHovered(r);
+  ctx.save();
   if (maxed) {
-    ctx.font = "11px monospace";
-    ctx.fillStyle = "#f0e0b0";
-    const sub = clipText(running?.name ?? model.status, 18);
-    const subX = dock.x + dock.w - 22 - ctx.measureText(sub).width;
-    if (subX > dock.x + 26 + titleW + 8) {
-      ctx.fillText(sub, subX, cy + 1);
-    }
+    ctx.fillStyle = hovered ? "rgba(110, 70, 24, 0.98)" : "rgba(50, 30, 12, 0.96)";
+    ctx.strokeStyle = GOLD;
+    ctx.fillRect(r.x, r.y, r.w, r.h);
+    ctx.strokeRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1);
+    ctx.fillStyle = GOLD;
+  } else {
+    ctx.fillStyle = hovered ? "#ffe08a" : GOLD;
+    ctx.strokeStyle = "#5c3a10";
+    ctx.fillRect(r.x, r.y, r.w, r.h);
+    ctx.strokeRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1);
+    ctx.fillStyle = INK;
   }
   ctx.font = "bold 12px monospace";
-  ctx.fillStyle = GOLD;
-  ctx.fillText(maxed ? "–" : "+", dock.x + dock.w - 16, cy + 1);
+  ctx.textBaseline = "middle";
+  ctx.textAlign = "center";
+  ctx.fillText(questHudToggleLabel(maxed), r.x + r.w / 2, r.y + r.h / 2 + 1);
   ctx.restore();
 }
 function drawQuestStar(ctx, cx, cy, outer) {
@@ -110799,6 +110850,8 @@ class AIOQuester extends TaskBot {
     this.startedAt = Date.now();
     this.stepSince = this.startedAt;
     this.questSince = this.startedAt;
+    paintState.set(QUEST_HUD_MAX_KEY, "0");
+    paintState.set("tabs:aio", "Current");
     const all = QUEST_DEFS.map((d) => d.record.id);
     const chosen = this.settings.list("quests", []).filter((id) => all.includes(id));
     this.picked = new Set(chosen.length > 0 ? chosen : all);

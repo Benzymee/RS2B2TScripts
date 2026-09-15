@@ -100562,6 +100562,23 @@ function nextQuest(order, picked, elig, parked) {
 function abandonRunningId(runningId, elig) {
   return runningId !== null && elig.get(runningId)?.status === "BLOCKED";
 }
+var SKILL_REASON_RE = /^needs [A-Za-z]+ \d+ \(have \d+\)$/;
+function isSkillRequirementReason(reason) {
+  return SKILL_REASON_RE.test(reason);
+}
+function skillBlockedQuests(rows) {
+  return rows.filter((r) => r.status === "BLOCKED").map((r) => ({ name: r.name, reasons: r.reasons.filter(isSkillRequirementReason) })).filter((q) => q.reasons.length > 0);
+}
+function queueWaitingOnSkills(rows) {
+  const leftover = rows.filter((r) => r.status !== "DONE");
+  if (leftover.length === 0) {
+    return false;
+  }
+  if (leftover.some((r) => r.status === "READY" || r.status === "RUNNING" || r.status === "PARKED")) {
+    return false;
+  }
+  return leftover.some((r) => r.status === "BLOCKED" && r.reasons.some(isSkillRequirementReason));
+}
 function queueRows(order, picked, elig, parked, runningId) {
   return order.filter((id) => picked.has(id)).map((id) => {
     const el = elig.get(id);
@@ -100686,6 +100703,7 @@ class QuestEngine {
   bankCloseFails = 0;
   bankUiStuck = false;
   runningId = null;
+  skillGateLogged = false;
   waitKey = "";
   waitCount = 0;
   lastStepLogged = "";
@@ -100758,6 +100776,16 @@ class QuestEngine {
     }
     const rows = this.applyBlocked(queueRows(this.order, picked, elig, this.parked, this.runningId));
     if (this.runningId === null) {
+      if (queueWaitingOnSkills(rows)) {
+        this.host.noteState(rows, null, "cannot complete — skill requirements", this.noProgressCount, this.parked.size);
+        if (!this.skillGateLogged) {
+          this.skillGateLogged = true;
+          for (const quest of skillBlockedQuests(rows)) {
+            this.host.log(`${quest.name} cannot be completed: ${quest.reasons.join("; ")}`);
+          }
+        }
+        return;
+      }
       this.host.noteState(rows, null, "queue drained", this.noProgressCount, this.parked.size);
       for (const r of rows) {
         this.host.log(`  ${r.name}: ${r.status}${r.reasons.length ? " — " + r.reasons.join("; ") : ""}`);
@@ -100765,6 +100793,7 @@ class QuestEngine {
       this.host.finish("quest queue drained — nothing left to run (per-quest status logged above)");
       return;
     }
+    this.skillGateLogged = false;
     const id = this.runningId;
     const module = defById(id);
     if (!module) {
@@ -110887,6 +110916,74 @@ function questStarPoints(cx, cy, outer, inner) {
   }
   return pts;
 }
+var BANNER_PAD_X = 18;
+var BANNER_PAD_Y = 14;
+var BANNER_TITLE_H = 20;
+var BANNER_LINE_H = 17;
+var BANNER_MAX_W = 420;
+var BANNER_MIN_W = 280;
+function sentenceCase(text) {
+  return text.length === 0 ? text : text[0].toUpperCase() + text.slice(1);
+}
+function skillGateBannerLines(quests) {
+  if (quests.length === 0) {
+    return [];
+  }
+  if (quests.length === 1) {
+    const q = quests[0];
+    return [`${q.name} cannot be completed`, ...q.reasons.map(sentenceCase)];
+  }
+  const lines = [`${quests.length} quests cannot be completed`];
+  for (const q of quests) {
+    lines.push(q.name);
+    for (const reason of q.reasons) {
+      lines.push(sentenceCase(reason));
+    }
+  }
+  return lines;
+}
+function skillGateBannerBox(lineCount, innerWidth = BANNER_MIN_W) {
+  const w = Math.min(BANNER_MAX_W, Math.max(BANNER_MIN_W, innerWidth + BANNER_PAD_X * 2));
+  const h = BANNER_PAD_Y * 2 + BANNER_TITLE_H + Math.max(0, lineCount - 1) * BANNER_LINE_H;
+  return {
+    x: GAME_VIEW.x + Math.floor((GAME_VIEW.w - w) / 2),
+    y: GAME_VIEW.y + Math.floor((GAME_VIEW.h - h) / 2),
+    w,
+    h
+  };
+}
+function paintSkillGateBanner(ctx, quests) {
+  const lines = skillGateBannerLines(quests);
+  if (lines.length === 0) {
+    return;
+  }
+  ctx.save();
+  ctx.font = "bold 14px monospace";
+  ctx.textBaseline = "middle";
+  let inner = ctx.measureText(lines[0]).width;
+  ctx.font = "12px monospace";
+  for (const line of lines.slice(1)) {
+    inner = Math.max(inner, ctx.measureText(line).width);
+  }
+  const box = skillGateBannerBox(lines.length, inner);
+  ctx.fillStyle = "rgba(18, 10, 10, 0.92)";
+  ctx.fillRect(box.x, box.y, box.w, box.h);
+  ctx.strokeStyle = "rgba(224, 91, 91, 0.95)";
+  ctx.lineWidth = 2;
+  ctx.strokeRect(box.x + 1, box.y + 1, box.w - 2, box.h - 2);
+  ctx.fillStyle = "#e05b5b";
+  ctx.fillRect(box.x, box.y, 5, box.h);
+  const textX = box.x + BANNER_PAD_X + 4;
+  ctx.font = "bold 14px monospace";
+  ctx.fillStyle = "#f4d2d2";
+  ctx.fillText(lines[0], textX, box.y + BANNER_PAD_Y + BANNER_TITLE_H / 2);
+  ctx.font = "12px monospace";
+  ctx.fillStyle = "#e8c35b";
+  for (let i2 = 1;i2 < lines.length; i2++) {
+    ctx.fillText(lines[i2], textX, box.y + BANNER_PAD_Y + BANNER_TITLE_H + (i2 - 0.5) * BANNER_LINE_H);
+  }
+  ctx.restore();
+}
 
 // src/bot/paint/Paint.ts
 var entryOf = (line) => typeof line === "string" ? { text: line } : line;
@@ -111747,6 +111844,9 @@ class AIOQuester extends TaskBot {
     const qp = Quests.points();
     if (this.qpAtStart === null && qp > 0) {
       this.qpAtStart = qp;
+    }
+    if (queueWaitingOnSkills(this.rows)) {
+      paintSkillGateBanner(ctx, skillBlockedQuests(this.rows));
     }
     paintQuestJournal(ctx, {
       status: this.status,

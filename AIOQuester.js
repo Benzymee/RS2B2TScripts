@@ -18745,7 +18745,7 @@ class GameShell {
   }
   refresh() {}
   constructor(resizetoFit = false) {
-    canvas.tabIndex = -1;
+    canvas.tabIndex = 0;
     canvas2d.fillStyle = "black";
     canvas2d.fillRect(0, 0, canvas.width, canvas.height);
     this.resizeToFit = resizetoFit;
@@ -18782,6 +18782,8 @@ class GameShell {
     canvas.onpointermove = this.onpointermove.bind(this);
     window.onmouseup = this.windowMouseUp.bind(this);
     window.onmousemove = this.windowMouseMove.bind(this);
+    canvas.addEventListener("wheel", this.onmousewheel.bind(this), { passive: false });
+    canvas.addEventListener("auxclick", this.onauxclick.bind(this));
     if (this.isTouchDevice) {
       canvas.style.touchAction = "pinch-zoom";
       canvas.addEventListener("touchend", this.touchEndHandler, { passive: false });
@@ -18937,7 +18939,28 @@ class GameShell {
       return;
     }
     this.getMousePos(e);
+    if (e.button === 1) {
+      this.middleMouseDown(this.absMouseX, this.absMouseY, e);
+      e.preventDefault();
+      return;
+    }
     this.mouseDown(this.absMouseX, this.absMouseY, e);
+  }
+  onmousewheel(e) {
+    e.preventDefault();
+    this.mouseWheel(e.deltaY);
+  }
+  onauxclick(e) {
+    if (e.button === 1) {
+      e.preventDefault();
+    }
+  }
+  mouseWheel(_deltaY) {}
+  middleMouseDown(_x, _y, _e) {}
+  middleMouseMove(_x, _y) {}
+  middleMouseUp() {}
+  middleMouseHeld() {
+    return false;
   }
   mouseDown(x2, y, e) {
     this.idleTimer = performance.now();
@@ -18964,6 +18987,9 @@ class GameShell {
   pointerDown(_x, _y, _e) {}
   onmouseup(e) {
     this.getMousePos(e);
+    if (e.button === 1 || this.middleMouseHeld()) {
+      this.middleMouseUp();
+    }
     this.mouseUp(this.absMouseX, this.absMouseY, e);
   }
   mouseUp(x2, y, _e) {
@@ -19012,8 +19038,17 @@ class GameShell {
     this.mouseX = x2;
     this.mouseY = y;
   }
-  windowMouseUp(_e) {}
-  windowMouseMove(_e) {}
+  windowMouseUp(e) {
+    if (e.button === 1 || this.middleMouseHeld()) {
+      this.middleMouseUp();
+    }
+  }
+  windowMouseMove(e) {
+    if ((e.buttons & 4) !== 0) {
+      this.getMousePos(e);
+      this.middleMouseMove(this.absMouseX, this.absMouseY);
+    }
+  }
   onkeydown(e) {
     this.idleTimer = performance.now();
     const keyCode = KeyCodes.get(e.key);
@@ -24213,6 +24248,11 @@ class Client extends GameShell {
   orbitCameraPitchVelocity = 0;
   orbitCameraX = 0;
   orbitCameraZ = 0;
+  orbitCameraZoom = 0;
+  orbitCameraZoomTarget = 0;
+  middleMousePanning = false;
+  lastMiddleMouseX = 0;
+  lastMiddleMouseY = 0;
   sendCameraDelay = 0;
   sendCamera = false;
   cameraPitchClamp = 0;
@@ -25084,7 +25124,13 @@ class Client extends GameShell {
           if (key === 8 && this.loginUser.length > 0) {
             this.loginUser = this.loginUser.substring(0, this.loginUser.length - 1);
           }
-          if (key === 9 || key === 10 || key === 13) {
+          if (key === 9) {
+            this.loginSelect = 1;
+          } else if (key === 10 || key === 13) {
+            if (this.loginPass.length > 0) {
+              this.startLogin(this.loginUser, this.loginPass);
+              return;
+            }
             this.loginSelect = 1;
           }
           if (valid) {
@@ -25097,8 +25143,11 @@ class Client extends GameShell {
           if (key === 8 && this.loginPass.length > 0) {
             this.loginPass = this.loginPass.substring(0, this.loginPass.length - 1);
           }
-          if (key === 9 || key === 10 || key === 13) {
+          if (key === 9) {
             this.loginSelect = 0;
+          } else if (key === 10 || key === 13) {
+            this.startLogin(this.loginUser, this.loginPass);
+            return;
           }
           if (valid) {
             this.loginPass = this.loginPass + String.fromCharCode(key);
@@ -27463,8 +27512,14 @@ class Client extends GameShell {
         pitch = this.camShakeRan[4] + 128;
       }
       const yaw = this.orbitCameraYaw + this.macroCameraAngle & 2047;
+      const zoomDelta = this.orbitCameraZoomTarget - this.orbitCameraZoom;
+      if (Math.abs(zoomDelta) < 1) {
+        this.orbitCameraZoom = this.orbitCameraZoomTarget;
+      } else {
+        this.orbitCameraZoom += 0.12 * zoomDelta;
+      }
       if (this.localPlayer) {
-        this.camFollow(pitch, yaw, this.orbitCameraX, this.getAvH(this.localPlayer.x, this.localPlayer.z, this.minusedlevel) - 50, this.orbitCameraZ, pitch * 3 + 600);
+        this.camFollow(pitch, yaw, this.orbitCameraX, this.getAvH(this.localPlayer.x, this.localPlayer.z, this.minusedlevel) - 50, this.orbitCameraZ, Math.max(48, pitch * 3 + 600 + this.orbitCameraZoom));
       }
     }
     let level;
@@ -33625,6 +33680,84 @@ class Client extends GameShell {
     this.mouseButton = 0;
     this.mouseX = x2;
     this.mouseY = y;
+    this.stopMiddleMouseCamera();
+  }
+  mouseDown(x2, y, e) {
+    if (e.button === 1) {
+      this.idleTimer = performance.now();
+      this.mouseX = x2;
+      this.mouseY = y;
+      if (this.inWorldViewport(x2, y)) {
+        this.startMiddleMouseCamera(x2, y);
+      }
+      return;
+    }
+    super.mouseDown(x2, y, e);
+    this.tryCompassReset(x2, y);
+  }
+  mouseWheel(deltaY) {
+    if (!this.ingame) {
+      return;
+    }
+    this.orbitCameraZoomTarget += 0.72 * deltaY;
+    if (this.orbitCameraZoomTarget < -1680) {
+      this.orbitCameraZoomTarget = -1680;
+    } else if (this.orbitCameraZoomTarget > 4800) {
+      this.orbitCameraZoomTarget = 4800;
+    }
+    this.sendCamera = true;
+  }
+  middleMouseDown(x2, y, _e) {
+    if (this.inWorldViewport(x2, y)) {
+      this.startMiddleMouseCamera(x2, y);
+    }
+  }
+  middleMouseMove(x2, y) {
+    this.applyMiddleMouseCamera(x2, y);
+  }
+  middleMouseUp() {
+    this.stopMiddleMouseCamera();
+  }
+  middleMouseHeld() {
+    return this.middleMousePanning;
+  }
+  inWorldViewport(x2, y) {
+    return this.ingame && x2 >= 4 && x2 < 516 && y >= 4 && y < 338;
+  }
+  tryCompassReset(x2, y) {
+    if (this.ingame && x2 >= 550 && x2 < 583 && y >= 4 && y < 37) {
+      this.orbitCameraYaw = 0;
+      this.orbitCameraYawVelocity = 0;
+      this.sendCamera = true;
+      return true;
+    }
+    return false;
+  }
+  startMiddleMouseCamera(x2, y) {
+    this.middleMousePanning = true;
+    this.lastMiddleMouseX = x2;
+    this.lastMiddleMouseY = y;
+    this.orbitCameraYawVelocity = 0;
+    this.orbitCameraPitchVelocity = 0;
+    this.sendCamera = true;
+  }
+  applyMiddleMouseCamera(x2, y) {
+    if (!this.middleMousePanning) {
+      return;
+    }
+    this.orbitCameraYaw = this.orbitCameraYaw - 3 * (x2 - this.lastMiddleMouseX) & 2047;
+    this.orbitCameraPitch += 3 * (y - this.lastMiddleMouseY);
+    if (this.orbitCameraPitch < 128) {
+      this.orbitCameraPitch = 128;
+    } else if (this.orbitCameraPitch > 383) {
+      this.orbitCameraPitch = 383;
+    }
+    this.lastMiddleMouseX = x2;
+    this.lastMiddleMouseY = y;
+    this.sendCamera = true;
+  }
+  stopMiddleMouseCamera() {
+    this.middleMousePanning = false;
   }
   pointerUp(x2, y, e) {
     if (MobileKeyboard_default.isWithinCanvasKeyboard(x2, y) && !this.exceedsGrabThreshold(20)) {
@@ -110112,16 +110245,46 @@ function queueSummary(rows) {
 function questClockRestarts(prevId, nextId) {
   return nextId !== null && nextId !== prevId;
 }
-var QUEST_HUD_MAX = { w: 328, h: 252 };
+var QUEST_HUD_MAX = { w: 328, h: 220 };
 var QUEST_HUD_MIN = { w: 272, h: 88 };
 var QUEST_HUD_MAX_KEY = "questHud:max";
 var QUEST_HUD_START_MAXIMIZED = false;
 var QUEST_HUD_TOGGLE_W = 64;
 var QUEST_HUD_TOGGLE_H = 18;
 var QUEST_HUD_HEADER_H = 24;
-function questJournalDock(maximized) {
-  const size = maximized ? QUEST_HUD_MAX : QUEST_HUD_MIN;
-  return dockWorldBottomRight(size.w, size.h);
+var QUEST_HUD_TABS = ["Current", "Queue", "Blocked", "Session"];
+var HUD_LINE = 16;
+var HUD_TAB_BLOCK = 23;
+var HUD_BUTTON_BLOCK = 29;
+var HUD_QUEUE_ROWS = 8;
+var HUD_COLS = 40;
+function questHudTab(stored) {
+  return QUEST_HUD_TABS.includes(stored) ? stored : "Current";
+}
+function questHudMaximizedHeight(opts) {
+  const top = QUEST_HUD_HEADER_H + HUD_TAB_BLOCK;
+  const foot = HUD_BUTTON_BLOCK;
+  if (opts.tab === "Queue") {
+    return Math.min(QUEST_HUD_MAX.h, top + HUD_QUEUE_ROWS * HUD_LINE + HUD_LINE + foot);
+  }
+  if (opts.tab === "Blocked") {
+    if (opts.blockedCount <= 0) {
+      return top + HUD_LINE + foot;
+    }
+    const rows = Math.min(HUD_QUEUE_ROWS, Math.max(1, opts.blockedCount));
+    return Math.min(QUEST_HUD_MAX.h, top + rows * HUD_LINE + HUD_LINE + foot);
+  }
+  if (opts.tab === "Session") {
+    const wraps = Math.min(3, Math.max(1, wrapText(opts.stepDesc || "—", HUD_COLS, 2).length));
+    return top + 3 * HUD_LINE + 4 + wraps * HUD_LINE + foot;
+  }
+  const stepLines = Math.max(1, wrapText(opts.stepDesc || "—", HUD_COLS, 2).slice(0, 5).length);
+  return top + 2 * HUD_LINE + HUD_LINE + stepLines * HUD_LINE + 2 + HUD_LINE + foot;
+}
+function questJournalDock(maximized, height = QUEST_HUD_MAX.h) {
+  const w = maximized ? QUEST_HUD_MAX.w : QUEST_HUD_MIN.w;
+  const h = maximized ? height : QUEST_HUD_MIN.h;
+  return dockWorldBottomRight(w, h);
 }
 function questHudToggleLabel(maximized) {
   return maximized ? "Min –" : "Max +";
@@ -110548,7 +110711,13 @@ var JOURNAL_PALETTE = {
 };
 function paintQuestJournal(ctx, model) {
   const maxed = isQuestHudMaximized(paintState.get(QUEST_HUD_MAX_KEY, QUEST_HUD_START_VALUE));
-  const dock = questJournalDock(maxed);
+  const tab = questHudTab(paintState.get("tabs:aio", "Current"));
+  const height = maxed ? questHudMaximizedHeight({
+    tab,
+    stepDesc: model.stepDesc,
+    blockedCount: blockedLines(model.rows, 40).length
+  }) : undefined;
+  const dock = questJournalDock(maxed, height);
   const toggle = questHudToggleRect(dock);
   drawParchment(ctx, dock);
   drawHeader(ctx, dock, model, maxed, toggle);
@@ -110666,7 +110835,9 @@ function paintMaximized(p, model) {
     { text: `Loadout: ${model.loadout}`, weight: 1.6 }
   ]);
   p.gap(4);
-  p.wrap(model.stepDesc || model.status, DIM);
+  for (const line of wrapText(model.stepDesc || model.status, p.cols(), 2).slice(0, 3)) {
+    p.text(line, DIM);
+  }
 }
 function journalInk(colour, status) {
   if (status === "RUNNING") {

@@ -64772,6 +64772,12 @@ var FEATHER = { id: 314, name: "Feather" };
 var RAW_TROUT = { id: 335, name: "Raw trout" };
 var RAW_SALMON = { id: 331, name: "Raw salmon" };
 var COOKED_SALMON = { id: 329, name: "Salmon" };
+function isJunkFish(item2) {
+  if (item2.id === RAW_SALMON.id || item2.id === COOKED_SALMON.id) {
+    return true;
+  }
+  return (item2.name ?? "").toLowerCase() === "burnt fish";
+}
 var GERRANT = { npc: "Gerrant", anchor: new Tile(3013, 3225, 0) };
 var ARDOUGNE_BAKER2 = { npc: "Baker", anchor: new Tile(2669, 3310, 0) };
 var BARB_LURE = new Tile(3104, 3430, 0);
@@ -64813,9 +64819,9 @@ function sourceBread(snap) {
 function troutStillNeeded() {
   return Math.max(0, TROUT_QTY - live(DEATH_ITEM.TROUT.id));
 }
-async function dropSalmon(log) {
+async function dropJunkFish(log) {
   for (let guard = 0;guard < 28; guard++) {
-    const fish = Inventory.items().find((i2) => i2.id === RAW_SALMON.id || i2.id === COOKED_SALMON.id);
+    const fish = Inventory.items().find(isJunkFish);
     if (!fish) {
       return;
     }
@@ -64824,7 +64830,7 @@ async function dropSalmon(log) {
       return;
     }
     if (await Execution.delayUntil(() => live(fish.id) < before, 3000)) {
-      log(`dropped ${fish.name ?? "salmon"}`);
+      log(`dropped ${fish.name ?? "junk fish"}`);
     }
   }
 }
@@ -64859,7 +64865,7 @@ async function lureTrout(log) {
       log("lure trout: yielding to a random event");
       return false;
     }
-    await dropSalmon(log);
+    await dropJunkFish(log);
     if (live(FEATHER.id) === 0) {
       log("out of feathers at the Barbarian Village spots");
       return false;
@@ -64900,7 +64906,7 @@ async function lureTrout(log) {
     await spot.interact("Lure");
     await Execution.delayUntil(() => live(RAW_TROUT.id) > beforeTrout || live(RAW_SALMON.id) > beforeSalmon, 20000);
   }
-  await dropSalmon(log);
+  await dropJunkFish(log);
   const have2 = live(RAW_TROUT.id);
   if (have2 < need) {
     log(`still ${have2}/${need} raw trout`);
@@ -64927,7 +64933,9 @@ async function cookTrout(log) {
   if (!await raw2.useOn(fire2)) {
     return false;
   }
-  return Execution.delayUntil(() => live(RAW_TROUT.id) === 0 || live(DEATH_ITEM.TROUT.id) > before, 60000);
+  const cooked = await Execution.delayUntil(() => live(RAW_TROUT.id) === 0 || live(DEATH_ITEM.TROUT.id) > before, 60000);
+  await dropJunkFish(log);
+  return cooked;
 }
 function sourceTrout(snap) {
   if (held18(snap, DEATH_ITEM.TROUT.id) >= TROUT_QTY) {

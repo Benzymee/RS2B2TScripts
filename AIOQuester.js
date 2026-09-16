@@ -11071,6 +11071,22 @@ var localReader = {
     }
     return -1;
   },
+  mainContinueComId() {
+    if (!raw || raw.mainModalId === -1 || raw.resumedPauseButton) {
+      return -1;
+    }
+    const modal = IfType.list[raw.mainModalId];
+    if (!modal?.children) {
+      return -1;
+    }
+    for (const childId of modal.children) {
+      const child = IfType.list[childId];
+      if (child && child.buttonType === 6 /* BUTTON_CONTINUE */) {
+        return childId;
+      }
+    }
+    return -1;
+  },
   chatOptions() {
     const out = [];
     if (!raw || raw.chatModalId === -1) {
@@ -11509,7 +11525,7 @@ var localActions = {
     return raw.tryMove(raw.localPlayer.routeX[0], raw.localPlayer.routeZ[0], lx, lz, true, 0, 0, 0, 0, 0, 0);
   },
   continueDialog() {
-    const comId = reader.chatContinueComId();
+    const comId = reader.chatContinueComId() !== -1 ? reader.chatContinueComId() : reader.mainContinueComId();
     if (comId === -1) {
       return false;
     }
@@ -13113,7 +13129,7 @@ var ChatDialog = {
     return reader.modals().chat !== -1;
   },
   canContinue() {
-    return reader.chatContinueComId() !== -1;
+    return reader.chatContinueComId() !== -1 || reader.mainContinueComId() !== -1;
   },
   options() {
     return reader.chatOptions().map((o) => o.text);
@@ -13244,11 +13260,12 @@ var ChatDialog = {
     return Execution.delayUntil(() => reader.modals().main !== before, 5000);
   },
   async continue() {
-    const before = reader.modals().chat;
+    const chatBefore = reader.modals().chat;
+    const mainBefore = reader.modals().main;
     if (!await Input.continueDialog()) {
       return false;
     }
-    return Execution.delayUntil(() => reader.modals().chat !== before || reader.chatContinueComId() !== -1, 3000);
+    return Execution.delayUntil(() => reader.modals().chat !== chatBefore || reader.modals().main !== mainBefore || reader.chatContinueComId() !== -1 || reader.mainContinueComId() !== -1, 3000);
   },
   async chooseOption(match) {
     const opts = reader.chatOptions();
@@ -14752,6 +14769,13 @@ class FloType {
   }
 }
 
+// src/client/dash3d/Tick.ts
+var ERA_TICK_MS = 600;
+var SERVER_TICK_MS = 200;
+var CLIENT_LOOP_MS = 20;
+var TICK_RATIO = ERA_TICK_MS / SERVER_TICK_MS;
+var LOOPS_PER_TICK = SERVER_TICK_MS / CLIENT_LOOP_MS;
+
 // src/client/config/SeqType.ts
 class SeqType {
   static numDefinitions = 0;
@@ -14798,7 +14822,7 @@ class SeqType {
     if (delay === 0) {
       delay = 1;
     }
-    return delay;
+    return Math.max(1, Math.round(delay / TICK_RATIO));
   }
   decode(dat) {
     while (true) {
@@ -27066,24 +27090,24 @@ class Client extends GameShell {
       seqId = e.walkanim;
     }
     e.secondaryAnim = seqId;
-    let moveSpeed = 4;
+    let moveSpeed = 4 * TICK_RATIO;
     if (e.yaw !== e.dstYaw && e.faceEntity === -1 && e.turnspeed !== 0) {
-      moveSpeed = 2;
+      moveSpeed = 2 * TICK_RATIO;
     }
     if (e.routeLength > 2) {
-      moveSpeed = 6;
+      moveSpeed = 6 * TICK_RATIO;
     }
     if (e.routeLength > 3) {
-      moveSpeed = 8;
+      moveSpeed = 8 * TICK_RATIO;
     }
     if (e.animDelayMove > 0 && e.routeLength > 1) {
-      moveSpeed = 8;
+      moveSpeed = 8 * TICK_RATIO;
       e.animDelayMove--;
     }
     if (e.routeRun[e.routeLength - 1]) {
       moveSpeed <<= 1;
     }
-    if (moveSpeed >= 8 && e.secondaryAnim === e.walkanim && e.runanim !== -1) {
+    if (moveSpeed >= 8 * TICK_RATIO && e.secondaryAnim === e.walkanim && e.runanim !== -1) {
       e.secondaryAnim = e.runanim;
     }
     if (x2 < dstX) {
@@ -29544,7 +29568,7 @@ class Client extends GameShell {
         return true;
       }
       if (this.ptype === 204 /* UPDATE_REBOOT_TIMER */) {
-        this.rebootTimer = this.in.g2() * 30;
+        this.rebootTimer = this.in.g2() * LOOPS_PER_TICK;
         this.ptype = -1;
         return true;
       }
@@ -35344,6 +35368,71 @@ var SPECIAL_CROSSINGS = [
     toTile: { x: 3098, z: 3358, level: 0 },
     arrivalRadius: 1,
     label: "Draynor Manor alcove lever → manor (#229)"
+  },
+  {
+    x: 2745,
+    z: 3152,
+    level: 0,
+    locName: "Dungeon entrance",
+    action: "Enter",
+    requires: { item: "Coins", count: 875 },
+    toTile: { x: 2713, z: 9564, level: 0 },
+    arrivalRadius: 2,
+    label: "Brimhaven dungeon entrance (Saniboch)"
+  },
+  {
+    x: 2714,
+    z: 9564,
+    level: 0,
+    locName: "Exit",
+    action: "leave",
+    toTile: { x: 2745, z: 3152, level: 0 },
+    arrivalRadius: 2,
+    label: "Brimhaven dungeon exit"
+  },
+  {
+    x: 2691,
+    z: 9564,
+    level: 0,
+    locName: "vines",
+    action: "Chop-down",
+    requiresSkill: { name: "woodcutting", level: 10 },
+    toTile: { x: 2689, z: 9564, level: 0 },
+    arrivalRadius: 0,
+    label: "Brimhaven dungeon vines (WC 10, in)"
+  },
+  {
+    x: 2689,
+    z: 9564,
+    level: 0,
+    locName: "vines",
+    action: "Chop-down",
+    toTile: { x: 2691, z: 9564, level: 0 },
+    arrivalRadius: 0,
+    label: "Brimhaven dungeon vines (WC 10, out)"
+  },
+  {
+    x: 2649,
+    z: 9561,
+    level: 0,
+    locName: "Stepping stone",
+    action: "Jump-from",
+    requiresSkill: { name: "agility", level: 12 },
+    toTile: { x: 2647, z: 9558, level: 0 },
+    arrivalRadius: 1,
+    retryOnGameMessage: { message: /lose your footing|fall into the lava/i, attempts: 4, reason: "lava stones fail" },
+    label: "Brimhaven dungeon stepping stones (N→S)"
+  },
+  {
+    x: 2647,
+    z: 9558,
+    level: 0,
+    locName: "Stepping stone",
+    action: "Jump-from",
+    toTile: { x: 2649, z: 9561, level: 0 },
+    arrivalRadius: 1,
+    retryOnGameMessage: { message: /lose your footing|fall into the lava/i, attempts: 4, reason: "lava stones fail" },
+    label: "Brimhaven dungeon stepping stones (S→N)"
   }
 ];
 function toTileMatches(sc, step) {
@@ -37450,14 +37539,76 @@ var KNOWN_DANGER_ZONES = [
     allowWhenEndpointInside: true,
     help: "Four level-26 jail guards aggressively hunt players around the jail compound. " + "Avoid as transit for combat 50 and below, but permit quest destinations inside.",
     rects: [
-      { minX: 3096, maxX: 3122, minZ: 3224, maxZ: 3250, level: 0 },
+      { minX: 3088, maxX: 3122, minZ: 3224, maxZ: 3250, level: 0 },
       { minX: 3107, maxX: 3133, minZ: 3225, maxZ: 3251, level: 0 },
       { minX: 3108, maxX: 3134, minZ: 3236, maxZ: 3262, level: 0 },
       { minX: 3114, maxX: 3140, minZ: 3235, maxZ: 3261, level: 0 }
     ]
+  },
+  {
+    id: "wilderness-lever",
+    label: "Wilderness / Ardougne lever",
+    automatic: true,
+    allowWhenEndpointInside: true,
+    help: "The Ardougne house lever teleports into deep wilderness. Transit always boats " + "Port Sarim → Musa Point → Brimhaven (and reverse) instead of pulling it as a " + "White Wolf shortcut. Mage Arena and other wilderness destinations still use " + "the lever when they are the goal.",
+    rects: [
+      { minX: 2554, maxX: 2568, minZ: 3304, maxZ: 3318, level: 0 },
+      { minX: 2944, maxX: 3392, minZ: 3520, maxZ: 3975 }
+    ]
   }
 ];
 var byId = new Map(KNOWN_DANGER_ZONES.map((z) => [z.id, z]));
+var WILDERNESS_LEVER_LOCS = [
+  { x: 2561, z: 3311 },
+  { x: 3153, z: 3923 }
+];
+function inWilderness(tile) {
+  const level = tile.level ?? 0;
+  return level === 0 && tile.x >= 2944 && tile.x <= 3392 && tile.z >= 3520 && tile.z <= 3975;
+}
+function wildernessLeverAllowed(start, dest) {
+  return start != null && inWilderness(start) || inWilderness(dest);
+}
+var LEVER_TELEPORT_IDS = new Set(["lever_ardougne_to_wild", "lever_wild_to_ardougne"]);
+function leverHouseTile(x2, z) {
+  return x2 >= 2554 && x2 <= 2568 && z >= 3304 && z <= 3318;
+}
+function isWildernessLeverHop(t) {
+  if (t.teleportId && LEVER_TELEPORT_IDS.has(t.teleportId)) {
+    return true;
+  }
+  if (t.locX !== undefined && t.locZ !== undefined && WILDERNESS_LEVER_LOCS.some((loc) => Math.abs(loc.x - t.locX) <= 2 && Math.abs(loc.z - t.locZ) <= 2)) {
+    return true;
+  }
+  const landing = t.toTile ?? t.to;
+  const name = (t.locName ?? "").toLowerCase();
+  const act = (t.action ?? "").toLowerCase();
+  if (name !== "lever" || act !== "" && act !== "pull") {
+    return false;
+  }
+  if (landing && inWilderness(landing)) {
+    return true;
+  }
+  if (t.locX !== undefined && t.locZ !== undefined && leverHouseTile(t.locX, t.locZ)) {
+    return true;
+  }
+  return false;
+}
+function pathUsesWildernessLever(waypoints) {
+  for (const w of waypoints) {
+    const t = w.transport;
+    if (!t) {
+      continue;
+    }
+    if (isWildernessLeverHop({
+      ...t,
+      toTile: t.toTile ?? (w.x !== undefined && w.z !== undefined ? { x: w.x, z: w.z, level: w.level } : undefined)
+    })) {
+      return true;
+    }
+  }
+  return false;
+}
 function knownDangerZone(id) {
   return byId.get(id);
 }
@@ -37514,6 +37665,7 @@ var WHITE_WOLF_BOAT = {
   ardyDock: { x: 2683, z: 3272, level: 0 }
 };
 var KARAMJA = { minX: 2680, maxX: 3020, minZ: 3130, maxZ: 3275 };
+var NORTH_OF_RIDGE_KANDARIN_X = 2808;
 function whiteWolfRegion(tile) {
   const wwm = knownDangerZone("white-wolf-mountain")?.rects;
   if (wwm && tileInDangerZones(tile.x, tile.z, tile.level, wwm)) {
@@ -37522,7 +37674,13 @@ function whiteWolfRegion(tile) {
   if (tile.x >= KARAMJA.minX && tile.x <= KARAMJA.maxX && tile.z >= KARAMJA.minZ && tile.z <= KARAMJA.maxZ) {
     return "karamja";
   }
-  if (tile.x < 2828) {
+  const ridge = wwm?.[0];
+  const west = ridge?.minX ?? 2828;
+  const north = ridge?.maxZ ?? 3538;
+  if (tile.x < west && tile.z <= north) {
+    return "kandarin";
+  }
+  if (tile.x < NORTH_OF_RIDGE_KANDARIN_X) {
     return "kandarin";
   }
   return "asgarnia";
@@ -38285,6 +38443,7 @@ class WalkExecutorImpl {
   bankLegDone = false;
   walkBankItemCounts;
   walkAvoidZones = [];
+  blockWildernessLever = true;
   pathFollow = resolvePathFollowConfig();
   forceRepathPending = false;
   requestRepath(_reason) {
@@ -38313,6 +38472,10 @@ class WalkExecutorImpl {
       ...walkStart ? { start: walkStart } : {},
       destination: dest
     });
+    this.blockWildernessLever = !wildernessLeverAllowed(walkStart, dest);
+    if (this.blockWildernessLever) {
+      this.walkPolicy = { ...this.walkPolicy, useWildernessLever: false };
+    }
     this.bankLegDone = false;
     const outer = this.walkDepth === 0;
     this.walkDepth++;
@@ -38346,6 +38509,10 @@ class WalkExecutorImpl {
           this.lastOutcome = "arrived";
           return true;
         }
+        if (!opts?.skipWhiteWolfBoat && needsWhiteWolfBoat(me, dest) && this.blockWildernessLever) {
+          log("White Wolf crossing — Port Sarim → Musa → Brimhaven boats");
+          return await this.walkWhiteWolfBoat(dest, opts, radius, log);
+        }
         let path = await this.requestPath(me, dest, maxExpansions);
         if (!path.ok) {
           if (this.avoidDoors.length > 0) {
@@ -38374,9 +38541,15 @@ class WalkExecutorImpl {
           }
         }
         const mountainPath = path.ok && pathCrossesWhiteWolf(path.waypoints);
-        if (!opts?.skipWhiteWolfBoat && needsWhiteWolfBoat(me, dest) && (!path.ok || mountainPath)) {
-          log(mountainPath ? "rejecting White Wolf Mountain path — Port Sarim → Musa → Brimhaven boats" : "no land path around White Wolf — Port Sarim → Musa → Brimhaven boats");
+        const leverPath = path.ok && pathUsesWildernessLever(path.waypoints);
+        if (!opts?.skipWhiteWolfBoat && needsWhiteWolfBoat(me, dest) && (!path.ok || mountainPath || leverPath && this.blockWildernessLever)) {
+          log(leverPath && this.blockWildernessLever ? "rejecting wilderness lever — Port Sarim → Musa → Brimhaven boats" : mountainPath ? "rejecting White Wolf Mountain path — Port Sarim → Musa → Brimhaven boats" : "no land path around White Wolf — Port Sarim → Musa → Brimhaven boats");
           return await this.walkWhiteWolfBoat(dest, opts, radius, log);
+        }
+        if (path.ok && leverPath && this.blockWildernessLever) {
+          log("rejecting wilderness lever — destination is not in the wilderness");
+          this.refreshSpecialCrossingAvoids();
+          continue;
         }
         if (!path.ok) {
           const short = await this.explainUnreachablePath(me, dest, path.reason, maxExpansions);
@@ -38458,6 +38631,11 @@ ${formatHops(hops)}`);
       return false;
     }
     const legs = remainingWhiteWolfBoatLegs(origin, dest);
+    const fare = legs.reduce((n, leg) => n + (leg.crossing.requires?.count ?? 30), 0);
+    if (fare > 0 && !await this.ensureBoatFare(fare, log)) {
+      this.lastOutcome = "failed";
+      return false;
+    }
     const nested = { ...opts, skipWhiteWolfBoat: true, radius: 3, log };
     for (const leg of legs) {
       const here = reader.worldTile();
@@ -38502,6 +38680,40 @@ ${formatHops(hops)}`);
       }
     }
     return this.walkTo(dest, { ...opts, skipWhiteWolfBoat: true, radius, log });
+  }
+  async ensureBoatFare(need, log) {
+    if (Inventory.count("Coins") >= need) {
+      return true;
+    }
+    const here = reader.worldTile();
+    const bank = here ? nearestBank(here) : null;
+    if (!bank) {
+      log(`White Wolf boats need ${need} Coins (have ${Inventory.count("Coins")}) — no bank in range`);
+      return false;
+    }
+    log(`White Wolf boats need ${need} Coins (have ${Inventory.count("Coins")}) — withdrawing at ${bank.id}`);
+    const stand = { x: bank.tile.x, z: bank.tile.z, level: bank.tile.level };
+    if (!await this.walkToBankOnly(stand, log)) {
+      log("White Wolf boats: could not reach the bank for the fare");
+      return false;
+    }
+    if (!await Banking.open({ preferNearby: true, log: (m) => log(`  ${m}`) })) {
+      log("White Wolf boats: could not open the bank for the fare");
+      return false;
+    }
+    BankMemory.capture(Bank.items());
+    const short = need - Inventory.count("Coins");
+    if (short > 0) {
+      const ok = await Bank.withdrawX("Coins", short);
+      log(ok ? `White Wolf boats: withdrew ${short} Coins` : `White Wolf boats: failed to withdraw ${short} Coins`);
+    }
+    if (Bank.isOpen()) {
+      await Bank.close().catch(() => {
+        return;
+      });
+    }
+    this.refreshSpecialCrossingAvoids();
+    return Inventory.count("Coins") >= need;
   }
   publishClientWalkSegment(from, to) {
     try {
@@ -38788,6 +39000,7 @@ ${formatHops(hops)}`);
         avoid.push(d);
       }
     }
+    this.appendWildernessLeverAvoid(avoid);
     return avoid;
   }
   refreshSpecialCrossingAvoids() {
@@ -38805,6 +39018,17 @@ ${formatHops(hops)}`);
       const already = this.avoidDoors.some((d) => d.x === x2 && d.z === z);
       if (!already) {
         this.avoidDoors.push({ x: x2, z });
+      }
+    }
+    this.appendWildernessLeverAvoid(this.avoidDoors);
+  }
+  appendWildernessLeverAvoid(target) {
+    if (!this.blockWildernessLever) {
+      return;
+    }
+    for (const loc of WILDERNESS_LEVER_LOCS) {
+      if (!target.some((d) => d.x === loc.x && d.z === loc.z)) {
+        target.push({ x: loc.x, z: loc.z });
       }
     }
   }
@@ -65290,15 +65514,94 @@ var SLOTS = [
 
 // src/bot/api/loadout/loadouts.ts
 var KNOWN = new Set(SLOTS);
+var SLOT_ALIASES = {
+  head: "hat",
+  helm: "hat",
+  helmet: "hat",
+  cape: "back",
+  neck: "front",
+  necklace: "front",
+  amulet: "front",
+  weapon: "righthand",
+  body: "torso",
+  chest: "torso",
+  platebody: "torso",
+  shield: "lefthand",
+  platelegs: "legs",
+  gloves: "hands",
+  boots: "feet",
+  ammo: "quiver",
+  arrows: "quiver"
+};
+var INDEX_TO_SLOT = [
+  "hat",
+  "back",
+  "front",
+  "righthand",
+  "torso",
+  "lefthand",
+  "legs",
+  "hands",
+  "feet",
+  "ring",
+  "quiver"
+];
+function resolveSlot(key) {
+  if (KNOWN.has(key)) {
+    return key;
+  }
+  const alias = SLOT_ALIASES[key.toLowerCase()];
+  if (alias) {
+    return alias;
+  }
+  if (/^\d+$/.test(key)) {
+    return INDEX_TO_SLOT[Number(key)] ?? null;
+  }
+  return null;
+}
+function itemNameOf(value) {
+  if (typeof value === "string" && value.trim().length > 0) {
+    return value.trim();
+  }
+  if (typeof value === "object" && value !== null) {
+    const rec = value;
+    const name = rec.item ?? rec.name;
+    if (typeof name === "string" && name.trim().length > 0) {
+      return name.trim();
+    }
+  }
+  return null;
+}
 function readWorn(raw2) {
   const out = {};
-  if (typeof raw2 !== "object" || raw2 === null) {
+  if (raw2 === null || raw2 === undefined) {
     return out;
   }
-  for (const [slot, value] of Object.entries(raw2)) {
-    if (KNOWN.has(slot) && typeof value === "string" && value.trim().length > 0) {
-      out[slot] = value;
+  const put = (slot, value) => {
+    if (slot === null) {
+      return;
     }
+    const name = itemNameOf(value);
+    if (name) {
+      out[slot] = name;
+    }
+  };
+  if (Array.isArray(raw2)) {
+    raw2.forEach((value, i2) => {
+      if (value && typeof value === "object" && !Array.isArray(value)) {
+        const rec = value;
+        put(resolveSlot(String(rec.slot ?? i2)), rec.item ?? rec.name ?? value);
+      } else {
+        put(INDEX_TO_SLOT[i2] ?? null, value);
+      }
+    });
+    return out;
+  }
+  if (typeof raw2 !== "object") {
+    return out;
+  }
+  for (const [key, value] of Object.entries(raw2)) {
+    put(resolveSlot(key), value);
   }
   return out;
 }
@@ -65310,8 +65613,9 @@ function readCarry(raw2) {
   for (const entry of raw2) {
     const item2 = entry?.item;
     const qty2 = entry?.qty;
-    if (typeof item2 === "string" && item2.trim().length > 0 && typeof qty2 === "number" && qty2 > 0) {
-      out.push({ item: item2, qty: Math.floor(qty2) });
+    const count = typeof qty2 === "number" ? qty2 : Number(qty2);
+    if (typeof item2 === "string" && item2.trim().length > 0 && Number.isFinite(count) && count > 0) {
+      out.push({ item: item2, qty: Math.floor(count) });
     }
   }
   return out;
@@ -65342,6 +65646,13 @@ function parseLoadouts(raw2) {
 function serializeLoadouts(list) {
   return JSON.stringify(list);
 }
+function isBlankLoadout(loadout) {
+  if (!loadout) {
+    return true;
+  }
+  const worn8 = Object.values(loadout.worn).filter((n) => typeof n === "string" && n.trim().length > 0);
+  return worn8.length === 0 && loadout.carry.length === 0;
+}
 
 // src/bot/api/loadout/loadoutStore.ts
 var KEY = "sets";
@@ -65368,15 +65679,21 @@ var LOADOUT_SETTING = {
   options: [],
   optionsFrom: "loadouts",
   label: "Loadout",
-  help: "gear and supplies to wear, defined in the Loadouts panel; blank uses the first one. Anything the loadout does not name falls back to this script's own default"
+  help: "gear and supplies to wear, defined in the Loadouts panel; blank uses the first set that names gear or supplies. Anything the loadout does not name falls back to this script's own default"
 };
+function firstFilled(all) {
+  return all.find((l) => !isBlankLoadout(l)) ?? null;
+}
 function selectedLoadout(bag) {
   const all = Loadouts.all();
   if (all.length === 0) {
     return null;
   }
   const wanted = bag.str("loadout", "").trim().toLowerCase();
-  return all.find((l) => l.name.toLowerCase() === wanted) ?? all[0];
+  if (wanted.length > 0) {
+    return all.find((l) => l.name.toLowerCase() === wanted) ?? firstFilled(all);
+  }
+  return firstFilled(all);
 }
 
 // src/bot/api/loadout/loadoutPlan.ts
@@ -100595,6 +100912,729 @@ function queueRows(order, picked, elig, parked, runningId) {
   });
 }
 
+// src/bot/api/inventory/packRules.ts
+function matchesAny(name, patterns) {
+  if (name === null) {
+    return false;
+  }
+  const n = name.toLowerCase();
+  return patterns.some((p) => {
+    const pat = p.trim().toLowerCase();
+    return pat.length > 0 && n.includes(pat);
+  });
+}
+function countMatching(items, patterns) {
+  return items.filter((i2) => matchesAny(i2.name, patterns)).reduce((sum, i2) => sum + i2.count, 0);
+}
+
+// src/bot/api/thieving/cakeStallData.ts
+var STALL_TILE = new Tile(2667, 3310, 0);
+var STAND = new Tile(2668, 3312, 0);
+var STAND_ALT = new Tile(2669, 3310, 0);
+var FLEE_TILE = new Tile(2644, 3264, 0);
+var FLEE_FAR_TILE = new Tile(2576, 3246, 0);
+var STALL_NAME = "Baker's stall";
+var STALL_OP = "Steal from";
+var CAKE_ITEMS = ["cake", "bread", "chocolate slice"];
+var LOCKOUT_TICKS = 10;
+var RESET_AFTER_REFUSALS = 3;
+function classifySteal(s) {
+  if (s.gained) {
+    return "success";
+  }
+  if (s.combat) {
+    return "caught";
+  }
+  if (s.lockoutSeen) {
+    return "lockout";
+  }
+  if (s.attemptSeen) {
+    return "refused";
+  }
+  return "timeout";
+}
+function shouldReset(consecutiveRefusals) {
+  return consecutiveRefusals >= RESET_AFTER_REFUSALS;
+}
+
+// src/bot/api/thieving/CakeStall.ts
+var DEADLINE_MS = 90000;
+var CLAIM_TIMEOUT_MS = 15000;
+var NEAR_STALL = 2;
+var RESOLVE_MS = 2400;
+var RESTOCK_WAIT_MS = 8000;
+var ATTEMPT_RE = /you attempt to steal/i;
+var LOCKOUT_RE = /can't steal from the market stall during combat/i;
+function carriedCakes() {
+  return countMatching(Inventory.items(), CAKE_ITEMS);
+}
+function stockedStall() {
+  return Locs.query().name(STALL_NAME).action(STALL_OP).where((l) => l.tile().distanceTo(STALL_TILE) <= 3).nearest();
+}
+async function stealCakes(opts) {
+  let stand = STAND;
+  let refusals = 0;
+  let selfLockout = 0;
+  let attemptSeen = false;
+  let lockoutSeen = false;
+  const unsub = bus.on("chat.message", (e) => {
+    if (ATTEMPT_RE.test(e.text)) {
+      attemptSeen = true;
+    }
+    if (LOCKOUT_RE.test(e.text)) {
+      lockoutSeen = true;
+    }
+  });
+  try {
+    const deadline = performance.now() + DEADLINE_MS;
+    while (performance.now() < deadline) {
+      if (opts.abort() || opts.shouldEat?.()) {
+        return "aborted";
+      }
+      if (Game.inCombat()) {
+        return "combat";
+      }
+      if (Inventory.isFull() || opts.fillTo !== undefined && carriedCakes() >= opts.fillTo) {
+        opts.log(`stocked ${carriedCakes()} stall food (${Inventory.used()} slots)`);
+        return "stocked";
+      }
+      const until = Math.max(opts.lockedOutUntil?.() ?? 0, selfLockout);
+      if (Game.tick() < until) {
+        opts.setStatus("waiting out the post-combat steal lockout");
+        await Execution.delayUntil(() => Game.tick() >= until || opts.abort(), 12000);
+        continue;
+      }
+      const here11 = Game.tile();
+      if (here11 && stand.distanceTo(here11) > 0) {
+        await Traversal.walkTo(stand, { radius: 0, timeoutMs: CLAIM_TIMEOUT_MS, log: (m) => opts.log(`  ${m}`) });
+        const now = Game.tile();
+        if (!now || STALL_TILE.distanceTo(now) > NEAR_STALL) {
+          opts.log(`claim fell short${now ? ` at (${now.x},${now.z})` : ""} — not stealing from the market side`);
+          await Execution.delayTicks(1);
+          continue;
+        }
+      }
+      const stall = stockedStall();
+      if (!stall) {
+        opts.log("stall emptied — waiting for the restock");
+        await Execution.delayUntil(() => stockedStall() !== null || opts.abort(), RESTOCK_WAIT_MS);
+        continue;
+      }
+      attemptSeen = false;
+      lockoutSeen = false;
+      const before = carriedCakes();
+      opts.setStatus(opts.fillTo !== undefined ? `stealing cake (${before}/${opts.fillTo})` : `stealing cake (${Inventory.used()}/${Inventory.used() + Inventory.free()} slots)`);
+      if (!await stall.interact(STALL_OP)) {
+        refusals++;
+        await Execution.delayTicks(1);
+      } else {
+        await Execution.delayUntil(() => carriedCakes() > before || Game.inCombat() || lockoutSeen, RESOLVE_MS);
+        const outcome = classifySteal({ gained: carriedCakes() > before, combat: Game.inCombat(), lockoutSeen, attemptSeen });
+        if (outcome === "success") {
+          refusals = 0;
+          opts.onSteal?.();
+          continue;
+        }
+        if (outcome === "caught") {
+          return "combat";
+        }
+        if (outcome === "lockout") {
+          selfLockout = Game.tick() + LOCKOUT_TICKS;
+          continue;
+        }
+        refusals++;
+      }
+      if (shouldReset(refusals)) {
+        stand = stand.equals(STAND_ALT) ? STAND : STAND_ALT;
+        opts.setStatus("watched — swapping stands");
+        opts.log(`${refusals} refused steals — swapping to the stand at (${stand.x},${stand.z})`);
+        opts.onReset?.();
+        refusals = 0;
+      }
+    }
+    return "no-progress";
+  } finally {
+    unsub();
+  }
+}
+
+// src/bot/api/thieving/kiteGuard.ts
+async function kiteArdougneGuard(opts) {
+  const hops = [FLEE_TILE, FLEE_FAR_TILE];
+  for (const dest of hops) {
+    if (opts.abort?.() || EventSignal.pending()) {
+      return;
+    }
+    if (!Game.inCombat()) {
+      return;
+    }
+    await opts.eat?.();
+    opts.setStatus?.(`kiting a catching guard behind the buildings (${dest.x},${dest.z})`);
+    opts.log(`kiting the guard out of the square to ${dest.x},${dest.z}`);
+    await Traversal.walkResilient(dest, {
+      radius: 3,
+      attempts: 2,
+      timeoutMs: 45000,
+      avoidZones: opts.avoidZones,
+      log: (m) => opts.log(`  ${m}`)
+    });
+  }
+  await opts.eat?.();
+  await Execution.delayUntil(() => !Game.inCombat() || EventSignal.pending() || !!opts.abort?.(), 20000);
+}
+
+// src/bot/api/thieving/stealRules.ts
+function nextWithdrawChunk(need) {
+  if (need <= 0) {
+    return null;
+  }
+  if (need > 10) {
+    return { kind: "x", count: need };
+  }
+  if (need >= 10) {
+    return { kind: "op", op: "Withdraw-10" };
+  }
+  if (need >= 5) {
+    return { kind: "op", op: "Withdraw-5" };
+  }
+  return { kind: "op", op: "Withdraw-1" };
+}
+async function withdrawTo(name, target5, countInInv = () => Inventory.count(name)) {
+  const start = countInInv();
+  for (let guard = 0;guard < 40 && countInInv() < target5 && !Inventory.isFull(); guard++) {
+    const before = countInInv();
+    const need = target5 - before;
+    const chunk = nextWithdrawChunk(need);
+    if (!chunk) {
+      break;
+    }
+    if (chunk.kind === "x") {
+      if (await Bank.withdrawX(name, chunk.count)) {
+        if (countInInv() > before) {
+          continue;
+        }
+      }
+      const fallback = nextWithdrawChunk(Math.min(need, 10));
+      if (!fallback || fallback.kind !== "op") {
+        break;
+      }
+      await Bank.withdraw(name, fallback.op);
+      if (!await Execution.delayUntil(() => countInInv() > before, 2500)) {
+        break;
+      }
+      continue;
+    }
+    await Bank.withdraw(name, chunk.op);
+    if (!await Execution.delayUntil(() => countInInv() > before, 2500)) {
+      break;
+    }
+  }
+  return countInInv() - start;
+}
+
+// src/bot/api/ai/quests/engine/moneyMakingPlan.ts
+var MONEY_MAKING_GP = 5000;
+var MONEY_MAKING_LABEL = "Money making";
+var CAKE_STOCK = 100;
+var PICKPOCKET_CAKES = 20;
+var MIN_PICKPOCKET_HP = 5;
+var CAKE_THIEVING = 5;
+var CAKE_HEAL = 4;
+var CAKE_COUNT_NAMES = ["Cake", "2/3 cake", "Slice of cake", "Chocolate slice", "Bread"];
+function countCakes(count) {
+  return CAKE_COUNT_NAMES.reduce((n, name) => n + count(name), 0);
+}
+function shouldEatCake(hp, maxHp, cakes) {
+  return shouldEatToUseFood({
+    hp,
+    maxHp,
+    heal: CAKE_HEAL,
+    foodCount: cakes,
+    minHp: MIN_PICKPOCKET_HP
+  });
+}
+var MONEY_MAKING_AVOID_ZONES = ["wilderness-lever"];
+var START_BANK_RADIUS = 50;
+function shouldScanStartBank(tilesToBank, alreadyScanned) {
+  return !alreadyScanned && tilesToBank !== null && tilesToBank <= START_BANK_RADIUS;
+}
+function bestArdougnePickpocket(thieving) {
+  if (thieving >= 80) {
+    return "Hero";
+  }
+  if (thieving >= 70) {
+    return "Paladin";
+  }
+  if (thieving >= 55) {
+    return "Knight of Ardougne";
+  }
+  if (thieving >= 40) {
+    return "Guard";
+  }
+  if (thieving >= 25) {
+    return "Warrior woman";
+  }
+  return "Man";
+}
+function boatFareFor(region2) {
+  if (region2 === "kandarin") {
+    return 0;
+  }
+  if (region2 === "karamja" || region2 === "ridge") {
+    return 30;
+  }
+  return 60;
+}
+function inArdougneMarket(tile) {
+  return tile !== null && tile.level === 0 && tile.x >= 2568 && tile.x <= 2695 && tile.z >= 3278 && tile.z <= 3338;
+}
+function decideMoneyMaking(snap) {
+  if (snap.coins >= MONEY_MAKING_GP) {
+    return { kind: "done" };
+  }
+  if (snap.stallCaught) {
+    return { kind: "flee" };
+  }
+  if (shouldEatCake(snap.hp, snap.maxHp, snap.invCakes)) {
+    return { kind: "heal" };
+  }
+  if (snap.hp < MIN_PICKPOCKET_HP) {
+    if (snap.inArdougneMarket && snap.bankKnown && snap.bankCakes > 0) {
+      return { kind: "load-food" };
+    }
+    return { kind: "heal" };
+  }
+  if (!snap.bankKnown) {
+    return { kind: "scan-bank" };
+  }
+  if (!snap.inArdougneMarket) {
+    const fare = snap.region ? boatFareFor(snap.region) : 60;
+    if (fare > 0 && snap.coins < fare) {
+      return { kind: "earn-fare", fare };
+    }
+    return { kind: "travel-ardy" };
+  }
+  if (snap.thieving < CAKE_THIEVING) {
+    return { kind: "steal-men" };
+  }
+  const reserved = snap.invCakes + snap.bankCakes;
+  const hasReserve = reserved >= CAKE_STOCK || snap.cakeStocked && reserved > 0;
+  if (!hasReserve) {
+    return { kind: "steal-cakes", have: snap.invCakes };
+  }
+  if (!snap.foodLoaded || snap.invCakes === 0) {
+    return { kind: "load-food" };
+  }
+  return { kind: "pickpocket", npc: bestArdougnePickpocket(snap.thieving) };
+}
+
+// src/bot/data/pickpocketTargets.ts
+var PICKPOCKET_TARGETS = [
+  { name: "Man", level: 1 },
+  { name: "Woman", level: 1 },
+  { name: "Farmer", level: 10 },
+  { name: "Warrior woman", level: 25 },
+  { name: "Al-Kharid warrior", level: 25 },
+  { name: "Rogue", level: 32 },
+  { name: "Guard", level: 40 },
+  { name: "Knight of Ardougne", level: 55 },
+  { name: "Watchman", level: 65 },
+  { name: "Paladin", level: 70 },
+  { name: "Hero", level: 80 }
+];
+var PICKPOCKET_TARGET_NAMES = PICKPOCKET_TARGETS.map((t) => t.name);
+
+// src/bot/api/thieving/targets.ts
+var SPOTS = {
+  Man: { anchor: new Tile(2624, 3295, 0), leash: 12 },
+  Woman: { anchor: new Tile(2624, 3295, 0), leash: 12 },
+  "Warrior woman": { anchor: new Tile(2571, 3290, 0), leash: 16 },
+  Guard: { anchor: new Tile(2661, 3306, 0), leash: 19 },
+  "Knight of Ardougne": { anchor: new Tile(2661, 3306, 0), leash: 29 },
+  Paladin: { anchor: new Tile(2655, 3311, 0), leash: 12 },
+  Hero: { anchor: new Tile(2657, 3311, 0), leash: 17 }
+};
+function targetSpot(target5) {
+  return SPOTS[target5] ?? SPOTS["Guard"];
+}
+
+// src/bot/api/ai/quests/engine/moneyMaking.ts
+var ARDY_BANK = new Tile(2655, 3286, 0);
+var ARDY_MARKET = new Tile(2668, 3312, 0);
+var LUMBRIDGE_MEN = new Tile(3222, 3218, 0);
+var PICKPOCKET_OP = "Pickpocket";
+var HOUSE_DOOR = ["door", "gate"];
+function liveCoinWealth() {
+  return Inventory.count("Coins") + BankMemory.count("Coins");
+}
+function needsMoneyMaking() {
+  return liveCoinWealth() < MONEY_MAKING_GP;
+}
+
+class MoneyMakingTask {
+  host;
+  cakeStocked = false;
+  foodLoaded = false;
+  stallKite = false;
+  lastKind = null;
+  startBankDone = false;
+  constructor(host2) {
+    this.host = host2;
+  }
+  validate() {
+    return Game.tile() !== null && needsMoneyMaking();
+  }
+  async execute() {
+    if (EventSignal.pending() || ChatDialog.canContinue()) {
+      return;
+    }
+    if (Game.inCombat() && !this.stallCaught()) {
+      if (this.needsCakeHeal()) {
+        this.host.noteMoneyMaking("eating cake");
+        await this.eatUntilSafe();
+        return;
+      }
+      this.host.noteMoneyMaking("stunned — waiting");
+      await Execution.delayUntil(() => !Game.inCombat() || this.needsCakeHeal() || EventSignal.pending() || ChatDialog.canContinue(), 8000);
+      if (this.needsCakeHeal()) {
+        this.host.noteMoneyMaking("eating cake");
+        await this.eatUntilSafe();
+      }
+      return;
+    }
+    if (this.shouldOpenStartBank()) {
+      this.startBankDone = true;
+      this.host.noteMoneyMaking("checking the bank");
+      this.host.log(`Money making: bank within ${START_BANK_RADIUS} tiles — opening it before thieving`);
+      await this.scanSessionBank();
+      return;
+    }
+    const action = this.plan();
+    this.lastKind = action.kind;
+    this.host.noteMoneyMaking(labelFor(action), action.kind === "pickpocket" ? action.npc : action.kind === "steal-men" ? "Man" : undefined);
+    switch (action.kind) {
+      case "done":
+        return;
+      case "flee":
+        await this.flee();
+        return;
+      case "heal":
+        await this.heal();
+        return;
+      case "scan-bank":
+        await this.scanSessionBank();
+        return;
+      case "earn-fare":
+      case "steal-men": {
+        const men = this.menSpot();
+        this.host.log(`Money making: pickpocketing men at ${men.tile.x},${men.tile.z},${men.tile.level}`);
+        await this.pickpocketMen(men.tile, men.leash, men.indoor);
+        return;
+      }
+      case "travel-ardy":
+        await this.walkTo(ARDY_MARKET, 4, 300000, 4);
+        return;
+      case "steal-cakes":
+        await this.stealCakeStock();
+        return;
+      case "load-food":
+        await this.loadPickpocketFood();
+        return;
+      case "pickpocket":
+        await this.pickpocketNamed(action.npc);
+        return;
+    }
+  }
+  shouldOpenStartBank() {
+    const here11 = Game.tile();
+    if (!here11) {
+      return false;
+    }
+    const bank = nearestBank(here11);
+    const tiles = bank ? Tile.from(here11).distanceTo(bank.tile) : null;
+    return shouldScanStartBank(tiles, this.startBankDone);
+  }
+  menSpot() {
+    const here11 = Game.tile();
+    if (here11 && whiteWolfRegion(here11) === "asgarnia") {
+      return { tile: LUMBRIDGE_MEN, leash: 16, indoor: false };
+    }
+    const spot = targetSpot("Man");
+    return { tile: spot.anchor, leash: spot.leash, indoor: true };
+  }
+  plan() {
+    const here11 = Game.tile();
+    const invCakes = carriedCakes();
+    const bankCakes = this.bankedCakeCount();
+    if (invCakes + bankCakes >= CAKE_STOCK) {
+      this.cakeStocked = true;
+    }
+    if (invCakes + bankCakes === 0) {
+      this.cakeStocked = false;
+      this.foodLoaded = false;
+    }
+    if (invCakes === 0) {
+      this.foodLoaded = false;
+    }
+    const region2 = here11 ? whiteWolfRegion(here11) : null;
+    return decideMoneyMaking({
+      coins: liveCoinWealth(),
+      invCakes,
+      bankCakes,
+      thieving: Skills.level("thieving"),
+      hp: Skills.effective("hitpoints"),
+      maxHp: Skills.level("hitpoints"),
+      region: region2,
+      inArdougneMarket: inArdougneMarket(here11),
+      bankKnown: BankMemory.known(),
+      stallCaught: this.stallCaught(),
+      cakeStocked: this.cakeStocked,
+      foodLoaded: this.foodLoaded
+    });
+  }
+  bankedCakeCount() {
+    return countCakes((name) => BankMemory.count(name));
+  }
+  stallCaught() {
+    if (!Game.inCombat()) {
+      this.stallKite = false;
+      return false;
+    }
+    return this.stallKite || this.lastKind === "steal-cakes";
+  }
+  async flee() {
+    this.stallKite = true;
+    this.host.log("Money making: cake stall guard — running out of the square");
+    await kiteArdougneGuard({
+      log: (m) => this.host.log(m),
+      setStatus: (s) => this.host.noteMoneyMaking(s),
+      eat: () => this.eatUntilSafe(),
+      abort: () => EventSignal.pending() || ChatDialog.canContinue(),
+      avoidZones: [...MONEY_MAKING_AVOID_ZONES]
+    });
+  }
+  needsCakeHeal() {
+    return shouldEatCake(Skills.effective("hitpoints"), Skills.level("hitpoints"), carriedCakes());
+  }
+  cakeItem() {
+    return Inventory.items().find((i2) => {
+      const n = i2.name?.toLowerCase() ?? "";
+      return n === "cake" || n === "2/3 cake" || n === "slice of cake" || n === "bread" || n === "chocolate slice";
+    });
+  }
+  async eatCake() {
+    if (!this.needsCakeHeal()) {
+      return;
+    }
+    const food = this.cakeItem();
+    if (!food) {
+      return;
+    }
+    const before = Skills.effective("hitpoints");
+    if (await food.interact("Eat")) {
+      await Execution.delayUntil(() => Skills.effective("hitpoints") > before, 3000);
+    }
+  }
+  async eatUntilSafe() {
+    for (let bite = 0;bite < 10 && this.needsCakeHeal() && this.cakeItem(); bite++) {
+      await this.eatCake();
+    }
+  }
+  async heal() {
+    await this.eatUntilSafe();
+    if (Skills.effective("hitpoints") >= MIN_PICKPOCKET_HP || Game.inCombat() || this.cakeItem()) {
+      return;
+    }
+    this.host.log(`Money making: waiting to get above ${MIN_PICKPOCKET_HP - 1} HP`);
+    await Execution.delayUntil(() => Skills.effective("hitpoints") >= MIN_PICKPOCKET_HP || Game.inCombat() || EventSignal.pending(), 60000);
+  }
+  async scanSessionBank() {
+    const here11 = Game.tile();
+    const bank = here11 ? nearestBank(here11) : null;
+    const stand = bank?.tile ?? ARDY_BANK;
+    if (!await this.walkTo(stand, 4, 180000, 3)) {
+      return;
+    }
+    if (!await Banking.open({ preferNearby: true, log: (m) => this.host.log(`  ${m}`) })) {
+      this.host.log("Money making: could not open the bank");
+      return;
+    }
+    BankMemory.capture(Bank.items());
+    const bankedCakes = this.bankedCakeCount();
+    this.host.log(`Money making: bank remembered — ${liveCoinWealth()} gp, ${bankedCakes} cake`);
+    if (inArdougneMarket(Game.tile()) && bankedCakes + carriedCakes() >= CAKE_STOCK) {
+      this.cakeStocked = true;
+      await this.depositAndWithdrawCakes();
+    }
+    await Bank.close();
+  }
+  async loadPickpocketFood() {
+    if (!await this.walkTo(ARDY_BANK, 2, 180000, 3)) {
+      return;
+    }
+    if (!await Bank.openBooth(ARDY_BANK, "Bank booth", "Use-quickly", (m) => this.host.log(`  ${m}`))) {
+      this.host.log("Money making: could not open the Ardougne bank");
+      return;
+    }
+    await this.depositAndWithdrawCakes();
+    await Bank.close();
+  }
+  async depositAndWithdrawCakes() {
+    await Bank.depositInventory();
+    BankMemory.capture(Bank.items());
+    for (const name of ["Cake", "Chocolate slice", "Bread", "2/3 cake", "Slice of cake"]) {
+      if (carriedCakes() >= PICKPOCKET_CAKES) {
+        break;
+      }
+      await withdrawTo(name, PICKPOCKET_CAKES, carriedCakes);
+    }
+    BankMemory.capture(Bank.items());
+    const held44 = carriedCakes();
+    this.foodLoaded = held44 > 0;
+    if (this.bankedCakeCount() + held44 >= CAKE_STOCK) {
+      this.cakeStocked = true;
+    }
+    this.host.log(this.foodLoaded ? `Money making: withdrew ${held44} cake for pickpocketing (${this.bankedCakeCount()} still banked)` : "Money making: no cake in the bank to withdraw");
+  }
+  async stealCakeStock() {
+    const result = await stealCakes({
+      fillTo: CAKE_STOCK,
+      abort: () => EventSignal.pending() || ChatDialog.canContinue(),
+      setStatus: (s) => this.host.noteMoneyMaking(s),
+      log: (m) => this.host.log(m)
+    });
+    if (carriedCakes() >= CAKE_STOCK || Inventory.isFull() && carriedCakes() > 0) {
+      this.cakeStocked = true;
+    }
+    if (result === "combat") {
+      this.stallKite = true;
+      this.host.log("Money making: a guard caught the stall steal");
+      await this.flee();
+    }
+  }
+  async pickpocketMen(anchor, leash, indoor = true) {
+    if (!(indoor ? await this.reachHouse(anchor) : await this.reach(anchor, 8))) {
+      return;
+    }
+    const npc = Npcs.query().name("Man", "Woman").action(PICKPOCKET_OP).where((n) => n.tile().distanceTo(anchor) <= leash).nearest();
+    if (!npc) {
+      this.host.log(`Money making: no Man/Woman to pickpocket near (${anchor.x},${anchor.z})`);
+      await Execution.delayTicks(3);
+      return;
+    }
+    if (indoor && !await this.openDoorIfInside(npc.tile())) {
+      return;
+    }
+    await this.pickpocketNpc(npc.name ?? "Man", npc);
+  }
+  async pickpocketNamed(name) {
+    const spot = targetSpot(name);
+    const indoor = name === "Man" || name === "Woman" || name === "Warrior woman";
+    if (!(indoor ? await this.reachHouse(spot.anchor) : await this.reach(spot.anchor, 4))) {
+      return;
+    }
+    const npc = Npcs.query().name(name).action(PICKPOCKET_OP).where((n) => n.tile().distanceTo(spot.anchor) <= spot.leash).nearest();
+    if (!npc) {
+      this.host.log(`Money making: no ${name} near ${spot.anchor.x},${spot.anchor.z}`);
+      await Execution.delayTicks(3);
+      return;
+    }
+    if (indoor && !await this.openDoorIfInside(npc.tile())) {
+      return;
+    }
+    await this.pickpocketNpc(name, npc);
+  }
+  async reachHouse(anchor) {
+    const here11 = Game.tile();
+    if (!here11 || Tile.from(here11).distanceTo(anchor) > 8) {
+      if (!await this.walkTo(anchor, 6, 240000, 3)) {
+        return false;
+      }
+    }
+    return walkOpening(anchor, 1, HOUSE_DOOR, (m) => this.host.log(`  ${m}`));
+  }
+  async openDoorIfInside(tile) {
+    if (Reachability.canReach(tile, { adjacentOk: true })) {
+      return true;
+    }
+    this.host.log(`Money making: target is inside — opening the door at (${tile.x},${tile.z})`);
+    await walkOpening(Tile.from(tile), 1, HOUSE_DOOR, (m) => this.host.log(`  ${m}`));
+    return Reachability.canReach(tile, { adjacentOk: true });
+  }
+  async pickpocketNpc(name, npc) {
+    await this.takeLooseCoins();
+    const coinsBefore = Inventory.count("Coins");
+    const xpBefore = Skills.xp("thieving");
+    const hpBefore = Skills.effective("hitpoints");
+    if (!await npc.interact(PICKPOCKET_OP)) {
+      await Execution.delayTicks(2);
+      return;
+    }
+    await Execution.delayUntil(() => Inventory.count("Coins") > coinsBefore || Skills.xp("thieving") > xpBefore || Skills.effective("hitpoints") < hpBefore || ChatDialog.canContinue() || EventSignal.pending(), 4000);
+    if (this.needsCakeHeal()) {
+      await this.eatUntilSafe();
+    }
+    await this.takeLooseCoins();
+    if (Inventory.count("Coins") > coinsBefore) {
+      this.host.log(`Money making: pickpocketed ${name} (${liveCoinWealth()}/${MONEY_MAKING_GP} gp)`);
+    }
+  }
+  async takeLooseCoins() {
+    const drop = GroundItems.query().name("Coins").where((g) => g.distance() <= 1).nearest();
+    if (!drop) {
+      return;
+    }
+    const before = Inventory.count("Coins");
+    if (await drop.interact("Take")) {
+      await Execution.delayUntil(() => Inventory.count("Coins") > before, 2500);
+    }
+  }
+  async reach(tile, radius) {
+    const here11 = Game.tile();
+    if (here11 && tile.distanceTo(here11) <= radius) {
+      return true;
+    }
+    return this.walkTo(tile, radius, 240000, 3);
+  }
+  async walkTo(tile, radius, timeoutMs, attempts) {
+    const here11 = Game.tile();
+    if (here11 && tile.distanceTo(Tile.from(here11)) <= radius) {
+      return true;
+    }
+    return Traversal.walkResilient(tile, {
+      radius,
+      attempts,
+      timeoutMs,
+      avoidZones: [...MONEY_MAKING_AVOID_ZONES],
+      log: (m) => this.host.log(m)
+    });
+  }
+}
+function labelFor(action) {
+  switch (action.kind) {
+    case "done":
+      return `${MONEY_MAKING_LABEL} done`;
+    case "flee":
+      return "kiting a catching guard out of the square";
+    case "heal":
+      return "eating cake / waiting above 4 HP";
+    case "scan-bank":
+      return "checking the bank";
+    case "earn-fare":
+      return `pickpocketing Lumbridge men for the ${action.fare} gp boat fare`;
+    case "travel-ardy":
+      return "walking / boating to Ardougne";
+    case "steal-men":
+      return "pickpocketing men to Thieving 5";
+    case "steal-cakes":
+      return `stealing cake (${action.have}/${CAKE_STOCK})`;
+    case "load-food":
+      return `banking cake and withdrawing ${PICKPOCKET_CAKES}`;
+    case "pickpocket":
+      return `pickpocketing ${action.npc} to ${MONEY_MAKING_GP} gp`;
+  }
+}
+
 // src/bot/api/ai/quests/engine/watchdog.ts
 var NO_PROGRESS_WARN = 3;
 var NO_PROGRESS_PARK = 8;
@@ -100717,7 +101757,7 @@ class QuestEngine {
     BankMemory.reset();
   }
   validate() {
-    return !ChatDialog.canContinue() && Game.tile() !== null;
+    return !ChatDialog.canContinue() && Game.tile() !== null && !needsMoneyMaking();
   }
   async execute() {
     if (await this.recoverDeathIfPending()) {
@@ -101184,10 +102224,10 @@ class QuestEngine {
     return tileWithinBankScan(here11, radius);
   }
   async scanNearbyBankOnStart() {
-    if (this.bankKnown || !this.standingNearBank(BANK_SCAN_RADIUS)) {
+    if (this.bankKnown || !this.standingNearBank(START_BANK_RADIUS)) {
       return false;
     }
-    this.host.log("a bank is within 80 tiles — scanning it before the next step");
+    this.host.log(`a bank is within ${START_BANK_RADIUS} tiles — scanning it before the next step`);
     const here11 = Game.tile();
     const stand = here11 ? nearestBank(here11)?.tile : undefined;
     const opened = await executeStep({ kind: "scanBank", bank: stand }, [], (m) => this.host.log(`  ${m}`));
@@ -110864,6 +111904,12 @@ var HUD_COLS = 40;
 function questHudTab(stored) {
   return QUEST_HUD_TABS.includes(stored) ? stored : "Current";
 }
+function questHudActivity(status, runningName) {
+  if (status === "Money making") {
+    return "Money making";
+  }
+  return runningName || "—";
+}
 function questHudMaximizedHeight(opts) {
   const top = QUEST_HUD_HEADER_H + HUD_TAB_BLOCK;
   const foot = HUD_BUTTON_BLOCK;
@@ -111435,7 +112481,7 @@ function paintMinimized(p, model) {
   p.cells([
     { text: `QP ${model.qp}`, weight: 1, color: DIM },
     { text: fmtDuration(questMins), weight: 1, color: DIM },
-    { text: clipText(running?.name ?? "", 16), weight: 1.6, color: "#6b1d1d" }
+    { text: clipText(questHudActivity(model.status, running?.name), 16), weight: 1.6, color: "#6b1d1d" }
   ]);
 }
 function paintMaximized(p, model) {
@@ -111459,7 +112505,7 @@ function paintMaximized(p, model) {
     const stepMins = (Date.now() - model.stepSince) / 60000;
     const questMins = (Date.now() - model.questSince) / 60000;
     p.cells([
-      { text: `Quest: ${running?.name ?? "—"}`, weight: 2, color: running ? "#6b1d1d" : DIM },
+      { text: `Quest: ${questHudActivity(model.status, running?.name)}`, weight: 2, color: running || model.status === "Money making" ? "#6b1d1d" : DIM },
       { text: `On quest: ${fmtDuration(questMins)}`, weight: 1 }
     ]);
     p.cells([
@@ -111549,7 +112595,7 @@ function drawHeader(ctx, dock, model, maxed, toggle) {
   ctx.textBaseline = "middle";
   ctx.fillStyle = GOLD;
   const running = model.rows.find((r) => r.id === model.runningId);
-  const title = maxed ? `Benny's Fixed Quester V2` : clipText(running?.name ?? model.status, 18);
+  const title = maxed ? `Benny's Fixed Quester V2` : clipText(questHudActivity(model.status, running?.name), 18);
   ctx.fillText(title, dock.x + 26, cy + 1);
   drawToggleButton(ctx, toggle, maxed);
   ctx.restore();
@@ -111690,6 +112736,8 @@ class AIOQuester extends TaskBot {
   stepDesc = ", ";
   noProgress = 0;
   parkedCount = 0;
+  moneyMaking = false;
+  moneyTarget = "Man";
   skipRequested = false;
   died = false;
   deaths = 0;
@@ -111746,7 +112794,10 @@ class AIOQuester extends TaskBot {
     }
     const queueNames = QUEST_DEFS.filter((d) => this.picked.has(d.record.id)).map((d) => d.record.name);
     this.log(`AIOQuester, queue: ${queueNames.join(", ") || "(none)"}`);
-    this.add(new DismissWelcomeModal, new ContinueDialog, new EatFood(this), new QuestEngine(this));
+    this.add(new DismissWelcomeModal, new ContinueDialog, new EatFood(this), new MoneyMakingTask({
+      log: (m) => this.log(m),
+      noteMoneyMaking: (step3, target5) => this.noteMoneyMaking(step3, target5)
+    }), new QuestEngine(this));
   }
   async onStop() {
     EventSignal.setInterrupt(null);
@@ -111768,6 +112819,9 @@ class AIOQuester extends TaskBot {
     return resolveSustainPolicy(this.foodItem(), quest?.sustain);
   }
   shouldEat() {
+    if (needsMoneyMaking()) {
+      return false;
+    }
     return this.selectFood() !== null;
   }
   async eatOnce() {
@@ -111787,12 +112841,27 @@ class AIOQuester extends TaskBot {
     return selectSustainConsumable(Inventory.items(), this.sustainPolicy().foods, Skills.effective("hitpoints"), Skills.level("hitpoints"));
   }
   grindTargets() {
+    if (this.moneyMaking) {
+      return [this.moneyTarget.toLowerCase()];
+    }
     return this.runningId ? defById(this.runningId)?.grind ?? [] : [];
   }
   pickedIds() {
     return this.picked;
   }
+  noteMoneyMaking(step3, target5) {
+    this.moneyMaking = true;
+    this.status = MONEY_MAKING_LABEL;
+    if (step3 !== this.stepDesc) {
+      this.stepSince = Date.now();
+    }
+    this.stepDesc = step3;
+    if (target5) {
+      this.moneyTarget = target5;
+    }
+  }
   noteState(rows, runningId, stepDesc, noProgress, parked) {
+    this.moneyMaking = false;
     if (stepDesc !== this.stepDesc) {
       this.stepSince = Date.now();
     }

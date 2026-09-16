@@ -64915,8 +64915,52 @@ async function lureTrout(log) {
   log(`caught ${have2} raw trout - cooking next`);
   return true;
 }
+async function confirmCookMenu(log) {
+  if (!ChatDialog.isMakeMenu()) {
+    return false;
+  }
+  log(`cook menu [${ChatDialog.makeProducts().join(", ")}]`);
+  if (await ChatDialog.make("Trout")) {
+    return true;
+  }
+  return ChatDialog.make();
+}
+async function cookOneTrout(log) {
+  const beforeRaw = live(RAW_TROUT.id);
+  const beforeCooked = live(DEATH_ITEM.TROUT.id);
+  const beforeBurnt = Inventory.count("Burnt fish");
+  const finished = () => live(RAW_TROUT.id) < beforeRaw || live(DEATH_ITEM.TROUT.id) > beforeCooked || Inventory.count("Burnt fish") > beforeBurnt;
+  if (ChatDialog.isMakeMenu()) {
+    await confirmCookMenu(log);
+    await Execution.delayUntil(finished, 8000);
+  } else {
+    const raw2 = Inventory.items().find((i2) => i2.id === RAW_TROUT.id);
+    const fire2 = Locs.query().name("Fire").within(8).nearest();
+    if (!raw2 || !fire2) {
+      log("no raw trout in the pack, or no Fire at the Barbarian Village");
+      return "stall";
+    }
+    const at2 = fire2.tile();
+    log(`use trout on Fire at (${at2.x},${at2.z}) (${beforeRaw} raw)`);
+    if (!await raw2.useOn(fire2)) {
+      return "stall";
+    }
+    await Execution.delayUntil(() => ChatDialog.isMakeMenu() || ChatDialog.canContinue() || finished(), 8000);
+    if (ChatDialog.isMakeMenu()) {
+      await confirmCookMenu(log);
+      await Execution.delayUntil(finished, 8000);
+    }
+  }
+  if (live(DEATH_ITEM.TROUT.id) > beforeCooked) {
+    return "cooked";
+  }
+  if (live(RAW_TROUT.id) < beforeRaw || Inventory.count("Burnt fish") > beforeBurnt) {
+    return "burnt";
+  }
+  log("Fire did not take the trout");
+  return "stall";
+}
 async function cookTrout(log) {
-  const before = live(DEATH_ITEM.TROUT.id);
   if (live(RAW_TROUT.id) === 0) {
     log("no raw trout to cook");
     return false;
@@ -64924,18 +64968,28 @@ async function cookTrout(log) {
   if (!await Traversal.walkResilient(BARB_FIRE, { radius: 2, attempts: 3, timeoutMs: 120000, log })) {
     return false;
   }
-  const raw2 = Inventory.items().find((i2) => i2.id === RAW_TROUT.id);
-  const fire2 = Locs.query().name("Fire").within(8).nearest();
-  if (!raw2 || !fire2) {
-    log("no raw trout in the pack, or no Fire at the Barbarian Village");
-    return false;
+  let stalls = 0;
+  while (live(RAW_TROUT.id) > 0 && live(DEATH_ITEM.TROUT.id) < TROUT_QTY) {
+    if (EventSignal.pending()) {
+      log("cook trout: yielding to a random event");
+      return false;
+    }
+    const result = await cookOneTrout(log);
+    await dropJunkFish(log);
+    if (result === "cooked" || result === "burnt") {
+      stalls = 0;
+      log(`${result} · ${live(DEATH_ITEM.TROUT.id)} cooked, ${live(RAW_TROUT.id)} raw`);
+      continue;
+    }
+    stalls++;
+    if (stalls >= 4) {
+      log("could not cook on this Fire");
+      return false;
+    }
+    await Execution.delayTicks(2);
   }
-  if (!await raw2.useOn(fire2)) {
-    return false;
-  }
-  const cooked = await Execution.delayUntil(() => live(RAW_TROUT.id) === 0 || live(DEATH_ITEM.TROUT.id) > before, 60000);
   await dropJunkFish(log);
-  return cooked;
+  return live(RAW_TROUT.id) === 0 || live(DEATH_ITEM.TROUT.id) >= TROUT_QTY;
 }
 function sourceTrout(snap) {
   if (held18(snap, DEATH_ITEM.TROUT.id) >= TROUT_QTY) {

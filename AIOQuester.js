@@ -64776,6 +64776,16 @@ var GERRANT = { npc: "Gerrant", anchor: new Tile(3013, 3225, 0) };
 var ARDOUGNE_BAKER2 = { npc: "Baker", anchor: new Tile(2669, 3310, 0) };
 var BARB_LURE = new Tile(3104, 3430, 0);
 var BARB_FIRE = new Tile(3079, 3444, 0);
+var BARB_VILLAGE_LURE_HOPS = [
+  new Tile(3104, 3424, 0),
+  new Tile(3104, 3425, 0),
+  new Tile(3110, 3432, 0),
+  new Tile(3110, 3433, 0),
+  new Tile(3110, 3434, 0)
+];
+var BARB_RIVER = { minX: 3102, maxX: 3112, minZ: 3422, maxZ: 3436 };
+var BARB_NORTH_STAND = new Tile(3109, 3433, 0);
+var BARB_SOUTH_STAND = new Tile(3103, 3424, 0);
 var TROUT_QTY = 10;
 var BREAD_QTY = 10;
 var FEATHER_BUY = 50;
@@ -64818,12 +64828,28 @@ async function dropSalmon(log) {
     }
   }
 }
+function inBarbRiver(t) {
+  return t.level === 0 && t.x >= BARB_RIVER.minX - 2 && t.x <= BARB_RIVER.maxX + 2 && t.z >= BARB_RIVER.minZ - 2 && t.z <= BARB_RIVER.maxZ + 2;
+}
+function barbLureSpot() {
+  return Npcs.query().name("Fishing spot").action("Lure").inside(BARB_RIVER).nearest();
+}
+function otherClusterStand(here3) {
+  return here3.z >= 3429 ? BARB_SOUTH_STAND : BARB_NORTH_STAND;
+}
+async function reachBarbLure(log) {
+  const here3 = Game.tile();
+  if (here3 && inBarbRiver(here3)) {
+    return true;
+  }
+  return Traversal.walkResilient(BARB_LURE, { radius: 3, attempts: 3, timeoutMs: 180000, log });
+}
 async function lureTrout(log) {
   const need = troutStillNeeded();
   if (need <= 0) {
     return true;
   }
-  if (!await Traversal.walkResilient(BARB_LURE, { radius: 3, attempts: 3, timeoutMs: 180000, log })) {
+  if (!await reachBarbLure(log)) {
     return false;
   }
   log(`fly-fish until ${need} raw trout (then cook)`);
@@ -64842,14 +64868,35 @@ async function lureTrout(log) {
       log("pack is full at the lure spots - dropping salmon did not free a slot");
       return false;
     }
+    let spot = barbLureSpot();
+    if (!spot) {
+      const here4 = Game.tile();
+      const stand = otherClusterStand(here4 ?? BARB_LURE);
+      log(`lure hopped - walking to the ${stand === BARB_NORTH_STAND ? "north" : "south"} cluster (${stand.x},${stand.z})`);
+      if (!await Traversal.walkResilient(stand, { radius: 2, attempts: 3, timeoutMs: 60000, log })) {
+        return false;
+      }
+      spot = barbLureSpot();
+      if (!spot) {
+        await Execution.delayTicks(5);
+        continue;
+      }
+    }
+    const dest = spot.tile();
+    const here3 = Game.tile();
+    if (here3 && Tile.from(here3).distanceTo(dest) > 1) {
+      log(`lure spot at (${dest.x},${dest.z})`);
+      if (!await Traversal.walkResilient(dest, { radius: 1, attempts: 2, timeoutMs: 45000, log })) {
+        await Execution.delayTicks(2);
+        continue;
+      }
+      spot = barbLureSpot();
+      if (!spot) {
+        continue;
+      }
+    }
     const beforeTrout = live(RAW_TROUT.id);
     const beforeSalmon = live(RAW_SALMON.id);
-    const spot = Npcs.query().name("Fishing spot").action("Lure").within(8).nearest();
-    if (!spot) {
-      log("no Lure Fishing spot at Barbarian Village");
-      await Execution.delayTicks(5);
-      continue;
-    }
     await spot.interact("Lure");
     await Execution.delayUntil(() => live(RAW_TROUT.id) > beforeTrout || live(RAW_SALMON.id) > beforeSalmon, 20000);
   }

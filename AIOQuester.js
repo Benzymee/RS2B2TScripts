@@ -38509,10 +38509,6 @@ class WalkExecutorImpl {
           this.lastOutcome = "arrived";
           return true;
         }
-        if (!opts?.skipWhiteWolfBoat && needsWhiteWolfBoat(me, dest) && this.blockWildernessLever) {
-          log("White Wolf crossing — Port Sarim → Musa → Brimhaven boats");
-          return await this.walkWhiteWolfBoat(dest, opts, radius, log);
-        }
         let path = await this.requestPath(me, dest, maxExpansions);
         if (!path.ok) {
           if (this.avoidDoors.length > 0) {
@@ -38691,7 +38687,7 @@ ${formatHops(hops)}`);
       log(`White Wolf boats need ${need} Coins (have ${Inventory.count("Coins")}) — no bank in range`);
       return false;
     }
-    log(`White Wolf boats need ${need} Coins (have ${Inventory.count("Coins")}) — withdrawing at ${bank.id}`);
+    log(`White Wolf boats need ${need} Coins (have ${Inventory.count("Coins")}) — withdrawing at ${bank.name}`);
     const stand = { x: bank.tile.x, z: bank.tile.z, level: bank.tile.level };
     if (!await this.walkToBankOnly(stand, log)) {
       log("White Wolf boats: could not reach the bank for the fare");
@@ -64267,7 +64263,11 @@ var TENZING_SUPPLIES = {
   npc: "Tenzing",
   anchor: TILE.TENZING,
   leash: 8,
-  prefer: []
+  prefer: [
+    "I've lost the climbing boots",
+    "I've lost the secret way map",
+    "OK, I'll get those for you"
+  ]
 };
 var DUNSTAN_SPIKES = {
   npc: "Dunstan",
@@ -65436,16 +65436,29 @@ function decide31(snap) {
     }
     if (!map.supplies) {
       if (heldId15(snap, DEATH_ITEM.SPIKED_BOOTS.id) === 0) {
-        const needBar = sourceNamed(snap, DEATH_ITEM.IRON_BAR.name, DEATH_ITEM.IRON_BAR.id, 1) ?? sourceIronBar(snap);
-        if (needBar)
-          return needBar;
+        const needSpiked = sourceNamed(snap, DEATH_ITEM.SPIKED_BOOTS.name, DEATH_ITEM.SPIKED_BOOTS.id, 1);
+        if (needSpiked)
+          return needSpiked;
         if (heldId15(snap, DEATH_ITEM.CLIMBING_BOOTS.id) === 0) {
+          const needClimbing = sourceNamed(snap, DEATH_ITEM.CLIMBING_BOOTS.name, DEATH_ITEM.CLIMBING_BOOTS.id, 1);
+          if (needClimbing)
+            return needClimbing;
           return custom6("reclaim climbing boots from Tenzing", async (log) => {
             if (!await openTenzingDoor(log))
               return false;
-            return talkAt(TENZING_SUPPLIES, log);
+            const before = liveId(DEATH_ITEM.CLIMBING_BOOTS.id) + liveId(DEATH_ITEM.SPIKED_BOOTS.id);
+            if (!await talkAt(TENZING_SUPPLIES, log))
+              return false;
+            if (liveId(DEATH_ITEM.CLIMBING_BOOTS.id) + liveId(DEATH_ITEM.SPIKED_BOOTS.id) <= before) {
+              log("Tenzing did not reissue climbing boots - they may still be banked");
+              return false;
+            }
+            return true;
           });
         }
+        const needBar = sourceNamed(snap, DEATH_ITEM.IRON_BAR.name, DEATH_ITEM.IRON_BAR.id, 1) ?? sourceIronBar(snap);
+        if (needBar)
+          return needBar;
         return custom6("have Dunstan spike the climbing boots", (log) => talkAt({
           npc: "Dunstan",
           anchor: TILE.DUNSTAN,
@@ -101158,6 +101171,9 @@ var START_BANK_RADIUS = 50;
 function shouldScanStartBank(tilesToBank, alreadyScanned) {
   return !alreadyScanned && tilesToBank !== null && tilesToBank <= START_BANK_RADIUS;
 }
+function shouldPreloadPickpocketFood(coins2, inArdougneMarket, cakeReserve) {
+  return coins2 < MONEY_MAKING_GP && inArdougneMarket && cakeReserve >= CAKE_STOCK;
+}
 function bestArdougnePickpocket(thieving) {
   if (thieving >= 80) {
     return "Hero";
@@ -101461,8 +101477,9 @@ class MoneyMakingTask {
     }
     BankMemory.capture(Bank.items());
     const bankedCakes = this.bankedCakeCount();
-    this.host.log(`Money making: bank remembered — ${liveCoinWealth()} gp, ${bankedCakes} cake`);
-    if (inArdougneMarket(Game.tile()) && bankedCakes + carriedCakes() >= CAKE_STOCK) {
+    const wealth = liveCoinWealth();
+    this.host.log(`Money making: bank remembered — ${wealth} gp, ${bankedCakes} cake`);
+    if (shouldPreloadPickpocketFood(wealth, inArdougneMarket(Game.tile()), bankedCakes + carriedCakes())) {
       this.cakeStocked = true;
       await this.depositAndWithdrawCakes();
     }

@@ -64770,6 +64770,8 @@ async function readDeathPlateauProgress() {
 var FLY_ROD = { id: 309, name: "Fly fishing rod" };
 var FEATHER = { id: 314, name: "Feather" };
 var RAW_TROUT = { id: 335, name: "Raw trout" };
+var RAW_SALMON = { id: 331, name: "Raw salmon" };
+var COOKED_SALMON = { id: 329, name: "Salmon" };
 var GERRANT = { npc: "Gerrant", anchor: new Tile(3013, 3225, 0) };
 var ARDOUGNE_BAKER2 = { npc: "Baker", anchor: new Tile(2669, 3310, 0) };
 var BARB_LURE = new Tile(3104, 3430, 0);
@@ -64798,21 +64800,50 @@ function sourceBread(snap) {
   const short = BREAD_QTY - held18(snap, DEATH_ITEM.BREAD.id);
   return { kind: "buy", item: DEATH_ITEM.BREAD.name, qty: short, shop: ARDOUGNE_BAKER2, estGp: short * BREAD_GP };
 }
+function troutStillNeeded() {
+  return Math.max(0, TROUT_QTY - live(DEATH_ITEM.TROUT.id));
+}
+async function dropSalmon(log) {
+  for (let guard = 0;guard < 28; guard++) {
+    const fish = Inventory.items().find((i2) => i2.id === RAW_SALMON.id || i2.id === COOKED_SALMON.id);
+    if (!fish) {
+      return;
+    }
+    const before = live(fish.id);
+    if (!await fish.interact("Drop")) {
+      return;
+    }
+    if (await Execution.delayUntil(() => live(fish.id) < before, 3000)) {
+      log(`dropped ${fish.name ?? "salmon"}`);
+    }
+  }
+}
 async function lureTrout(log) {
-  const before = live(RAW_TROUT.id);
+  const need = troutStillNeeded();
+  if (need <= 0) {
+    return true;
+  }
   if (!await Traversal.walkResilient(BARB_LURE, { radius: 3, attempts: 3, timeoutMs: 180000, log })) {
     return false;
   }
-  const deadline = performance.now() + 90000;
-  while (performance.now() < deadline && live(RAW_TROUT.id) <= before) {
+  log(`fly-fish until ${need} raw trout (then cook)`);
+  const deadline = performance.now() + 240000;
+  while (performance.now() < deadline && live(RAW_TROUT.id) < need) {
     if (EventSignal.pending()) {
       log("lure trout: yielding to a random event");
       return false;
     }
+    await dropSalmon(log);
     if (live(FEATHER.id) === 0) {
       log("out of feathers at the Barbarian Village spots");
       return false;
     }
+    if (Inventory.isFull()) {
+      log("pack is full at the lure spots - dropping salmon did not free a slot");
+      return false;
+    }
+    const beforeTrout = live(RAW_TROUT.id);
+    const beforeSalmon = live(RAW_SALMON.id);
     const spot = Npcs.query().name("Fishing spot").action("Lure").within(8).nearest();
     if (!spot) {
       log("no Lure Fishing spot at Barbarian Village");
@@ -64820,9 +64851,16 @@ async function lureTrout(log) {
       continue;
     }
     await spot.interact("Lure");
-    await Execution.delayUntil(() => live(RAW_TROUT.id) > before, 20000);
+    await Execution.delayUntil(() => live(RAW_TROUT.id) > beforeTrout || live(RAW_SALMON.id) > beforeSalmon, 20000);
   }
-  return live(RAW_TROUT.id) > before;
+  await dropSalmon(log);
+  const have2 = live(RAW_TROUT.id);
+  if (have2 < need) {
+    log(`still ${have2}/${need} raw trout`);
+    return false;
+  }
+  log(`caught ${have2} raw trout - cooking next`);
+  return true;
 }
 async function cookTrout(log) {
   const before = live(DEATH_ITEM.TROUT.id);
@@ -64848,7 +64886,8 @@ function sourceTrout(snap) {
   if (held18(snap, DEATH_ITEM.TROUT.id) >= TROUT_QTY) {
     return null;
   }
-  if (held18(snap, RAW_TROUT.id) > 0) {
+  const needRaw = TROUT_QTY - held18(snap, DEATH_ITEM.TROUT.id);
+  if (held18(snap, RAW_TROUT.id) >= needRaw) {
     return { kind: "custom", name: "cook trout on the Barbarian Village fire", run: cookTrout };
   }
   if (held18(snap, FLY_ROD.id) === 0) {

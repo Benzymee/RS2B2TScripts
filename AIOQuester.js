@@ -48,18 +48,29 @@ function defineBot(manifest) {
 // src/bot/api/events/EventBus.ts
 class EventBusImpl {
   listeners = new Map;
+  reentering = false;
   off(event, cb) {
     const hostEvents = globalThis.__rs2b0t?.events;
-    if (hostEvents && hostEvents !== this && typeof hostEvents.off === "function") {
-      hostEvents.off(event, cb);
-      return;
+    if (!this.reentering && hostEvents && hostEvents !== this && typeof hostEvents.off === "function") {
+      this.reentering = true;
+      try {
+        hostEvents.off(event, cb);
+        return;
+      } finally {
+        this.reentering = false;
+      }
     }
     this.listeners.get(event)?.delete(cb);
   }
   on(event, cb) {
     const hostEvents = globalThis.__rs2b0t?.events;
-    if (hostEvents && hostEvents !== this && typeof hostEvents.on === "function") {
-      return hostEvents.on(event, cb);
+    if (!this.reentering && hostEvents && hostEvents !== this && typeof hostEvents.on === "function") {
+      this.reentering = true;
+      try {
+        return hostEvents.on(event, cb);
+      } finally {
+        this.reentering = false;
+      }
     }
     let set = this.listeners.get(event);
     if (!set) {
@@ -11421,7 +11432,7 @@ var localReader = {
 var reader = new Proxy(localReader, {
   get(target, prop, receiver) {
     const hostReader = globalThis.__rs2b0t?.reader ?? globalThis.rs2b0t?.reader;
-    if (hostReader && hostReader !== target && prop in hostReader) {
+    if (hostReader && hostReader !== target && hostReader !== receiver && prop in hostReader) {
       const val = hostReader[prop];
       return typeof val === "function" ? val.bind(hostReader) : val;
     }
@@ -11429,7 +11440,7 @@ var reader = new Proxy(localReader, {
   },
   set(target, prop, val, receiver) {
     const hostReader = globalThis.__rs2b0t?.reader ?? globalThis.rs2b0t?.reader;
-    if (hostReader && hostReader !== target && prop in hostReader) {
+    if (hostReader && hostReader !== target && hostReader !== receiver && prop in hostReader) {
       hostReader[prop] = val;
     }
     return Reflect.set(target, prop, val, receiver);
@@ -11618,7 +11629,7 @@ var localActions = {
 var actions = new Proxy(localActions, {
   get(target, prop, receiver) {
     const hostActions = globalThis.rs2b0t?.actions;
-    if (hostActions && hostActions !== target && prop in hostActions) {
+    if (hostActions && hostActions !== target && hostActions !== receiver && prop in hostActions) {
       const val = hostActions[prop];
       return typeof val === "function" ? val.bind(hostActions) : val;
     }
@@ -11626,7 +11637,7 @@ var actions = new Proxy(localActions, {
   },
   set(target, prop, val, receiver) {
     const hostActions = globalThis.rs2b0t?.actions;
-    if (hostActions && hostActions !== target && prop in hostActions) {
+    if (hostActions && hostActions !== target && hostActions !== receiver && prop in hostActions) {
       hostActions[prop] = val;
     }
     return Reflect.set(target, prop, val, receiver);
@@ -13057,7 +13068,7 @@ var localQuests = {
 var Quests = new Proxy(localQuests, {
   get(target, prop, receiver) {
     const hostQuests = globalThis.__rs2b0t?.Quests;
-    if (hostQuests && hostQuests !== target && prop in hostQuests) {
+    if (hostQuests && hostQuests !== target && hostQuests !== receiver && prop in hostQuests) {
       const val = hostQuests[prop];
       return typeof val === "function" ? val.bind(hostQuests) : val;
     }
@@ -40239,8 +40250,8 @@ var UNIVERSAL_GATHERERS = {
     kind: "buy",
     item: "Iron chainbody",
     qty,
-    shop: ANCHORS.HORVIK_ARMOUR_SHOP,
-    estGp: 200 * qty
+    shop: ANCHORS.WAYNE_CHAINS,
+    estGp: 210 * qty
   }),
   "bronze med helm": (_snap, qty) => ({
     kind: "buy",
@@ -55397,17 +55408,35 @@ async function pickCabbage(log) {
   if (Inventory.contains("Cabbage")) {
     return true;
   }
-  const plant = Locs.query().name("Cabbage").action("Pick").within(10).nearest();
-  if (!plant) {
+  const here2 = Game.tile();
+  if (here2 === null) {
+    return false;
+  }
+  if (chebyshev2(here2, BKF_TILE.CABBAGE_FIELD) > 10) {
+    log("walking to the Falador farm cabbage pen");
     await Traversal.walkResilient(BKF_TILE.CABBAGE_FIELD, { radius: 4, attempts: 4, timeoutMs: 120000, log });
     return false;
   }
-  const before = Inventory.count("Cabbage");
-  log("picking a cabbage from the Draynor Manor field");
-  if (!await plant.interact("Pick")) {
+  const plant = Locs.query().name("Cabbage").action("Pick").within(8).nearest();
+  if (plant && canUseLoc(plant)) {
+    const before = Inventory.count("Cabbage");
+    log("picking a cabbage from the Falador farm");
+    if (!await plant.interact("Pick")) {
+      return false;
+    }
+    return Execution.delayUntil(() => Inventory.count("Cabbage") > before, 8000);
+  }
+  const gate = Locs.query().where((l) => /gate/i.test(l.name ?? "")).action("Open").within(6).nearest();
+  if (gate) {
+    log("opening the Falador farm gate");
+    if (!await gate.interact("Open")) {
+      return false;
+    }
+    await Execution.delayTicks(2);
     return false;
   }
-  await Execution.delayUntil(() => Inventory.count("Cabbage") > before, 6000);
+  log("walking to the Falador farm cabbage pen");
+  await Traversal.walkResilient(BKF_TILE.CABBAGE_FIELD, { radius: 4, attempts: 4, timeoutMs: 120000, log });
   return false;
 }
 var blackknight = {
@@ -55416,6 +55445,20 @@ var blackknight = {
   food: 4,
   grind: ["black knight", "aggressive black knight"],
   gather: {
+    "iron chainbody": (_snap, qty2) => ({
+      kind: "buy",
+      item: IRON_CHAINBODY,
+      qty: qty2,
+      shop: { npc: "Wayne", anchor: new Tile(2972, 3312, 0) },
+      estGp: 210 * qty2
+    }),
+    "bronze med helm": (_snap, qty2) => ({
+      kind: "buy",
+      item: BRONZE_MED_HELM,
+      qty: qty2,
+      shop: { npc: "Peksa", anchor: new Tile(3075, 3430, 0) },
+      estGp: 30 * qty2
+    }),
     cabbage: () => ({ kind: "custom", name: "pick cabbage", run: pickCabbage })
   },
   decide: decide22
@@ -111236,16 +111279,18 @@ class PaintState {
   }
 }
 var _localPaintState = new PaintState;
-function _hostPaint() {
-  const g = globalThis;
-  const host2 = g?.rs2b0t?.paint;
-  return host2 && typeof host2.publishRegions === "function" ? host2 : null;
+function _hostPaint(self) {
+  const host2 = globalThis?.rs2b0t?.paint;
+  if (!host2 || host2 === self || host2 === _localPaintState) {
+    return null;
+  }
+  return typeof host2.publishRegions === "function" ? host2 : null;
 }
 var paintState = new Proxy(_localPaintState, {
   get(local, prop, receiver) {
-    const host2 = _hostPaint();
+    const host2 = _hostPaint(receiver);
     const target5 = host2 ?? local;
-    const val = Reflect.get(target5, prop, target5);
+    const val = Reflect.get(target5, prop, target5 === host2 ? host2 : receiver);
     return typeof val === "function" ? val.bind(target5) : val;
   }
 });
